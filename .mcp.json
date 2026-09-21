@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "--network",
+        "host",
+        "-v",
+        "/tmp:/tmp",
+        "mcp/playwright"
+      ]
+    },
+    "n8n-builder": {
+      "command": "npx",
+      "args": ["@makafeli/n8n-workflow-builder"],
+      "env": {
+        "N8N_HOST": "http://localhost:5678",
+        "N8N_API_KEY": "REDACTED-EXAMPLE-JWT-PLACEHOLDER"
+      }
+    }
+  }
+}

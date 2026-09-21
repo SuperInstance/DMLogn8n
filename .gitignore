@@ -1,0 +1,45 @@
+# Build outputs and caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+node_modules/
+.next/
+.venv/
+venv/
+
+# OS / WSL / NTFS alternate data stream noise
+*:Zone.Identifier
+*?Zone.Identifier
+*?Zone - Copy.Identifier
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+
+# Secrets / credentials (use .example instead)
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Large fetched assets (not committed; see STATUS.md)
+*.pt
+*.onnx
+*.safetensors
+*.bin
+*.h5
+*.gguf
+*.ckpt
