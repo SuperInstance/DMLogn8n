@@ -1,0 +1,562 @@
+{
+  "name": "Performance Testing Suite - System Load Validation",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/performance/test/start",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "perf-test-trigger",
+      "name": "Start Performance Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [240, 300],
+      "webhookId": "perf-test-suite-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize performance test configuration\nconst perfConfig = {\n  testId: 'perf_' + Date.now(),\n  startTime: new Date().toISOString(),\n  testSuite: 'performance',\n  loadTestConfig: {\n    concurrentSessions: $json.concurrentSessions || 10,\n    testDuration: $json.testDuration || 300,\n    rampUpTime: $json.rampUpTime || 60,\n    requestsPerSecond: $json.requestsPerSecond || 50\n  },\n  thresholds: {\n    apiResponseTime: 2.0,\n    aiDecisionLatency: 5.0,\n    memoryRetrievalTime: 1.0,\n    websocketLatency: 0.5,\n    cpuUsage: 80,\n    memoryUsage: 85,\n    errorRate: 5\n  },\n  metrics: {\n    responseTimes: [],\n    throughput: [],\n    errorCounts: {},\n    systemResources: []\n  }\n};\n\n$items[0].json.perfConfig = perfConfig;\n\nreturn [{\n  json: {\n    ...perfConfig,\n    status: 'initialized',\n    currentTest: 'concurrent_sessions'\n  }\n}];"
+      },
+      "id": "initialize-perf-test",
+      "name": "Initialize Performance Test",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "concurrent-sessions-condition",
+              "leftValue": "={{ $json.currentTest }}",
+              "rightValue": "concurrent_sessions",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "perf-test-router",
+      "name": "Route Performance Test",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/performance/concurrent-sessions",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "sessionCount": "={{ $json.loadTestConfig.concurrentSessions }}",
+          "rampUpTime": "={{ $json.loadTestConfig.rampUpTime }}",
+          "testDuration": "={{ $json.loadTestConfig.testDuration }}",
+          "operationsPerSession": [
+            "character_creation",
+            "ai_decision",
+            "memory_operation",
+            "websocket_connection",
+            "voice_chat_init"
+          ]
+        },
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "concurrent-session-test",
+      "name": "Concurrent Session Capacity Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/performance/ai-decision-latency",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "testScenarios": [
+            "combat_decision",
+            "dialogue_response",
+            "quest_planning",
+            "environmental_reaction",
+            "strategic_planning"
+          ],
+          "iterationsPerScenario": 100,
+          "concurrentRequests": "={{ Math.floor($json.loadTestConfig.concurrentSessions / 2) }}",
+          "complexityLevels": ["simple", "medium", "complex"]
+        },
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "ai-decision-latency-test",
+      "name": "AI Decision Latency Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/performance/memory-retrieval",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "testTypes": [
+            "short_term_memory",
+            "long_term_memory",
+            "episodic_memory",
+            "procedural_memory",
+            "semantic_memory"
+          ],
+          "databaseSizes": [
+            1000,
+            10000,
+            100000,
+            1000000
+          ],
+          "concurrentQueries": "={{ $json.loadTestConfig.concurrentSessions }}",
+          "queryComplexity": ["simple", "complex", "aggregated"]
+        },
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "memory-retrieval-test",
+      "name": "Memory Retrieval Performance Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/performance/database-optimization",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "queryTypes": [
+            "character_state_queries",
+            "memory_search_queries",
+            "session_management_queries",
+            "campaign_data_queries",
+            "analytics_queries"
+          ],
+          "dataVolumes": [
+            10000,
+            100000,
+            1000000,
+            10000000
+          ],
+          "concurrencyLevels": [
+            10,
+            50,
+            100,
+            500
+          ],
+          "indexOptimizationTest": true,
+          "queryPlanAnalysis": true
+        },
+        "options": {
+          "timeout": 240000
+        }
+      },
+      "id": "database-query-test",
+      "name": "Database Query Optimization Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/performance/websocket-stress",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "maxConnections": "={{ $json.loadTestConfig.concurrentSessions * 2 }}",
+          "connectionRampUp": "={{ Math.floor($json.loadTestConfig.rampUpTime / 2) }}",
+          "testDuration": "={{ Math.floor($json.loadTestConfig.testDuration * 0.8) }}",
+          "messageTypes": [
+            "game_state_update",
+            "chat_message",
+            "dice_roll",
+            "character_action",
+            "dm_narrative"
+          ],
+          "messageFrequency": {
+            "min": 1,
+            "max": 10,
+            "average": 5
+          },
+          "payloadSizes": [
+            "small",
+            "medium",
+            "large"
+          ]
+        },
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "websocket-stress-test",
+      "name": "WebSocket Connection Stress Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/performance/voice-chat-load",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "concurrentVoiceSessions": "={{ Math.floor($json.loadTestConfig.concurrentSessions / 3) }}",
+          "sessionDuration": 300,
+          "audioQualities": ["low", "medium", "high"],
+          "codecs": ["opus", "pcm"],
+          "participantsPerSession": [2, 3, 4, 6],
+          "backgroundNoiseLevels": [0, 0.1, 0.3, 0.5]
+        },
+        "options": {
+          "timeout": 360000
+        }
+      },
+      "id": "voice-chat-load-test",
+      "name": "Voice Chat Load Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/performance/resource-monitoring",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "monitoringInterval": 5,
+          "metrics": [
+            "cpu_usage",
+            "memory_usage",
+            "disk_io",
+            "network_io",
+            "database_connections",
+            "active_sessions",
+            "queue_depth"
+          ],
+          "alerts": {
+            "cpu_threshold": 90,
+            "memory_threshold": 90,
+            "disk_threshold": 85,
+            "error_rate_threshold": 10
+          }
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "resource-monitoring",
+      "name": "System Resource Monitoring",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/performance/throughput-test",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "targetRPS": "={{ $json.loadTestConfig.requestsPerSecond }}",
+          "testDuration": "={{ Math.floor($json.loadTestConfig.testDuration * 0.6) }}",
+          "endpoints": [
+            "/api/character/create",
+            "/api/ai/decision",
+            "/api/memory/acquire",
+            "/api/session/create",
+            "/api/campaign/generate"
+          ],
+          "rampUpStrategy": "linear",
+          "sustainedLoadDuration": "={{ Math.floor($json.loadTestConfig.testDuration * 0.4) }}"
+        },
+        "options": {
+          "timeout": 240000
+        }
+      },
+      "id": "throughput-test",
+      "name": "Throughput Capacity Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyze performance test results and generate comprehensive report\nconst perfResults = {\n  testId: $json.testId,\n  testSuite: 'performance',\n  startTime: $json.startTime,\n  endTime: new Date().toISOString(),\n  totalDuration: Date.now() - new Date($json.startTime).getTime(),\n  tests: [\n    {\n      name: 'concurrent_sessions',\n      status: $json.concurrentSessionResults ? 'passed' : 'failed',\n      maxConcurrentSessions: $json.maxConcurrentSessions || 0,\n      averageResponseTime: $json.concurrentSessionAvgTime || 0,\n      errorRate: $json.concurrentSessionErrorRate || 0,\n      throughput: $json.concurrentSessionThroughput || 0,\n      details: $json.concurrentSessionDetails || {}\n    },\n    {\n      name: 'ai_decision_latency',\n      status: $json.aiDecisionResults ? 'passed' : 'failed',\n      averageLatency: $json.aiDecisionAvgLatency || 0,\n      p95Latency: $json.aiDecisionP95Latency || 0,\n      p99Latency: $json.aiDecisionP99Latency || 0,\n      throughput: $json.aiDecisionThroughput || 0,\n      details: $json.aiDecisionDetails || {}\n    },\n    {\n      name: 'memory_retrieval',\n      status: $json.memoryRetrievalResults ? 'passed' : 'failed',\n      averageRetrievalTime: $json.memoryAvgRetrievalTime || 0,\n      cacheHitRate: $json.memoryCacheHitRate || 0,\n      queryComplexityImpact: $json.memoryComplexityImpact || {},\n      databaseSizeImpact: $json.memoryDatabaseSizeImpact || {},\n      details: $json.memoryRetrievalDetails || {}\n    },\n    {\n      name: 'database_optimization',\n      status: $json.databaseOptimizationResults ? 'passed' : 'failed',\n      averageQueryTime: $json.databaseAvgQueryTime || 0,\n      indexEffectiveness: $json.databaseIndexEffectiveness || {},\n      queryPlanOptimizations: $json.databaseQueryOptimizations || [],\n      scalability: $json.databaseScalability || {},\n      details: $json.databaseOptimizationDetails || {}\n    },\n    {\n      name: 'websocket_stress',\n      status: $json.websocketStressResults ? 'passed' : 'failed',\n      maxConnections: $json.websocketMaxConnections || 0,\n      averageLatency: $json.websocketAvgLatency || 0,\n      messageThroughput: $json.websocketMessageThroughput || 0,\n      connectionDropRate: $json.websocketConnectionDropRate || 0,\n      details: $json.websocketStressDetails || {}\n    },\n    {\n      name: 'voice_chat_load',\n      status: $json.voiceChatResults ? 'passed' : 'failed',\n      maxConcurrentSessions: $json.voiceMaxConcurrentSessions || 0,\n      averageLatency: $json.voiceAvgLatency || 0,\n      audioQualityMetrics: $json.voiceAudioQualityMetrics || {},\n      resourceUtilization: $json.voiceResourceUtilization || {},\n      details: $json.voiceChatDetails || {}\n    },\n    {\n      name: 'throughput_capacity',\n      status: $json.throughputResults ? 'passed' : 'failed',\n      maxRPS: $json.throughputMaxRPS || 0,\n      sustainedRPS: $json.throughputSustainedRPS || 0,\n      averageResponseTime: $json.throughputAvgResponseTime || 0,\n      errorRate: $json.throughputErrorRate || 0,\n      details: $json.throughputDetails || {}\n    }\n  ],\n  systemResources: $json.systemResources || [],\n  thresholds: $json.thresholds || {}\n};\n\n// Calculate performance summary\nconst passedTests = perfResults.tests.filter(t => t.status === 'passed').length;\nconst totalTests = perfResults.tests.length;\nconst successRate = (passedTests / totalTests * 100).toFixed(1);\n\n// Performance metrics summary\nconst performanceSummary = {\n  averageResponseTime: perfResults.tests.reduce((sum, t) => sum + (t.averageResponseTime || t.averageLatency || 0), 0) / totalTests,\n  maxThroughput: Math.max(...perfResults.tests.map(t => t.throughput || 0)),\n  averageErrorRate: perfResults.tests.reduce((sum, t) => sum + (t.errorRate || 0), 0) / totalTests,\n  peakResourceUsage: {\n    cpu: Math.max(...(perfResults.systemResources.map(r => r.cpu) || [0])),\n    memory: Math.max(...(perfResults.systemResources.map(r => r.memory) || [0]))\n  }\n};\n\n// Determine overall performance rating\nlet performanceRating = 'excellent';\nif (performanceSummary.averageResponseTime > perfResults.thresholds.apiResponseTime * 2) {\n  performanceRating = 'poor';\n} else if (performanceSummary.averageResponseTime > perfResults.thresholds.apiResponseTime) {\n  performanceRating = 'fair';\n} else if (performanceSummary.averageResponseTime > perfResults.thresholds.apiResponseTime * 0.5) {\n  performanceRating = 'good';\n}\n\nif (performanceSummary.averageErrorRate > perfResults.thresholds.errorRate) {\n  performanceRating = Math.min(performanceRating, 'poor');\n}\n\nconst summary = {\n  totalTests,\n  passedTests,\n  failedTests: totalTests - passedTests,\n  successRate: parseFloat(successRate),\n  overallStatus: successRate >= 90 ? 'passed' : successRate >= 70 ? 'warning' : 'failed',\n  performanceRating,\n  ...performanceSummary\n};\n\nreturn [{\n  json: {\n    testSuite: 'performance',\n    ...perfResults,\n    summary,\n    performanceSummary,\n    status: summary.overallStatus,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "analyze-perf-results",
+      "name": "Analyze Performance Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/performance/results",
+        "jsonParameters": true,
+        "json": "={{ $json }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "save-perf-results",
+      "name": "Save Performance Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "return-perf-report",
+      "name": "Return Performance Report",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate performance recommendations based on test results\nconst recommendations = [];\n\nif ($json.performanceSummary.averageResponseTime > $json.thresholds.apiResponseTime) {\n  recommendations.push({\n    category: 'response_time',\n    priority: 'high',\n    issue: 'Average response time exceeds threshold',\n    suggestion: 'Consider implementing caching, optimizing database queries, or scaling resources'\n  });\n}\n\nif ($json.performanceSummary.averageErrorRate > $json.thresholds.errorRate) {\n  recommendations.push({\n    category: 'error_rate',\n    priority: 'critical',\n    issue: 'Error rate exceeds acceptable threshold',\n    suggestion: 'Investigate error patterns, implement better error handling, and improve system reliability'\n  });\n}\n\nif ($json.performanceSummary.peakResourceUsage.cpu > $json.thresholds.cpuUsage) {\n  recommendations.push({\n    category: 'cpu_usage',\n    priority: 'medium',\n    issue: 'CPU usage consistently high during load',\n    suggestion: 'Optimize CPU-intensive operations, consider horizontal scaling, or upgrade hardware'\n  });\n}\n\nif ($json.performanceSummary.peakResourceUsage.memory > $json.thresholds.memoryUsage) {\n  recommendations.push({\n    category: 'memory_usage',\n    priority: 'medium',\n    issue: 'Memory usage approaches limit',\n    suggestion: 'Implement memory optimization, reduce memory leaks, or increase available memory'\n  });\n}\n\n// Check specific test results for recommendations\n$json.tests.forEach(test => {\n  if (test.name === 'ai_decision_latency' && test.averageLatency > $json.thresholds.aiDecisionLatency) {\n    recommendations.push({\n      category: 'ai_performance',\n      priority: 'high',\n      issue: 'AI decision latency is too high',\n      suggestion: 'Optimize AI model inference, implement model caching, or use faster hardware'\n    });\n  }\n  \n  if (test.name === 'memory_retrieval' && test.averageRetrievalTime > $json.thresholds.memoryRetrievalTime) {\n    recommendations.push({\n      category: 'memory_performance',\n      priority: 'medium',\n      issue: 'Memory retrieval is slow',\n      suggestion: 'Improve database indexing, implement better caching strategies, or optimize queries'\n    });\n  }\n  \n  if (test.name === 'websocket_stress' && test.connectionDropRate > 5) {\n    recommendations.push({\n      category: 'websocket_reliability',\n      priority: 'high',\n      issue: 'High WebSocket connection drop rate',\n      suggestion: 'Implement connection pooling, improve error handling, and optimize network configuration'\n    });\n  }\n});\n\nreturn [{\n  json: {\n    testId: $json.testId,\n    recommendations,\n    summary: {\n      totalRecommendations: recommendations.length,\n      criticalIssues: recommendations.filter(r => r.priority === 'critical').length,\n      highPriorityIssues: recommendations.filter(r => r.priority === 'high').length,\n      mediumPriorityIssues: recommendations.filter(r => r.priority === 'medium').length\n    },\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "generate-recommendations",
+      "name": "Generate Performance Recommendations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/performance/recommendations",
+        "jsonParameters": true,
+        "json": "={{ $json }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "save-recommendations",
+      "name": "Save Recommendations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2000, 500]
+    }
+  ],
+  "connections": {
+    "Start Performance Test": {
+      "main": [
+        [
+          {
+            "node": "Initialize Performance Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Performance Test": {
+      "main": [
+        [
+          {
+            "node": "Route Performance Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Performance Test": {
+      "main": [
+        [
+          {
+            "node": "Concurrent Session Capacity Test",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "WebSocket Connection Stress Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Concurrent Session Capacity Test": {
+      "main": [
+        [
+          {
+            "node": "AI Decision Latency Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Decision Latency Test": {
+      "main": [
+        [
+          {
+            "node": "Memory Retrieval Performance Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory Retrieval Performance Test": {
+      "main": [
+        [
+          {
+            "node": "Database Query Optimization Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Database Query Optimization Test": {
+      "main": [
+        [
+          {
+            "node": "System Resource Monitoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WebSocket Connection Stress Test": {
+      "main": [
+        [
+          {
+            "node": "Voice Chat Load Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice Chat Load Test": {
+      "main": [
+        [
+          {
+            "node": "Throughput Capacity Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Throughput Capacity Test": {
+      "main": [
+        [
+          {
+            "node": "System Resource Monitoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "System Resource Monitoring": {
+      "main": [
+        [
+          {
+            "node": "Analyze Performance Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Performance Results": {
+      "main": [
+        [
+          {
+            "node": "Save Performance Results",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Performance Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Performance Results": {
+      "main": [
+        [
+          {
+            "node": "Return Performance Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Performance Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Save Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T15:30:00.000Z",
+      "updatedAt": "2024-10-23T15:30:00.000Z",
+      "id": "tag-performance",
+      "name": "Performance"
+    },
+    {
+      "createdAt": "2024-10-23T15:30:00.000Z",
+      "updatedAt": "2024-10-23T15:30:00.000Z",
+      "id": "tag-load-testing",
+      "name": "Load Testing"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T15:30:00.000Z",
+  "versionId": "1"
+}

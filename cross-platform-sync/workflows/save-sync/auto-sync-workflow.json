@@ -1,0 +1,607 @@
+{
+  "name": "DMlogn8n Auto Save Sync Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "sync-trigger",
+      "name": "Sync Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": true,
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "pending-sync-condition",
+              "leftValue": "={{ $json.sync_status }}",
+              "rightValue": "pending",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "limit": 100
+      },
+      "id": "get-pending-syncs",
+      "name": "Get Pending Syncs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-pending-syncs",
+              "leftValue": "={{ $json.allItems.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-pending-syncs",
+      "name": "Check Pending Syncs",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process each pending sync item\nconst pendingSyncs = $input.all();\nconst results = [];\n\nfor (const item of pendingSyncs) {\n  const syncData = item.json;\n  \n  // Generate sync operation record\n  const syncOperation = {\n    id: syncData.id || require('crypto').randomUUID(),\n    user_id: syncData.user_id,\n    save_game_id: syncData.save_game_id,\n    operation_type: syncData.operation_type || 'upload',\n    source_platform: syncData.platform || 'unknown',\n    source_device_id: syncData.device_id || 'unknown',\n    sync_version_start: syncData.current_version || 0,\n    status: 'syncing',\n    started_at: new Date().toISOString(),\n    retry_count: syncData.retry_count || 0\n  };\n  \n  results.push({\n    json: syncOperation\n  });\n}\n\nreturn results;"
+      },
+      "id": "prepare-sync-operations",
+      "name": "Prepare Sync Operations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "sync_operations",
+        "columns": "id, user_id, save_game_id, operation_type, source_platform, source_device_id, sync_version_start, status, started_at, retry_count",
+        "additionalFields": {
+          "returnFields": "id"
+        }
+      },
+      "id": "create-sync-operations",
+      "name": "Create Sync Operations",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        1120,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get save game data for each sync operation\nconst syncOps = $input.all();\nconst results = [];\n\nfor (const item of syncOps) {\n  const syncOp = item.json;\n  \n  try {\n    // Get the most recent save data\n    const saveDataQuery = `\n      SELECT data_json, platform, device_id, sync_version \n      FROM save_game_data \n      WHERE save_game_id = $1 \n      ORDER BY sync_version DESC \n      LIMIT 1\n    `;\n    \n    // This would typically be done with a database node,\n    // but for now we'll simulate it\n    const saveData = {\n      save_game_id: syncOp.save_game_id,\n      data_json: syncOp.data_json || '{}',\n      platform: syncOp.source_platform,\n      device_id: syncOp.source_device_id,\n      version: syncOp.sync_version_start\n    };\n    \n    results.push({\n      json: {\n        ...syncOp,\n        save_data: saveData\n      }\n    });\n  } catch (error) {\n    results.push({\n      json: {\n        ...syncOp,\n        error: error.message\n      }\n    });\n  }\n}\n\nreturn results;"
+      },
+      "id": "get-save-data",
+      "name": "Get Save Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.api_endpoint || 'https://api.dmlogn8n.com/sync' }}/process",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  type: 'sync_data',\n  saveGameId: $json.save_game_id,\n  data: JSON.parse($json.save_data.data_json),\n  platform: $json.source_platform,\n  deviceId: $json.source_device_id,\n  version: $json.sync_version_start,\n  syncOperationId: $json.id,\n  timestamp: new Date().toISOString()\n} }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "process-sync-api",
+      "name": "Process Sync API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1560,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dmlogn8n-api-auth",
+          "name": "DMlogn8n API Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "sync-success",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-sync-result",
+      "name": "Check Sync Result",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "sync_operations",
+        "updateKey": "id",
+        "updateValue": "={{ $json.syncOperationId }}",
+        "columns": "status, completed_at, sync_version_end, bytes_transferred",
+        "columnValues": "synced,={{ new Date().toISOString() }},={{ $json.version }},={{ $json.bytesTransferred || 0 }}"
+      },
+      "id": "update-success-sync",
+      "name": "Update Successful Sync",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        2000,
+        120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "sync_operations",
+        "updateKey": "id",
+        "updateValue": "={{ $json.syncOperationId }}",
+        "columns": "status, error_message, completed_at",
+        "columnValues": "error,={{ $json.error || 'Unknown error' }},={{ new Date().toISOString() }}"
+      },
+      "id": "update-failed-sync",
+      "name": "Update Failed Sync",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        2000,
+        280
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle failed syncs - retry logic\nconst failedSyncs = $input.all();\nconst results = [];\n\nfor (const item of failedSyncs) {\n  const syncData = item.json;\n  const maxRetries = 3;\n  \n  // Check if we should retry\n  const retryCount = syncData.retry_count || 0;\n  \n  if (retryCount < maxRetries) {\n    // Schedule retry with exponential backoff\n    const retryDelay = Math.pow(2, retryCount) * 60000; // 1min, 2min, 4min\n    const retryAt = new Date(Date.now() + retryDelay);\n    \n    results.push({\n      json: {\n        ...syncData,\n        status: 'pending_retry',\n        retry_count: retryCount + 1,\n        retry_at: retryAt.toISOString(),\n        error_message: syncData.error_message\n      }\n    });\n  } else {\n    // Max retries exceeded - mark as failed\n    results.push({\n      json: {\n        ...syncData,\n        status: 'failed',\n        retry_count: retryCount + 1,\n        error_message: `Max retries exceeded: ${syncData.error_message}`\n      }\n    });\n  }\n}\n\nreturn results;"
+      },
+      "id": "handle-retry-logic",
+      "name": "Handle Retry Logic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "sync_operations",
+        "updateKey": "id",
+        "updateValue": "={{ $json.syncOperationId }}",
+        "columns": "status, retry_count, retry_at, error_message",
+        "columnValues": "={{ $json.status }},={{ $json.retry_count }},={{ $json.retry_at }},={{ $json.error_message }}"
+      },
+      "id": "update-retry-status",
+      "name": "Update Retry Status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        2440,
+        280
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "save_games",
+        "updateKey": "id",
+        "updateValue": "={{ $json.save_game_id }}",
+        "columns": "sync_status, last_synced",
+        "columnValues": "synced,={{ new Date().toISOString() }}"
+      },
+      "id": "update-save-game-status",
+      "name": "Update Save Game Status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        2220,
+        120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Send notifications for sync completion\nconst syncResults = $input.all();\nconst results = [];\n\nfor (const item of syncResults) {\n  const syncData = item.json;\n  \n  // Prepare notification data\n  const notification = {\n    user_id: syncData.user_id,\n    type: 'sync_completed',\n    save_game_id: syncData.save_game_id,\n    platform: syncData.source_platform,\n    status: syncData.status,\n    timestamp: new Date().toISOString(),\n    version: syncData.sync_version_end,\n    error: syncData.error_message\n  };\n  \n  results.push({\n    json: notification\n  });\n}\n\nreturn results;"
+      },
+      "id": "prepare-notifications",
+      "name": "Prepare Notifications",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2440,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "={{ $json.type }}_{{ $json.user_id }}",
+        "message": "={{ JSON.stringify($json) }}"
+      },
+      "id": "send-websocket-notification",
+      "name": "Send WebSocket Notification",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        2660,
+        120
+      ],
+      "credentials": {
+        "redis": {
+          "id": "dmlogn8n-redis-credentials",
+          "name": "DMlogn8n Redis"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "sync_analytics",
+        "updateKey": "user_id, date, platform",
+        "updateValue": "={{ $json.user_id }},={{ new Date().toISOString().split('T')[0] }},={{ $json.platform }}",
+        "columns": "total_syncs, successful_syncs, failed_syncs, avg_sync_time_ms, total_bytes_synced",
+        "columnValues": "total_syncs + 1,{{ $json.status === 'synced' ? 'successful_syncs + 1' : 'successful_syncs' }},{{ $json.status === 'error' ? 'failed_syncs + 1' : 'failed_syncs' }},={{ ($json.avg_sync_time_ms || 0) + 100 }},{{ ($json.total_bytes_synced || 0) + ($json.bytes_transferred || 0) }}",
+        "additionalFields": {
+          "returnFields": "*"
+        }
+      },
+      "id": "update-analytics",
+      "name": "Update Analytics",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        2880,
+        120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/sync-completed",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "completion-webhook",
+      "name": "Completion Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        3100,
+        120
+      ],
+      "webhookId": "sync-completion-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log workflow completion and statistics\nconst workflowResults = $input.all();\nconst stats = {\n  total_processed: workflowResults.length,\n  successful: workflowResults.filter(item => item.json.status === 'synced').length,\n  failed: workflowResults.filter(item => item.json.status === 'error').length,\n  retried: workflowResults.filter(item => item.json.status === 'pending_retry').length,\n  execution_time: new Date().toISOString()\n};\n\n// Log to console for monitoring\nconsole.log('Auto Sync Workflow completed:', stats);\n\n// Store metrics in Redis for dashboard\nconst redis = require('ioredis');\nconst redisClient = new redis({\n  host: 'localhost',\n  port: 6379,\n  password: process.env.REDIS_PASSWORD\n});\n\nredisClient.hmset('sync_workflow_stats', {\n  last_execution: stats.execution_time,\n  total_processed: stats.total_processed,\n  successful: stats.successful,\n  failed: stats.failed,\n  retried: stats.retried\n});\n\nredisClient.expire('sync_workflow_stats', 86400); // 24 hours\n\nredisClient.quit();\n\nreturn [{\n  json: {\n    workflow: 'auto-sync',\n    statistics: stats,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "log-completion-stats",
+      "name": "Log Completion Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3320,
+        120
+      ]
+    }
+  ],
+  "connections": {
+    "Sync Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Pending Syncs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Pending Syncs": {
+      "main": [
+        [
+          {
+            "node": "Check Pending Syncs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Pending Syncs": {
+      "main": [
+        [
+          {
+            "node": "Prepare Sync Operations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Prepare Sync Operations": {
+      "main": [
+        [
+          {
+            "node": "Create Sync Operations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Sync Operations": {
+      "main": [
+        [
+          {
+            "node": "Get Save Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Save Data": {
+      "main": [
+        [
+          {
+            "node": "Process Sync API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Sync API": {
+      "main": [
+        [
+          {
+            "node": "Check Sync Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Sync Result": {
+      "main": [
+        [
+          {
+            "node": "Update Successful Sync",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Failed Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Successful Sync": {
+      "main": [
+        [
+          {
+            "node": "Update Save Game Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Failed Sync": {
+      "main": [
+        [
+          {
+            "node": "Handle Retry Logic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Retry Logic": {
+      "main": [
+        [
+          {
+            "node": "Update Retry Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Save Game Status": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Notifications": {
+      "main": [
+        [
+          {
+            "node": "Send WebSocket Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WebSocket Notification": {
+      "main": [
+        [
+          {
+            "node": "Update Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Analytics": {
+      "main": [
+        [
+          {
+            "node": "Completion Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Completion Webhook": {
+      "main": [
+        [
+          {
+            "node": "Log Completion Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-15T10:00:00.000Z",
+      "updatedAt": "2024-01-15T10:00:00.000Z",
+      "id": "sync-workflow-tag"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T10:00:00.000Z",
+  "versionId": "sync-workflow-v1"
+}

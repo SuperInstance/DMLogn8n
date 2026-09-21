@@ -1,0 +1,875 @@
+{
+  "name": "DMlogn8n Real-Time Sync Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "channel": "sync:save:*",
+        "options": {}
+      },
+      "id": "redis-sync-trigger",
+      "name": "Redis Sync Trigger",
+      "type": "n8n-nodes-base.redisTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "credentials": {
+        "redis": {
+          "id": "dmlogn8n-redis-credentials",
+          "name": "DMlogn8n Redis"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Redis sync message\nconst redisMessage = $input.first().json;\n\ntry {\n  const syncData = JSON.parse(redisMessage.message);\n  const channel = redisMessage.channel;\n  \n  // Extract save game ID from channel\n  const saveGameId = channel.split(':')[2];\n  \n  const processedData = {\n    save_game_id: saveGameId,\n    type: syncData.type,\n    version: syncData.version,\n    updated_by: syncData.updatedBy,\n    timestamp: syncData.timestamp,\n    channel: channel,\n    original_message: syncData\n  };\n  \n  return [{\n    json: processedData\n  }];\n} catch (error) {\n  console.error('Failed to parse Redis message:', error);\n  return [{\n    json: {\n      error: error.message,\n      raw_message: redisMessage\n    }\n  }];\n}"
+      },
+      "id": "parse-sync-message",
+      "name": "Parse Sync Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "valid-sync-message",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists"
+              },
+              "negate": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "validate-sync-message",
+      "name": "Validate Sync Message",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": "save_games",
+        "where": {
+          "conditions": [
+            {
+              "id": "save-game-exists",
+              "condition": "id",
+              "operation": "equal",
+              "value": "={{ $json.save_game_id }}"
+            }
+          ],
+          "combinator": "and"
+        },
+        "additionalFields": {
+          "returnFields": "id, user_id, campaign_name, character_name, sync_status, last_synced"
+        }
+      },
+      "id": "get-save-game-details",
+      "name": "Get Save Game Details",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "save-game-found",
+              "leftValue": "={{ $json.allItems.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "save-game-exists",
+      "name": "Save Game Exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": "user_platforms",
+        "where": {
+          "conditions": [
+            {
+              "id": "active-user-platforms",
+              "condition": "user_id",
+              "operation": "equal",
+              "value": "={{ $json.user_id }}"
+            },
+            {
+              "id": "platform-active",
+              "condition": "is_active",
+              "operation": "equal",
+              "value": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "additionalFields": {
+          "returnFields": "platform, device_id, device_name, last_seen, sync_version"
+        }
+      },
+      "id": "get-active-platforms",
+      "name": "Get Active Platforms",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        1340,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-other-platforms",
+              "leftValue": "={{ $json.allItems.length }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-other-platforms",
+      "name": "Has Other Platforms",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter out the platform that sent the update\nconst allPlatforms = $input.all();\nconst syncMessage = $('Parse Sync Message').first().json;\nconst updatedBy = syncMessage.updated_by; // Format: \"platform:device_id\"\n\nconst [updatingPlatform] = updatedBy.split(':');\n\nconst otherPlatforms = allPlatforms\n  .filter(item => {\n    const platform = item.json.platform;\n    return platform !== updatingPlatform;\n  })\n  .map(item => ({\n    json: {\n      ...item.json,\n      needs_notification: true\n    }\n  }));\n\nreturn otherPlatforms.length > 0 ? otherPlatforms : [{\n  json: {\n    message: 'No other platforms to notify',\n    updating_platform: updatingPlatform\n  }\n}];"
+      },
+      "id": "filter-notification-targets",
+      "name": "Filter Notification Targets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "needs-notification",
+              "leftValue": "={{ $json.needs_notification }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-needs-notification",
+      "name": "Check Needs Notification",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare personalized notification for each platform\nconst platformData = $json;\nconst syncMessage = $('Parse Sync Message').first().json;\nconst saveGameDetails = $('Get Save Game Details').first().json;\n\nconst notification = {\n  type: 'real_time_sync_update',\n  save_game_id: syncMessage.save_game_id,\n  campaign_name: saveGameDetails.campaign_name,\n  character_name: saveGameDetails.character_name,\n  version: syncMessage.version,\n  updated_by: syncMessage.updated_by,\n  timestamp: syncMessage.timestamp,\n  target_platform: platformData.platform,\n  target_device_id: platformData.device_id,\n  target_device_name: platformData.device_name,\n  current_version: platformData.sync_version,\n  needs_sync: platformData.sync_version < syncMessage.version,\n  message: `Your save game \"${saveGameDetails.campaign_name}\" has been updated to version ${syncMessage.version}`\n};\n\nreturn [{\n  json: notification\n}];"
+      },
+      "id": "prepare-platform-notification",
+      "name": "Prepare Platform Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": "ws_sessions",
+        "where": {
+          "conditions": [
+            {
+              "id": "active-sessions",
+              "condition": "user_id",
+              "operation": "equal",
+              "value": "={{ $json.user_id }}"
+            },
+            {
+              "id": "matching-platform",
+              "condition": "platform",
+              "operation": "equal",
+              "value": "={{ $json.target_platform }}"
+            },
+            {
+              "id": "session-active",
+              "condition": "is_active",
+              "operation": "equal",
+              "value": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "additionalFields": {
+          "returnFields": "session_id, device_id, last_ping, subscriptions"
+        }
+      },
+      "id": "get-active-sessions",
+      "name": "Get Active Sessions",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        2440,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-active-sessions",
+              "leftValue": "={{ $json.allItems.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-active-sessions",
+      "name": "Has Active Sessions",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Send WebSocket notifications to active sessions\nconst notificationData = $('Prepare Platform Notification').first().json;\nconst sessions = $input.all();\nconst results = [];\n\nfor (const session of sessions) {\n  const sessionData = session.json;\n  \n  // Check if session is subscribed to this save game\n  const subscriptions = sessionData.subscriptions ? JSON.parse(sessionData.subscriptions) : [];\n  const isSubscribed = subscriptions.includes(notificationData.save_game_id);\n  \n  if (isSubscribed || !subscriptions.length) { // Send if subscribed or no specific subscriptions\n    const notification = {\n      ...notificationData,\n      session_id: sessionData.session_id,\n      device_id: sessionData.device_id,\n      last_ping: sessionData.last_ping,\n      delivery_method: 'websocket'\n    };\n    \n    results.push({\n      json: notification\n    });\n  }\n}\n\nreturn results.length > 0 ? results : [{\n  json: {\n    message: 'No active sessions to notify',\n    save_game_id: notificationData.save_game_id,\n    target_platform: notificationData.target_platform\n  }\n}];"
+      },
+      "id": "prepare-websocket-notifications",
+      "name": "Prepare WebSocket Notifications",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "ws:session:{{ $json.session_id }}",
+        "message": "={{ JSON.stringify($json) }}"
+      },
+      "id": "send-websocket-notifications",
+      "name": "Send WebSocket Notifications",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        3100,
+        300
+      ],
+      "credentials": {
+        "redis": {
+          "id": "dmlogn8n-redis-credentials",
+          "name": "DMlogn8n Redis"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare push notifications for offline devices\nconst platformData = $('Filter Notification Targets').first().json;\nconst syncMessage = $('Parse Sync Message').first().json;\nconst saveGameDetails = $('Get Save Game Details').first().json;\n\nif (platformData.message === 'No other platforms to notify') {\n  return [{\n    json: {\n      message: 'No push notifications needed'\n    }\n  }];\n}\n\nconst pushNotification = {\n  type: 'sync_update_push',\n  user_id: saveGameDetails.user_id,\n  platform: platformData.platform,\n  device_id: platformData.device_id,\n  title: 'Save Game Updated',\n  body: `\"${saveGameDetails.campaign_name}\" has been updated to version ${syncMessage.version}`,\n  data: {\n    save_game_id: syncMessage.save_game_id,\n    campaign_name: saveGameDetails.campaign_name,\n    version: syncMessage.version,\n    updated_by: syncMessage.updated_by,\n    needs_sync: platformData.sync_version < syncMessage.version\n  },\n  priority: platformData.sync_version < syncMessage.version ? 'high' : 'normal',\n  timestamp: new Date().toISOString()\n};\n\nreturn [{\n  json: pushNotification\n}];"
+      },
+      "id": "prepare-push-notifications",
+      "name": "Prepare Push Notifications",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": "push_tokens",
+        "where": {
+          "conditions": [
+            {
+              "id": "user-push-tokens",
+              "condition": "user_id",
+              "operation": "equal",
+              "value": "={{ $json.user_id }}"
+            },
+            {
+              "id": "platform-push-tokens",
+              "condition": "platform",
+              "operation": "equal",
+              "value": "={{ $json.platform }}"
+            },
+            {
+              "id": "active-push-tokens",
+              "condition": "is_active",
+              "operation": "equal",
+              "value": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "additionalFields": {
+          "returnFields": "token, device_id, platform_type"
+        }
+      },
+      "id": "get-push-tokens",
+      "name": "Get Push Tokens",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        2440,
+        420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-push-tokens",
+              "leftValue": "={{ $json.allItems.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-push-tokens",
+      "name": "Has Push Tokens",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2660,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.platform_type === 'ios' ? 'https://api.push.apple.com/3/device' : 'https://fcm.googleapis.com/fcm/send' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "bearer {{ $json.platform_type === 'ios' ? $credentials.APNS_AUTH_TOKEN : $credentials.FCM_SERVER_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.platform_type === 'ios' ? {\n  \"aps\": {\n    \"alert\": {\n      \"title\": $json.title,\n      \"body\": $json.body\n    },\n    \"badge\": 1,\n    \"sound\": \"default\",\n    \"priority\": $json.priority === 'high' ? 10 : 5\n  },\n  \"data\": $json.data\n} : {\n  \"to\": $json.token,\n  \"notification\": {\n    \"title\": $json.title,\n    \"body\": $json.body,\n    \"sound\": \"default\"\n  },\n  \"data\": $json.data,\n  \"priority\": $json.priority === 'high' ? 'high' : 'normal'\n}}}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "send-push-notifications",
+      "name": "Send Push Notifications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2880,
+        420
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "push-service-auth",
+          "name": "Push Service Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "sync_notifications",
+        "columns": "id, user_id, save_game_id, platform, device_id, notification_type, message, sent_at, delivery_method, status",
+        "columnValues": "={{ require('crypto').randomUUID() }},={{ $json.user_id }},={{ $json.save_game_id }},={{ $json.platform }},={{ $json.device_id }},real_time_update,={{ $json.message }},NOW(),={{ $json.delivery_method }},sent"
+      },
+      "id": "log-notification-sent",
+      "name": "Log Notification Sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        3100,
+        420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "sync_analytics",
+        "updateKey": "user_id, date, platform",
+        "updateValue": "={{ $json.user_id }},={{ new Date().toISOString().split('T')[0] }},={{ $json.platform }}",
+        "columns": "real_time_updates, notifications_sent",
+        "columnValues": "real_time_updates + 1,notifications_sent + 1",
+        "additionalFields": {
+          "returnFields": "*"
+        }
+      },
+      "id": "update-real-time-analytics",
+      "name": "Update Real-Time Analytics",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        3320,
+        420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "save_games",
+        "updateKey": "id",
+        "updateValue": "={{ $json.save_game_id }}",
+        "columns": "last_sync_broadcast",
+        "columnValues": "NOW()"
+      },
+      "id": "update-broadcast-timestamp",
+      "name": "Update Broadcast Timestamp",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        3320,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log error and continue processing\nconst errorData = $input.first().json;\n\nconsole.error('Real-time sync error:', errorData);\n\n// Log error to database\nawait require('pg').Pool({\n  host: process.env.DB_HOST,\n  port: process.env.DB_PORT,\n  database: process.env.DB_NAME,\n  user: process.env.DB_USER,\n  password: process.env.DB_PASSWORD\n}).query(`\n  INSERT INTO sync_errors (id, error_type, error_message, raw_data, created_at)\n  VALUES ($1, $2, $3, $4, NOW())\n`, [\n  require('crypto').randomUUID(),\n  'real_time_sync_error',\n  errorData.error || 'Unknown error',\n  JSON.stringify(errorData)\n]);\n\nreturn [{\n  json: {\n    error_handled: true,\n    error_type: 'real_time_sync_error',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "handle-error",
+      "name": "Handle Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Clean up old notifications and update metrics\nconst cleanupData = {\n  execution_time: new Date().toISOString(),\n  notifications_processed: $('Send WebSocket Notifications').all().length + $('Send Push Notifications').all().length,\n  websocket_sent: $('Send WebSocket Notifications').all().length,\n  push_sent: $('Send Push Notifications').all().length\n};\n\n// Clean up notifications older than 7 days\nconst cleanupQuery = `\n  DELETE FROM sync_notifications \n  WHERE sent_at < NOW() - INTERVAL '7 days'\n`;\n\n// Update Redis metrics\nconst redis = require('ioredis');\nconst redisClient = new redis({\n  host: 'localhost',\n  port: 6379,\n  password: process.env.REDIS_PASSWORD\n});\n\nredisClient.hmset('real_time_sync_stats', {\n  last_execution: cleanupData.execution_time,\n  notifications_processed: cleanupData.notifications_processed,\n  websocket_sent: cleanupData.websocket_sent,\n  push_sent: cleanupData.push_sent\n});\n\nredisClient.expire('real_time_sync_stats', 86400); // 24 hours\n\nredisClient.quit();\n\nconsole.log('Real-time sync workflow completed:', cleanupData);\n\nreturn [{\n  json: {\n    workflow: 'real-time-sync',\n    cleanup_data: cleanupData,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "cleanup-and-metrics",
+      "name": "Cleanup and Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3540,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Redis Sync Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parse Sync Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Sync Message": {
+      "main": [
+        [
+          {
+            "node": "Validate Sync Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Sync Message": {
+      "main": [
+        [
+          {
+            "node": "Get Save Game Details",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Save Game Details": {
+      "main": [
+        [
+          {
+            "node": "Save Game Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Game Exists": {
+      "main": [
+        [
+          {
+            "node": "Get Active Platforms",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Get Active Platforms": {
+      "main": [
+        [
+          {
+            "node": "Has Other Platforms",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Other Platforms": {
+      "main": [
+        [
+          {
+            "node": "Filter Notification Targets",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Filter Notification Targets": {
+      "main": [
+        [
+          {
+            "node": "Check Needs Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Push Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Needs Notification": {
+      "main": [
+        [
+          {
+            "node": "Prepare Platform Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Prepare Platform Notification": {
+      "main": [
+        [
+          {
+            "node": "Get Active Sessions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Sessions": {
+      "main": [
+        [
+          {
+            "node": "Has Active Sessions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Active Sessions": {
+      "main": [
+        [
+          {
+            "node": "Prepare WebSocket Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Prepare WebSocket Notifications": {
+      "main": [
+        [
+          {
+            "node": "Send WebSocket Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WebSocket Notifications": {
+      "main": [
+        [
+          {
+            "node": "Update Broadcast Timestamp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Push Notifications": {
+      "main": [
+        [
+          {
+            "node": "Get Push Tokens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Push Tokens": {
+      "main": [
+        [
+          {
+            "node": "Has Push Tokens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Push Tokens": {
+      "main": [
+        [
+          {
+            "node": "Send Push Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Send Push Notifications": {
+      "main": [
+        [
+          {
+            "node": "Log Notification Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Notification Sent": {
+      "main": [
+        [
+          {
+            "node": "Update Real-Time Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Real-Time Analytics": {
+      "main": [
+        [
+          {
+            "node": "Update Broadcast Timestamp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Broadcast Timestamp": {
+      "main": [
+        [
+          {
+            "node": "Cleanup and Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicyDefaultOption": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-15T10:00:00.000Z",
+      "updatedAt": "2024-01-15T10:00:00.000Z",
+      "id": "real-time-sync-tag"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T10:00:00.000Z",
+  "versionId": "real-time-sync-v1"
+}

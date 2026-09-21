@@ -1,0 +1,337 @@
+{
+  "name": "Emotion Analysis and Response Generation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "emotion-analyze",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook - Emotion Analysis Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "emotion-analysis-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse incoming request\nconst requestData = JSON.parse($input.first().json.body);\n\n// Validate required fields\nif (!requestData.text || !requestData.speakerId) {\n  throw new Error('Missing required fields: text and speakerId');\n}\n\n// Prepare data for emotion analysis\nconst emotionAnalysisData = {\n  text: requestData.text,\n  speakerId: requestData.speakerId,\n  conversationId: requestData.conversationId || 'default',\n  context: {\n    previousMessages: requestData.previousMessages || [],\n    environment: requestData.environment || {},\n    relationship: requestData.relationship || {},\n    campaign: requestData.campaign || {},\n    playerState: requestData.playerState || {}\n  },\n  timestamp: new Date().toISOString()\n};\n\n// Add metadata\nemotionAnalysisData.metadata = {\n  source: 'dialogue-system',\n  version: '1.0',\n  processingPriority: requestData.priority || 'normal'\n};\n\nreturn { json: emotionAnalysisData };"
+      },
+      "id": "parse-request",
+      "name": "Parse Request Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/emotion/analyze",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{$json.text}}"
+            },
+            {
+              "name": "speakerId",
+              "value": "={{$json.speakerId}}"
+            },
+            {
+              "name": "context",
+              "value": "={{$json.context}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "emotion-analysis-api",
+      "name": "Emotion Analysis API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process emotion analysis results\nconst emotionResult = $input.first().json;\n\n// Extract emotional state and metrics\nconst emotionalState = emotionResult.emotionalState || {};\nconst sentiment = emotionResult.sentiment || {};\nconst empathyResponse = emotionResult.empathyResponse || {};\nconst confidence = emotionResult.confidence || 0.5;\n\n// Determine dominant emotion\nconst dominantEmotion = Object.entries(emotionalState)\n  .sort((a, b) => b[1] - a[1])[0]?.[0] || 'neutral';\n\n// Calculate emotional intensity\nconst emotionalIntensity = Object.values(emotionalState)\n  .reduce((sum, intensity) => sum + intensity, 0) / Object.keys(emotionalState).length;\n\n// Generate response strategy\nconst responseStrategy = determineResponseStrategy(dominantEmotion, emotionalIntensity, sentiment);\n\n// Prepare context-aware response data\nconst responseData = {\n  originalRequest: {\n    text: emotionResult.originalText || '',\n    speakerId: emotionResult.speakerId || '',\n    timestamp: emotionResult.timestamp || new Date().toISOString()\n  },\n  emotionalAnalysis: {\n    dominantEmotion,\n    emotionalState,\n    emotionalIntensity,\n    confidence,\n    sentiment,\n    empathyResponse\n  },\n  responseStrategy,\n  suggestedResponses: generateSuggestedResponses(dominantEmotion, emotionalIntensity, empathyResponse),\n  metadata: {\n    processedAt: new Date().toISOString(),\n    processingTime: emotionResult.processingTime || 0,\n    modelVersion: '1.0'\n  }\n};\n\nfunction determineResponseStrategy(emotion, intensity, sentiment) {\n  const strategies = {\n    happiness: intensity > 0.7 ? 'enthusiastic' : 'supportive',\n    sadness: intensity > 0.7 ? 'comforting' : 'supportive',\n    anger: intensity > 0.7 ? 'deescalating' : 'understanding',\n    fear: intensity > 0.7 ? 'reassuring' : 'supportive',\n    surprise: intensity > 0.7 ? 'engaged' : 'acknowledging',\n    disgust: intensity > 0.7 ? 'validating' : 'understanding',\n    trust: 'reciprocal',\n    anticipation: 'engaged',\n    neutral: 'neutral'\n  };\n\n  return {\n    primary: strategies[emotion] || 'neutral',\n    intensity: intensity,\n    sentimentAlignment: sentiment.score > 0 ? 'positive' : sentiment.score < 0 ? 'negative' : 'neutral',\n    requiresEmpathy: empathyResponse !== null,\n    confidence: confidence\n  };\n}\n\nfunction generateSuggestedResponses(emotion, intensity, empathy) {\n  const responseTemplates = {\n    happiness: [\n      \"I can hear the excitement in your voice! Tell me more.\",\n      \"That sounds wonderful! I'm genuinely happy for you.\",\n      \"Your enthusiasm is contagious! What else happened?\"\n    ],\n    sadness: [\n      \"I can hear how difficult this is for you. I'm here to listen.\",\n      \"That sounds really tough. You don't have to go through this alone.\",\n      \"I understand this hurts. Take your time to process this.\"\n    ],\n    anger: [\n      \"I can understand why you'd feel angry about this. Let's work through it.\",\n      \"Your feelings are valid. What do you think would help right now?\",\n      \"I hear your frustration. Let's find a constructive way forward.\"\n    ],\n    fear: [\n      \"That sounds scary. You're safe to talk about this with me.\",\n      \"I understand your concern. Let's think through this together.\",\n      \"Your fear makes sense given the situation. What would help you feel more secure?\"\n    ],\n    neutral: [\n      \"I understand. Tell me more about that.\",\n      \"Thank you for sharing that with me.\",\n      \"How does that make you feel?\"\n    ]\n  };\n\n  const templates = responseTemplates[emotion] || responseTemplates.neutral;\n  const responseCount = Math.min(3, Math.ceil(intensity * 3) + 1);\n  \n  return templates.slice(0, responseCount).map((template, index) => ({\n    id: `response_${index + 1}`,\n    text: template,\n    appropriateness: 0.8 + (Math.random() * 0.2),\n    emotionalTone: emotion,\n    intensity: intensity\n  }));\n}\n\nreturn { json: responseData };"
+      },
+      "id": "process-emotion-results",
+      "name": "Process Emotion Analysis Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/context/update",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "conversationId",
+              "value": "={{$json.originalRequest.speakerId}}"
+            },
+            {
+              "name": "emotionalState",
+              "value": "={{$json.emotionalAnalysis.emotionalState}}"
+            },
+            {
+              "name": "sentiment",
+              "value": "={{$json.emotionalAnalysis.sentiment}}"
+            },
+            {
+              "name": "responseStrategy",
+              "value": "={{$json.responseStrategy}}"
+            }
+          ]
+        }
+      },
+      "id": "update-context",
+      "name": "Update Conversation Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate analytics tracking data\nconst responseData = $input.first().json;\nconst originalRequest = responseData.originalRequest;\nconst emotionalAnalysis = responseData.emotionalAnalysis;\nconst responseStrategy = responseData.responseStrategy;\n\n// Create analytics event\nconst analyticsEvent = {\n  eventType: 'emotion_analysis_completed',\n  timestamp: new Date().toISOString(),\n  sessionId: originalRequest.speakerId,\n  conversationId: originalRequest.speakerId,\n  eventData: {\n    dominantEmotion: emotionalAnalysis.dominantEmotion,\n    emotionalIntensity: emotionalAnalysis.emotionalIntensity,\n    confidence: emotionalAnalysis.confidence,\n    sentimentScore: emotionalAnalysis.sentiment.score || 0,\n    responseStrategy: responseStrategy.primary,\n    requiresEmpathy: responseStrategy.requiresEmpathy,\n    processingTime: responseData.metadata.processingTime\n  },\n  metadata: {\n    workflowId: 'emotion-analysis-workflow',\n    version: '1.0',\n    source: 'dialogue-system'\n  }\n};\n\n// Create performance metrics\nconst performanceMetrics = {\n  sessionId: originalRequest.speakerId,\n  processingMetrics: {\n    emotionAnalysisTime: responseData.metadata.processingTime,\n    totalProcessingTime: Date.now() - new Date(originalRequest.timestamp).getTime(),\n    confidence: emotionalAnalysis.confidence,\n    success: true\n  },\n  qualityMetrics: {\n    emotionalAccuracy: emotionalAnalysis.confidence,\n    responseRelevance: responseStrategy.confidence,\n    empathyDetected: responseStrategy.requiresEmpathy\n  }\n};\n\nreturn {\n  json: {\n    analyticsEvent,\n    performanceMetrics,\n    originalResponse: responseData\n  }\n};"
+      },
+      "id": "generate-analytics",
+      "name": "Generate Analytics Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/analytics/track",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event",
+              "value": "={{$json.analyticsEvent}}"
+            },
+            {
+              "name": "metrics",
+              "value": "={{$json.performanceMetrics}}"
+            }
+          ]
+        }
+      },
+      "id": "track-analytics",
+      "name": "Track Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json.originalResponse}}"
+      },
+      "id": "webhook-response",
+      "name": "Return Analysis Results",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.confidence}}",
+              "operation": "smaller",
+              "value2": 0.3
+            }
+          ]
+        }
+      },
+      "id": "low-confidence-check",
+      "name": "Low Confidence Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 480]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/emotion/reanalyze",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{$json.originalRequest.text}}"
+            },
+            {
+              "name": "speakerId",
+              "value": "={{$json.originalRequest.speakerId}}"
+            },
+            {
+              "name": "previousResult",
+              "value": "={{$json}}"
+            },
+            {
+              "name": "reanalysisReason",
+              "value": "low_confidence"
+            }
+          ]
+        }
+      },
+      "id": "reanalysis-api",
+      "name": "Reanalysis API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 480]
+    }
+  ],
+  "connections": {
+    "Webhook - Emotion Analysis Request": {
+      "main": [
+        [
+          {
+            "node": "Parse Request Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Request Data": {
+      "main": [
+        [
+          {
+            "node": "Emotion Analysis API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Emotion Analysis API": {
+      "main": [
+        [
+          {
+            "node": "Process Emotion Analysis Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Emotion Analysis Results": {
+      "main": [
+        [
+          {
+            "node": "Update Conversation Context",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Low Confidence Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Conversation Context": {
+      "main": [
+        [
+          {
+            "node": "Generate Analytics Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Analytics Data": {
+      "main": [
+        [
+          {
+            "node": "Track Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Analytics": {
+      "main": [
+        [
+          {
+            "node": "Return Analysis Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Low Confidence Check": {
+      "main": [
+        [
+          {
+            "node": "Reanalysis API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Analytics Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reanalysis API": {
+      "main": [
+        [
+          {
+            "node": "Generate Analytics Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "emotion-analysis",
+      "name": "Emotion Analysis"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "ai-dialogue",
+      "name": "AI Dialogue"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1.0"
+}

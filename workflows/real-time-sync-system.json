@@ -1,0 +1,502 @@
+{
+  "name": "Real-Time Sync System - Multi-Client State Broadcasting & Conflict Resolution",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sync/update",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "sync-update-webhook",
+      "name": "Sync Update Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "sync-update"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process sync update request\nconst syncData = $input.first().json;\nconst { \n  clientId,\n  sessionId,\n  dataType, // 'character', 'scene', 'world', 'campaign'\n  entityId,\n  updateData,\n  timestamp,\n  priority = 'normal', // 'low', 'normal', 'high', 'critical'\n  conflictResolution = 'timestamp' // 'timestamp', 'manual', 'merge'\n} = syncData;\n\n// Validate required fields\nif (!clientId || !sessionId || !dataType || !entityId || !updateData) {\n  throw new Error('Missing required fields: clientId, sessionId, dataType, entityId, updateData');\n}\n\n// Generate update ID if not provided\nconst updateId = syncData.updateId || `update_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;\n\n// Prepare sync operation data\nconst syncOperation = {\n  updateId,\n  clientId,\n  sessionId,\n  dataType,\n  entityId,\n  updateData,\n  timestamp: timestamp || new Date().toISOString(),\n  priority,\n  conflictResolution,\n  status: 'pending',\n  metadata: {\n    processedBy: 'real-time-sync-workflow',\n    version: '1.0'\n  }\n};\n\nreturn { json: syncOperation };"
+      },
+      "id": "process-sync-update",
+      "name": "Process Sync Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "lookup",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_SYNC_SHEET_ID }}",
+        "range": "Sync_Queue!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-check-conflicts",
+      "name": "Google Sheets - Check Conflicts",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [680, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check for conflicts and apply resolution strategy\nconst syncData = $input.first().json;\nconst { updateId, dataType, entityId, conflictResolution, timestamp } = syncData;\n\n// Get existing updates for the same entity\nlet existingUpdates = [];\nif ($input.length > 1 && $input[1].json && $input[1].json.values) {\n  existingUpdates = $input[1].json.values.filter(row => \n    row[2] === dataType && row[3] === entityId && row[6] !== 'resolved'\n  ).map(row => ({\n    updateId: row[0],\n    clientId: row[1],\n    dataType: row[2],\n    entityId: row[3],\n    updateData: JSON.parse(row[4] || '{}'),\n    timestamp: row[5],\n    status: row[6]\n  }));\n}\n\n// Detect conflicts\nconst conflicts = [];\nconst currentTime = new Date(timestamp);\n\nexistingUpdates.forEach(existing => {\n  const existingTime = new Date(existing.timestamp);\n  const timeDiff = Math.abs(currentTime - existingTime);\n  \n  // Consider updates within 5 seconds as potentially conflicting\n  if (timeDiff < 5000 && existing.updateId !== updateId) {\n    conflicts.push({\n      existingUpdate: existing,\n      conflictType: 'simultaneous_update',\n      timeDifference: timeDiff\n    });\n  }\n  \n  // Check for data-level conflicts\n  const dataConflict = detectDataConflict(syncData.updateData, existing.updateData);\n  if (dataConflict.hasConflict) {\n    conflicts.push({\n      existingUpdate: existing,\n      conflictType: 'data_conflict',\n      details: dataConflict.details\n    });\n  }\n});\n\nfunction detectDataConflict(newData, existingData) {\n  const conflicts = [];\n  \n  // Check for conflicting field values\n  for (const key in newData) {\n    if (existingData.hasOwnProperty(key) && newData[key] !== existingData[key]) {\n      // Some fields are expected to change frequently\n      const nonConflictingFields = ['lastUpdated', 'timestamp', 'metadata'];\n      if (!nonConflictingFields.includes(key)) {\n        conflicts.push({\n          field: key,\n          newValue: newData[key],\n          existingValue: existingData[key]\n        });\n      }\n    }\n  }\n  \n  return {\n    hasConflict: conflicts.length > 0,\n    details: conflicts\n  };\n}\n\n// Apply conflict resolution\nlet resolvedData = syncData.updateData;\nlet resolutionLog = [];\n\nif (conflicts.length > 0) {\n  resolutionLog.push(`Detected ${conflicts.length} conflicts for ${dataType}:${entityId}`);\n  \n  switch (conflictResolution) {\n    case 'timestamp':\n      // Use the most recent update\n      const sortedByTime = [syncData, ...conflicts.map(c => c.existingUpdate)]\n        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));\n      \n      if (sortedByTime[0].updateId === updateId) {\n        resolutionLog.push('Update wins by timestamp (most recent)');\n        // Keep our data as resolved\n      } else {\n        resolutionLog.push(`Update rejected - newer update exists: ${sortedByTime[0].updateId}`);\n        // Use the newer data\n        resolvedData = sortedByTime[0].updateData;\n      }\n      break;\n      \n    case 'merge':\n      // Attempt to merge non-conflicting fields\n      conflicts.forEach(conflict => {\n        if (conflict.conflictType === 'data_conflict') {\n          conflict.details.forEach(fieldConflict => {\n            // For numeric fields, use the higher value (e.g., HP, XP)\n            if (typeof fieldConflict.newValue === 'number' && typeof fieldConflict.existingValue === 'number') {\n              if (fieldConflict.newValue > fieldConflict.existingValue) {\n                resolutionLog.push(`Merged numeric field ${fieldConflict.field}: kept higher value ${fieldConflict.newValue}`);\n              } else {\n                resolvedData[fieldConflict.field] = fieldConflict.existingValue;\n                resolutionLog.push(`Merged numeric field ${fieldConflict.field}: used existing higher value ${fieldConflict.existingValue}`);\n              }\n            }\n            // For array fields, merge them\n            else if (Array.isArray(fieldConflict.newValue) && Array.isArray(fieldConflict.existingValue)) {\n              resolvedData[fieldConflict.field] = [...new Set([...fieldConflict.newValue, ...fieldConflict.existingValue])];\n              resolutionLog.push(`Merged array field ${fieldConflict.field}: combined unique values`);\n            }\n            // For other fields, keep the newer value\n            else {\n              resolutionLog.push(`Kept newer value for field ${fieldConflict.field}: ${fieldConflict.newValue}`);\n            }\n          });\n        }\n      });\n      break;\n      \n    case 'manual':\n      // Flag for manual resolution\n      resolutionLog.push('Conflict flagged for manual resolution');\n      resolvedData.requiresManualResolution = true;\n      resolvedData.conflicts = conflicts;\n      break;\n      \n    default:\n      resolutionLog.push(`Unknown conflict resolution strategy: ${conflictResolution}`);\n  }\n} else {\n  resolutionLog.push('No conflicts detected - applying update directly');\n}\n\n// Prepare result\nconst syncResult = {\n  updateId,\n  dataType,\n  entityId,\n  originalData: syncData.updateData,\n  resolvedData,\n  conflicts,\n  resolutionStrategy: conflictResolution,\n  resolutionLog,\n  status: conflicts.length > 0 && conflictResolution === 'manual' ? 'requires_manual_resolution' : 'resolved',\n  timestamp: new Date().toISOString()\n};\n\nreturn { json: syncResult };"
+      },
+      "id": "resolve-conflicts",
+      "name": "Resolve Conflicts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_SYNC_SHEET_ID }}",
+        "range": "Sync_History!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-log-sync",
+      "name": "Google Sheets - Log Sync",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1140, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate data integrity before broadcasting\nconst syncResult = $input.first().json;\nconst { updateId, dataType, entityId, resolvedData, conflicts } = syncResult;\n\nconst validationErrors = [];\nconst validationWarnings = [];\n\n// Data type-specific validation\nswitch (dataType) {\n  case 'character':\n    // Validate character data\n    if (resolvedData.hpCurrent !== undefined) {\n      if (typeof resolvedData.hpCurrent !== 'number' || resolvedData.hpCurrent < 0) {\n        validationErrors.push('Invalid HP value: must be non-negative number');\n      }\n      if (resolvedData.hpMax !== undefined && resolvedData.hpCurrent > resolvedData.hpMax) {\n        validationWarnings.push('HP current exceeds HP max - capping at max value');\n        resolvedData.hpCurrent = resolvedData.hpMax;\n      }\n    }\n    \n    if (resolvedData.level !== undefined) {\n      if (typeof resolvedData.level !== 'number' || resolvedData.level < 1 || resolvedData.level > 100) {\n        validationErrors.push('Invalid level: must be number between 1 and 100');\n      }\n    }\n    break;\n    \n  case 'scene':\n    // Validate scene data\n    if (resolvedData.lighting) {\n      const validLighting = ['bright', 'normal', 'dim', 'dark', 'magical', 'flickering'];\n      if (!validLighting.includes(resolvedData.lighting)) {\n        validationErrors.push(`Invalid lighting type: ${resolvedData.lighting}`);\n      }\n    }\n    \n    if (resolvedData.objects && !Array.isArray(resolvedData.objects)) {\n      validationErrors.push('Scene objects must be an array');\n    }\n    break;\n    \n  case 'world':\n    // Validate world data\n    if (resolvedData.locations && !Array.isArray(resolvedData.locations)) {\n      validationErrors.push('World locations must be an array');\n    }\n    \n    if (resolvedData.npcs && !Array.isArray(resolvedData.npcs)) {\n      validationErrors.push('World NPCs must be an array');\n    }\n    break;\n}\n\n// General validation\nif (!entityId || typeof entityId !== 'string') {\n  validationErrors.push('Invalid entity ID: must be non-empty string');\n}\n\n// Check for data structure integrity\nif (typeof resolvedData !== 'object' || resolvedData === null) {\n  validationErrors.push('Invalid data structure: must be object');\n}\n\n// Prepare validation result\nconst validationResult = {\n  updateId,\n  dataType,\n  entityId,\n  isValid: validationErrors.length === 0,\n  validationErrors,\n  validationWarnings,\n  validatedData: resolvedData,\n  requiresManualReview: validationErrors.length > 0,\n  timestamp: new Date().toISOString()\n};\n\nreturn { json: validationResult };"
+      },
+      "id": "validate-data-integrity",
+      "name": "Validate Data Integrity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare and broadcast validated sync update to all clients\nconst validationResult = $input.first().json;\nconst { updateId, dataType, entityId, isValid, validatedData, validationErrors, validationWarnings } = validationResult;\n\nif (!isValid) {\n  return {\n    json: {\n      type: 'sync_error',\n      data: {\n        updateId,\n        dataType,\n        entityId,\n        errors: validationErrors,\n        warnings: validationWarnings,\n        status: 'validation_failed'\n      },\n      channels: ['sync_errors', 'dm_updates'],\n      timestamp: new Date().toISOString()\n    }\n  };\n}\n\n// Prepare broadcast payload\nconst broadcastPayload = {\n  type: 'sync_update',\n  data: {\n    updateId,\n    dataType,\n    entityId,\n    updateData: validatedData,\n    validationWarnings: validationWarnings.length > 0 ? validationWarnings : undefined,\n    status: 'synced'\n  },\n  channels: [\n    `${dataType}_updates`,\n    `${dataType}_${entityId}`,\n    'game_updates',\n    'sync_broadcast'\n  ],\n  timestamp: new Date().toISOString()\n};\n\nreturn { json: broadcastPayload };"
+      },
+      "id": "prepare-broadcast",
+      "name": "Prepare Broadcast",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1580, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Send WebSocket broadcast to all connected clients\nconst broadcastData = $input.first().json;\n\n// Send to WebSocket system\nconst response = await fetch('http://localhost:5678/webhook/websocket/broadcast', {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json'\n  },\n  body: JSON.stringify(broadcastData)\n});\n\nlet broadcastResult;\nif (response.ok) {\n  broadcastResult = {\n    success: true,\n    broadcastId: `broadcast_${Date.now()}`,\n    channels: broadcastData.channels,\n    recipients: 'all_connected_clients'\n  };\n} else {\n  broadcastResult = {\n    success: false,\n    error: `Broadcast failed: ${response.statusText}`,\n    status: response.status\n  };\n}\n\nreturn { json: { broadcast: broadcastResult, originalData: broadcastData } };"
+      },
+      "id": "websocket-broadcast",
+      "name": "WebSocket Broadcast",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1800, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: $json.broadcast.success,\n  updateId: $json.originalData.data.updateId,\n  dataType: $json.originalData.data.dataType,\n  entityId: $json.originalData.data.entityId,\n  status: $json.originalData.data.status,\n  broadcastId: $json.broadcast.broadcastId,\n  channels: $json.broadcast.channels,\n  timestamp: new Date().toISOString()\n} }}"
+      },
+      "id": "sync-success-response",
+      "name": "Sync Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2020, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sync/rollback",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "rollback-webhook",
+      "name": "Rollback Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 600],
+      "webhookId": "sync-rollback"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process rollback request\nconst rollbackData = $input.first().json;\nconst { \n  updateId,\n  sessionId,\n  reason = 'manual_rollback',\n  rollbackTo = null // timestamp or updateId to rollback to\n} = rollbackData;\n\n// Validate required fields\nif (!updateId || !sessionId) {\n  throw new Error('Missing required fields: updateId, sessionId');\n}\n\n// Prepare rollback operation\nconst rollbackOperation = {\n  rollbackId: `rollback_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n  originalUpdateId: updateId,\n  sessionId,\n  reason,\n  rollbackTo,\n  timestamp: new Date().toISOString(),\n  status: 'pending'\n};\n\nreturn { json: rollbackOperation };"
+      },
+      "id": "process-rollback",
+      "name": "Process Rollback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "operation": "lookup",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_SYNC_SHEET_ID }}",
+        "range": "Sync_History!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-get-history",
+      "name": "Google Sheets - Get History",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [680, 600],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Execute rollback and restore previous state\nconst rollbackData = $input.first().json;\nconst { rollbackId, originalUpdateId, rollbackTo, reason } = rollbackData;\n\n// Get sync history to find rollback target\nlet history = [];\nif ($input.length > 1 && $input[1].json && $input[1].json.values) {\n  history = $input[1].json.values.map(row => ({\n    updateId: row[0],\n    dataType: row[1],\n    entityId: row[2],\n    updateData: JSON.parse(row[3] || '{}'),\n    timestamp: row[4],\n    clientId: row[5],\n    sessionId: row[6]\n  }));\n}\n\n// Find the original update\nconst originalUpdate = history.find(h => h.updateId === originalUpdateId);\nif (!originalUpdate) {\n  throw new Error(`Original update not found: ${originalUpdateId}`);\n}\n\n// Find rollback target\nlet rollbackTarget = null;\nif (rollbackTo) {\n  // Rollback to specific update or timestamp\n  rollbackTarget = history.find(h => \n    h.updateId === rollbackTo || h.timestamp === rollbackTo\n  );\n} else {\n  // Find the most recent update before the original\n  const earlierUpdates = history.filter(h => \n    new Date(h.timestamp) < new Date(originalUpdate.timestamp) &&\n    h.dataType === originalUpdate.dataType &&\n    h.entityId === originalUpdate.entityId\n  );\n  \n  if (earlierUpdates.length > 0) {\n    rollbackTarget = earlierUpdates.reduce((latest, current) => \n      new Date(current.timestamp) > new Date(latest.timestamp) ? current : latest\n    );\n  }\n}\n\nif (!rollbackTarget) {\n  throw new Error('No suitable rollback target found');\n}\n\n// Prepare rollback data\nconst rollbackResult = {\n  rollbackId,\n  originalUpdateId,\n  rollbackTargetId: rollbackTarget.updateId,\n  dataType: originalUpdate.dataType,\n  entityId: originalUpdate.entityId,\n  restoredData: rollbackTarget.updateData,\n  originalData: originalUpdate.updateData,\n  reason,\n  rollbackTimestamp: new Date().toISOString(),\n  originalTimestamp: originalUpdate.timestamp,\n  restoredTimestamp: rollbackTarget.timestamp\n};\n\nreturn { json: rollbackResult };"
+      },
+      "id": "execute-rollback",
+      "name": "Execute Rollback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 600]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_SYNC_SHEET_ID }}",
+        "range": "Rollback_History!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-log-rollback",
+      "name": "Google Sheets - Log Rollback",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1140, 600],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Broadcast rollback notification to all clients\nconst rollbackData = $input.first().json;\n\nconst rollbackBroadcast = {\n  type: 'sync_rollback',\n  data: {\n    rollbackId: rollbackData.rollbackId,\n    originalUpdateId: rollbackData.originalUpdateId,\n    dataType: rollbackData.dataType,\n    entityId: rollbackData.entityId,\n    restoredData: rollbackData.restoredData,\n    reason: rollbackData.reason,\n    rollbackTimestamp: rollbackData.rollbackTimestamp\n  },\n  channels: [\n    `${rollbackData.dataType}_updates`,\n    `${rollbackData.dataType}_${rollbackData.entityId}`,\n    'game_updates',\n    'rollback_notifications'\n  ],\n  timestamp: new Date().toISOString()\n};\n\n// Send to WebSocket system\nfetch('http://localhost:5678/webhook/websocket/broadcast', {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json'\n  },\n  body: JSON.stringify(rollbackBroadcast)\n}).catch(error => {\n  console.error('Failed to broadcast rollback:', error);\n});\n\nreturn { json: rollbackBroadcast };"
+      },
+      "id": "broadcast-rollback",
+      "name": "Broadcast Rollback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 600]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: true,\n  rollbackId: $json.rollbackId,\n  originalUpdateId: $json.originalUpdateId,\n  dataType: $json.dataType,\n  entityId: $json.entityId,\n  reason: $json.reason,\n  rollbackTimestamp: $json.rollbackTimestamp,\n  timestamp: new Date().toISOString()\n} }}"
+      },
+      "id": "rollback-success-response",
+      "name": "Rollback Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1580, 600]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sync/audit",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "audit-webhook",
+      "name": "Audit Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 900],
+      "webhookId": "sync-audit"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate audit trail for sync operations\nconst auditRequest = $input.first().json;\nconst { \n  sessionId,\n  clientId,\n  timeRange = '24h', // '1h', '24h', '7d', '30d'\n  dataType = null,\n  entityId = null\n} = auditRequest;\n\n// Validate required fields\nif (!sessionId) {\n  throw new Error('Missing required field: sessionId');\n}\n\n// Prepare audit query\nconst auditQuery = {\n  sessionId,\n  clientId,\n  timeRange,\n  dataType,\n  entityId,\n  requestedAt: new Date().toISOString()\n};\n\nreturn { json: auditQuery };"
+      },
+      "id": "process-audit-request",
+      "name": "Process Audit Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 900]
+    },
+    {
+      "parameters": {
+        "operation": "lookup",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_SYNC_SHEET_ID }}",
+        "range": "Sync_History!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-get-audit-data",
+      "name": "Google Sheets - Get Audit Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [680, 900],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate comprehensive audit report\nconst auditQuery = $input.first().json;\nconst { sessionId, timeRange, dataType, entityId } = auditQuery;\n\n// Get all sync history\nlet allHistory = [];\nif ($input.length > 1 && $input[1].json && $input[1].json.values) {\n  allHistory = $input[1].json.values.map(row => ({\n    updateId: row[0],\n    dataType: row[1],\n    entityId: row[2],\n    updateData: JSON.parse(row[3] || '{}'),\n    timestamp: row[4],\n    clientId: row[5],\n    sessionId: row[6],\n    status: row[7]\n  }));\n}\n\n// Calculate time range filter\nconst now = new Date();\nlet timeLimit;\nswitch (timeRange) {\n  case '1h':\n    timeLimit = new Date(now.getTime() - 60 * 60 * 1000);\n    break;\n  case '24h':\n    timeLimit = new Date(now.getTime() - 24 * 60 * 60 * 1000);\n    break;\n  case '7d':\n    timeLimit = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);\n    break;\n  case '30d':\n    timeLimit = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);\n    break;\n  default:\n    timeLimit = new Date(now.getTime() - 24 * 60 * 60 * 1000);\n}\n\n// Filter audit data\nconst filteredHistory = allHistory.filter(entry => {\n  const entryTime = new Date(entry.timestamp);\n  return (\n    entry.sessionId === sessionId &&\n    entryTime >= timeLimit &&\n    (!dataType || entry.dataType === dataType) &&\n    (!entityId || entry.entityId === entityId)\n  );\n});\n\n// Generate audit statistics\nconst auditStats = {\n  totalUpdates: filteredHistory.length,\n  successfulUpdates: filteredHistory.filter(e => e.status === 'resolved').length,\n  failedUpdates: filteredHistory.filter(e => e.status === 'validation_failed').length,\n  pendingUpdates: filteredHistory.filter(e => e.status === 'pending').length,\n  dataTypes: [...new Set(filteredHistory.map(e => e.dataType))],\n  entities: [...new Set(filteredHistory.map(e => e.entityId))],\n  clients: [...new Set(filteredHistory.map(e => e.clientId))],\n  timeRange: timeRange,\n  generatedAt: new Date().toISOString()\n};\n\n// Group updates by hour for timeline\nconst timelineData = {};\nfilteredHistory.forEach(entry => {\n  const hour = new Date(entry.timestamp).toISOString().slice(0, 13); // YYYY-MM-DDTHH\n  if (!timelineData[hour]) {\n    timelineData[hour] = { total: 0, successful: 0, failed: 0 };\n  }\n  timelineData[hour].total++;\n  if (entry.status === 'resolved') timelineData[hour].successful++;\n  if (entry.status === 'validation_failed') timelineData[hour].failed++;\n});\n\n// Prepare audit report\nconst auditReport = {\n  sessionId,\n  query: auditQuery,\n  statistics: auditStats,\n  timeline: Object.entries(timelineData).map(([hour, data]) => ({\n    hour,\n    ...data\n  })).sort((a, b) => a.hour.localeCompare(b.hour)),\n  updates: filteredHistory.map(entry => ({\n    updateId: entry.updateId,\n    dataType: entry.dataType,\n    entityId: entry.entityId,\n    timestamp: entry.timestamp,\n    clientId: entry.clientId,\n    status: entry.status,\n    dataSummary: Object.keys(entry.updateData).length\n  })),\n  generatedAt: new Date().toISOString()\n};\n\nreturn { json: auditReport };"
+      },
+      "id": "generate-audit-report",
+      "name": "Generate Audit Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 900]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "audit-success-response",
+      "name": "Audit Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1140, 900]
+    }
+  ],
+  "connections": {
+    "Sync Update Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Sync Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Sync Update": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Check Conflicts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Check Conflicts": {
+      "main": [
+        [
+          {
+            "node": "Resolve Conflicts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Conflicts": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Log Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Log Sync": {
+      "main": [
+        [
+          {
+            "node": "Validate Data Integrity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Data Integrity": {
+      "main": [
+        [
+          {
+            "node": "Prepare Broadcast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Broadcast": {
+      "main": [
+        [
+          {
+            "node": "WebSocket Broadcast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WebSocket Broadcast": {
+      "main": [
+        [
+          {
+            "node": "Sync Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rollback Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Rollback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Rollback": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Get History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Get History": {
+      "main": [
+        [
+          {
+            "node": "Execute Rollback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Rollback": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Log Rollback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Log Rollback": {
+      "main": [
+        [
+          {
+            "node": "Broadcast Rollback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Broadcast Rollback": {
+      "main": [
+        [
+          {
+            "node": "Rollback Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audit Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Audit Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Audit Request": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Get Audit Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Get Audit Data": {
+      "main": [
+        [
+          {
+            "node": "Generate Audit Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Audit Report": {
+      "main": [
+        [
+          {
+            "node": "Audit Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "real-time-sync",
+      "name": "Real-Time Sync"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "websocket",
+      "name": "WebSocket"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "data-integrity",
+      "name": "Data Integrity"
+    }
+  ],
+  "triggerCount": 3,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

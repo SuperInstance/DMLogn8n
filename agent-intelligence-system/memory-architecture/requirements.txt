@@ -1,0 +1,22 @@
+# Core dependencies
+numpy>=1.21.0
+dataclasses-json>=0.5.7
+
+# Vector database and embeddings
+chromadb>=0.4.0
+sentence-transformers>=2.2.0
+
+# Optional: For enhanced text processing
+scikit-learn>=1.0.0
+
+# Logging and monitoring
+structlog>=21.1.0
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=3.0.0
+
+# Development (optional)
+black>=22.0.0
+flake8>=4.0.0
+mypy>=0.950

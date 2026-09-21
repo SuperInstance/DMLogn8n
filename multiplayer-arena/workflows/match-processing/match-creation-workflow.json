@@ -1,0 +1,64 @@
+{
+  "name": "Match Creation Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "match-create",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Match Creation Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Validate match creation request\nconst { arenaType, players, rules, config } = $input.first().json;\n\nif (!arenaType || !players || players.length === 0) {\n  throw new Error('Arena type and players are required');\n}\n\n// Check arena type validity\nconst validArenaTypes = ['1v1_duel', 'team_competition', 'battle_royale', 'monster_hunt', 'puzzle_race', 'siege_warfare'];\nif (!validArenaTypes.includes(arenaType)) {\n  throw new Error(`Invalid arena type: ${arenaType}`);\n}\n\n// Validate players\nplayers.forEach(player => {\n  if (!player.id || !player.name || !player.character) {\n    throw new Error('Each player must have id, name, and character data');\n  }\n});\n\n// Generate match ID\nconst matchId = `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;\n\nreturn {\n  matchId,\n  arenaType,\n  players,\n  rules: rules || {},\n  config: config || {},\n  status: 'initializing',\n  createdAt: new Date().toISOString()\n};"
+      },
+      "id": "function-1",
+      "name": "Validate Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "resource": "document",
+        "documentId": "={{ $json.matchId }}",
+        "returnAll": true
+      },
+      "id": "mongodb-1",
+      "name": "Check Match Exists",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "mongodb": {
+          "id": "mongodb_credential_id",
+          "name": "MongoDB Atlas"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {\n          "string": [\n            {\n              "value1": "={{ $json }}",\n              "operation": "isEmpty"\n            }\n          ]\n        }\n      },\n      "id": "if-1",\n      "name": "Match Already Exists?",\n      "type": "n8n-nodes-base.if",\n      "typeVersion": 1,\n      "position": [\n        900,\n        300\n      ]\n    },\n    {\n      "parameters": {\n        "httpMethod": "POST",\n        "path": "arena-system/create-arena",\n        "options": {}\n      },\n      "id": "http-request-1",\n      "name": "Create Arena Instance",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 3,\n      "position": [\n        1140,\n        200\n      ]\n    },\n    {\n      "parameters": {\n        "operation": "insert",\n        "resource": "document",\n        "database": "dmlogn8n_arena",\n        "collection": "matches",\n        "fields": {\n          "matchId": "={{ $json.matchId }}",\n          "arenaType": "={{ $json.arenaType }}",\n          "players": "={{ $json.players }}",\n          "rules": "={{ $json.rules }}",\n          "config": "={{ $json.config }}",\n          "status": "={{ $json.status }}",\n          "createdAt": "={{ $json.createdAt }}",\n          "arenaData": "={{ $node[\"Create Arena Instance\"].json.data }}"\n        }\n      },\n      "id": "mongodb-2",\n      "name": "Save Match to Database",\n      "type": "n8n-nodes-base.mongodb",\n      "typeVersion": 1,\n      "position": [\n        1360,\n        200\n      ]\n    },\n    {\n      "parameters": {\n        "respondWith": "json",\n        "responseBody": "={{ {\n  success: true,\n  matchId: $json.matchId,\n  arenaType: $json.arenaType,\n  status: $json.status,\n  players: $json.players.map(p => ({ id: p.id, name: p.name })),\n  arenaData: $node[\"Create Arena Instance\"].json.data\n} }}"\n      },\n      "id": "webhook-response-1",\n      "name": "Return Success Response",\n      "type": "n8n-nodes-base.respondToWebhook",\n      "typeVersion": 1,\n      "position": [\n        1580,\n        200\n      ]\n    },\n    {\n      "parameters": {\n        "httpMethod": "POST",\n        "path": "ranking/initialize-match",\n        "options": {}\n      },\n      "id": "http-request-2",\n      "name": "Initialize Ranking System",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 3,\n      "position": [\n        1140,\n        400\n      ]\n    },\n    {\n      "parameters": {\n        "respondWith": "json",\n        "responseBody": "={{ {\n  success: false,\n  error: 'Match already exists',\n  matchId: $json.matchId\n} }}"\n      },\n      "id": "webhook-response-2",\n      "name": "Return Error Response",\n      "type": "n8n-nodes-base.respondToWebhook",\n      "typeVersion": 1,\n      "position": [\n        1140,\n        600\n      ]\n    },\n    {\n      "parameters": {\n        "functionCode": "// Send notifications to all players\nconst players = $input.first().json.players;\nconst matchId = $input.first().json.matchId;\nconst notifications = [];\n\nplayers.forEach(player => {\n  notifications.push({\n    playerId: player.id,\n    type: 'match_created',\n    title: 'Match Ready!',\n    message: `Your ${$input.first().json.arenaType} match is ready to begin.`,\n    data: {\n      matchId: matchId,\n      arenaType: $input.first().json.arenaType\n    },\n    timestamp: new Date().toISOString()\n  });\n});\n\nreturn { notifications };"
+      },
+      "id": "function-2",
+      "name": "Create Player Notifications",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+n        1140,\n        0\n      ]\n    },\n    {\n      "parameters": {\n        "operation": "insert",\n        "resource": "document",\n        "database": "dmlogn8n_arena",\n        "collection": "notifications",\n        "fields": "={{ $json.notifications }}"\n      },\n      "id": "mongodb-3",\n      "name": "Queue Notifications",\n      "type": "n8n-nodes-base.mongodb",\n      "typeVersion": 1,\n      "position": [\n        1360,\n        0\n      ]\n    }\n  ],\n  "connections": {\n    "Match Creation Trigger": {\n      "main": [\n        [\n          {\n            "node": "Validate Request",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Validate Request": {\n      "main": [\n        [\n          {\n            "node": "Check Match Exists",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Check Match Exists": {\n      "main": [\n        [\n          {\n            "node": "Match Already Exists?",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Match Already Exists?": {\n      "main": [\n        [\n          {\n            "node": "Create Arena Instance",\n            "type": "main",\n            "index": 0\n          },\n          {\n            "node": "Initialize Ranking System",\n            "type": "main",\n            "index": 0\n          },\n          {\n            "node": "Create Player Notifications",\n            "type": "main",\n            "index": 0\n          }\n        ],\n        [\n          {\n            "node": "Return Error Response",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Create Arena Instance": {\n      "main": [\n        [\n          {\n            "node": "Save Match to Database",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Save Match to Database": {\n      "main": [\n        [\n          {\n            "node": "Return Success Response",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Create Player Notifications": {\n      "main": [\n        [\n          {\n            "node": "Queue Notifications",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    }\n  },\n  "settings": {\n    "executionOrder": "v1"\n  },\n  "staticData": null,\n  "tags": [\n    {\n      "createdAt": "2024-01-01T00:00:00.000Z",\n      "updatedAt": "2024-01-01T00:00:00.000Z",\n      "id": "1",\n      "name": "Arena"\n    }\n  ],\n  "triggerCount": 0,\n  "updatedAt": "2024-01-01T00:00:00.000Z",\n  "versionId": "1"\n}

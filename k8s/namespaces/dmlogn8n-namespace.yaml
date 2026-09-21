@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dmlogn8n
+  labels:
+    name: dmlogn8n
+    environment: production
+    project: dmlogn8n
+  annotations:
+    description: "DMlogn8n production namespace"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dmlogn8n-monitoring
+  labels:
+    name: dmlogn8n-monitoring
+    environment: production
+    project: dmlogn8n
+  annotations:
+    description: "DMlogn8n monitoring and observability namespace"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dmlogn8n-logging
+  labels:
+    name: dmlogn8n-logging
+    environment: production
+    project: dmlogn8n
+  annotations:
+    description: "DMlogn8n centralized logging namespace"

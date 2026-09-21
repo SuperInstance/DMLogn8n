@@ -1,0 +1,366 @@
+{
+  "name": "Business Logic Interpreter - Character Goals to Technical Strategies",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "business-logic-interpreter",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-business-logic",
+      "name": "Business Logic Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "business-logic-interpreter"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse business logic interpretation request\nconst request = $input.first().json;\n\n// Required fields validation\nif (!request.character_goal || !request.character_context) {\n  return [{\n    json: {\n      error: 'Missing required fields: character_goal, character_context',\n      status: 'invalid_request'\n    }\n  }];\n}\n\n// Build comprehensive context\nconst context = {\n  character_goal: request.character_goal,\n  character_context: {\n    class: request.character_context.class || 'unknown',\n    level: request.character_context.level || 1,\n    party_role: request.character_context.party_role || 'member',\n    play_style: request.character_context.play_style || 'balanced',\n    current_situation: request.character_context.current_situation || 'unknown',\n    available_resources: request.character_context.available_resources || {},\n    constraints: request.character_context.constraints || [],\n    preferences: request.character_context.preferences || {}\n  },\n  business_requirements: {\n    urgency_level: request.urgency_level || 'normal',\n    complexity_tolerance: request.complexity_tolerance || 'medium',\n    automation_preference: request.automation_preference || 'balanced',\n    success_metrics: request.success_metrics || ['effectiveness', 'reliability'],\n    stakeholder_analysis: request.stakeholder_analysis || {\n      primary: 'character',\n      secondary: ['party', 'dm']\n    }\n  },\n  timestamp: new Date().toISOString(),\n  analysis_depth: request.analysis_depth || 'comprehensive'\n};\n\nreturn [{\n  json: context\n}];"
+      },
+      "id": "code-parse-business-request",
+      "name": "Parse Business Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create business logic knowledge base and mapping\nconst context = $input.first().json;\n\n// Business logic mapping frameworks\nconst businessFrameworks = {\n  protection: {\n    business_objectives: ['minimize_damage_to_allies', 'maintain_party_survivability', 'prevent_critical_injuries'],\n    success_metrics: ['damage_prevented', 'lives_saved', 'combat_stability'],\n    stakeholder_needs: {\n      character: 'feel_protective_and_effective',\n      party: 'stay_alive_and_focused',\n      dm: 'maintain_challenge_balance'\n    },\n    technical_strategies: ['threat_monitoring', 'proactive_intervention', 'damage_mitigation', 'healing_coordination']\n  },\n  combat: {\n    business_objectives: ['maximize_damage_output', 'eliminate_threats_efficiently', 'control_battlefield'],\n    success_metrics: ['damage_dealt', 'threats_eliminated', 'combat_duration', 'resource_efficiency'],\n    stakeholder_needs: {\n      character: 'feel_powerful_and_decisive',\n      party: 'win_combats_quickly',\n      dm: 'maintain_engaging_combats'\n    },\n    technical_strategies: ['target_prioritization', 'attack_rotation', 'resource_management', 'opportunity_exploitation']\n  },\n  healing: {\n    business_objectives: ['maintain_party_health', 'remove_negative_conditions', 'prevent_deaths'],\n    success_metrics: ['health_restored', 'conditions_removed', 'deaths_prevented', 'healing_efficiency'],\n    stakeholder_needs: {\n      character: 'feel_necessary_and_caring',\n      party: 'stay_in fighting_condition',\n      dm: 'manage_difficulty_appropriately'\n    },\n    technical_strategies: ['health_monitoring', 'prioritized_healing', 'condition_management', 'resource_optimization']\n  },\n  utility: {\n    business_objectives: ['solve_problems', 'overcome_obstacles', 'support_party_objectives'],\n    success_metrics: ['problems_solved', 'obstacles_overcome', 'efficiency_gained', 'versatility_demonstrated'],\n    stakeholder_needs: {\n      character: 'feel_useful_and_clever',\n      party: 'overcome_challenges_effectively',\n      dm: 'enable_creative_solutions'\n    },\n    technical_strategies: ['situational_analysis', 'resource_application', 'problem_decomposition', 'adaptive_solutions']\n  }\n};\n\n// Class-specific business logic\nconst classBusinessLogic = {\n  'fighter': {\n    core_business: 'combat_excellence_and_party_protection',\n    value_proposition: 'reliable_damage_dealer and frontline_defender',\n    key_capabilities: ['weapon_mastery', 'tactical_positioning', 'damage_absorption'],\n    business_constraints: ['limited_range', 'resource_management (action_economy)']\n  },\n  'wizard': {\n    core_business: 'magical_problem_solving and battlefield_control',\n    value_proposition: 'versatile spellcaster with tactical advantages',\n    key_capabilities: ['spell_knowledge', 'situational_adaptation', 'resource_intelligence'],\n    business_constraints: ['limited_spells', 'squishy_nature', 'concentration_management']\n  },\n  'cleric': {\n    core_business: 'divine_support and party_sustainability',\n    value_proposition: 'healing provider and divine champion',\n    key_capabilities: ['divine_magic', 'healing_powers', 'buff_debuff_management'],\n    business_constraints: ['spell_slots', 'divine_focus', 'party_dependency']\n  },\n  'rogue': {\n    core_business: 'precision_damage and problem_solving',\n    value_proposition: 'specialized operator with unique capabilities',\n    key_capabilities: ['stealth', 'precision_attacks', 'skill_mastery'],\n    business_constraints: ['light_armor', 'positioning_dependence', 'opportunity_requirements']\n  },\n  'paladin': {\n    core_business: 'divine_warfare and party_leadership',\n    value_proposition: 'holy warrior with protection abilities',\n    key_capabilities: ['divine_smite', 'healing_powers', 'aura_management'],\n    business_constraints: ['oath_requirements', 'resource_management', 'alignment_restriction']\n  }\n};\n\n// Identify business domain\nconst businessDomain = identifyBusinessDomain(context.character_goal, context.character_context.class);\nconst classLogic = classBusinessLogic[context.character_context.class.toLowerCase()] || classBusinessLogic['fighter'];\n\nfunction identifyBusinessDomain(goal, characterClass) {\n  const goalLower = goal.toLowerCase();\n  const keywords = {\n    protection: ['protect', 'defend', 'shield', 'guard', 'save', 'rescue'],\n    combat: ['attack', 'damage', 'fight', 'kill', 'destroy', 'battle'],\n    healing: ['heal', 'cure', 'restore', 'mend', 'recover', 'aid'],\n    utility: ['help', 'support', 'solve', 'prepare', 'organize']\n  };\n  \n  for (const [domain, words] of Object.entries(keywords)) {\n    if (words.some(word => goalLower.includes(word))) {\n      return domain;\n    }\n  }\n  \n  return 'utility'; // Default domain\n}\n\nconst enhancedContext = {\n  ...context,\n  business_domain: businessDomain,\n  business_framework: businessFrameworks[businessDomain] || businessFrameworks.utility,\n  class_business_logic: classLogic,\n  interpretation_strategy: 'business_objective_mapping'\n};\n\nreturn [{\n  json: enhancedContext\n}];"
+      },
+      "id": "code-build-business-context",
+      "name": "Build Business Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create comprehensive business logic interpretation prompt\nconst context = $input.first().json;\n\nconst interpretationPrompt = `\nYou are an expert Business Logic Interpreter for D&D character automation. Your role is to translate character goals and business objectives into comprehensive technical strategies that align with stakeholder needs and success metrics.\n\n## Character Business Analysis:\n\n### Character Goal: \"${context.character_goal}\"\n### Character Profile:\n- Class: ${context.character_context.class}\n- Level: ${context.character_context.level}\n- Party Role: ${context.character_context.party_role}\n- Play Style: ${context.character_context.play_style}\n- Current Situation: ${context.character_context.current_situation}\n\n### Business Domain: ${context.business_domain}\n### Core Business: ${context.class_business_logic.core_business}\n### Value Proposition: ${context.class_business_logic.value_proposition}\n\n### Business Objectives:\n${context.business_framework.business_objectives.map(obj => `- ${obj}`).join('\\n')}\n\n### Success Metrics:\n${context.business_framework.success_metrics.map(metric => `- ${metric}`).join('\\n')}\n\n### Stakeholder Analysis:\n${Object.entries(context.business_framework.stakeholder_needs).map(([stakeholder, needs]) => \n  `- ${stakeholder}: ${needs}`).join('\\n')}\n\n### Business Constraints:\n${context.class_business_logic.business_constraints.map(constraint => `- ${constraint}`).join('\\n')}\n\n## Your Task:\nTranslate this character goal into a comprehensive business logic strategy that includes:\n\n1. **Strategic Analysis**: Deep understanding of the business problem\n2. **Technical Requirements**: Specific technical implementation needs\n3. **Stakeholder Alignment**: How the solution meets everyone's needs\n4. **Success Framework**: How to measure and ensure success\n5. **Implementation Strategy**: Step-by-step technical approach\n6. **Risk Assessment**: Potential issues and mitigation strategies\n7. **Business Value**: Clear articulation of value delivered\n\n## Response Format (JSON):\n{\n  \"strategic_analysis\": {\n    \"problem_statement\": \"Clear articulation of the business problem\",\n    \"opportunity_assessment\": \"What opportunities this creates\",\n    \"business_impact\": \"Expected impact on the party/character\",\n    \"strategic_importance\": \"Why this matters strategically\",\n    \"complexity_assessment\": \"simple/medium/complex with rationale\"\n  },\n  \"technical_requirements\": {\n    \"automation_type\": \"type of automation needed\",\n    \"core_functionality\": [\"list of essential features\"],\n    \"integration_points\": [\"systems that need to connect\"],\n    \"data_requirements\": [\"information needed to operate\"],\n    \"performance_requirements\": {\n      \"response_time\": \"acceptable response times\",\n      \"reliability\": \"required reliability level\",\n      \"scalability\": \"scalability considerations\"\n    },\n    \"technical_constraints\": [\"limitations and constraints\"]\n  },\n  \"stakeholder_alignment\": {\n    \"character_benefits\": [\"direct benefits to the character\"],\n    \"party_benefits\": [\"benefits to the party\"],\n    \"dm_considerations\": [\"considerations for dungeon master\"],\n    \"value_proposition\": \"overall value delivered\",\n    \"success_alignment\": \"how this aligns with success metrics\"\n  },\n  \"success_framework\": {\n    \"kpi_definitions\": [\"key performance indicators\"],\n    \"measurement_methods\": [\"how to track success\"],\n    \"success_criteria\": [\"what defines success\"],\n    \"optimization_opportunities\": [\"ways to improve over time\"]\n  },\n  \"implementation_strategy\": {\n    \"phases\": [\n      {\n        \"phase_name\": \"phase name\",\n        \"objectives\": [\"phase objectives\"],\n        \"deliverables\": [\"what will be delivered\"],\n        \"timeline\": \"estimated timeline\",\n        \"dependencies\": [\"what this phase depends on\"]\n      }\n    ],\n    \"resource_requirements\": [\"what resources are needed\"],\n    \"risk_mitigation\": [\"how to handle potential issues\"]\n  },\n  \"business_value\": {\n    \"quantitative_value\": \"measurable business value\",\n    \"qualitative_value\": \"intangible benefits\",\n    \"roi_projection\": \"return on investment projection\",\n    \"competitive_advantage\": \"how this creates an advantage\"\n  }\n}\n\nFocus on creating a comprehensive business case that justifies the technical solution while ensuring alignment with all stakeholders' needs and expectations.`;\n\nreturn [{\n  json: {\n    ...context,\n    deepseek_prompt: interpretationPrompt,\n    analysis_type: 'business_logic_interpretation'\n  }\n}];"
+      },
+      "id": "code-interpretation-prompt",
+      "name": "Create Interpretation Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer sk-3b0251d9943549a2b475eb9e57e46ee6"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "deepseek-chat"
+            },
+            {
+              "name": "messages",
+              "value": "=[{\"role\": \"user\", \"content\": \"{{ $json.deepseek_prompt }}\"}]"
+            },
+            {
+              "name": "max_tokens",
+              "value": "=3000"
+            },
+            {
+              "name": "temperature",
+              "value": "=0.5"
+            },
+            {
+              "name": "response_format",
+              "value": "={\"type\": \"json_object\"}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-business-interpretation",
+      "name": "Business Logic Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process business logic interpretation results\nconst aiResponse = $input.first().json;\nconst originalContext = items.find(item => item.json.deepseek_prompt)?.json;\n\nif (!aiResponse.choices || !aiResponse.choices[0]?.message?.content) {\n  return [{\n    json: {\n      error: 'Invalid AI response from business logic analysis',\n      status: 'ai_error'\n    }\n  }];\n}\n\ntry {\n  const interpretationResult = JSON.parse(aiResponse.choices[0].message.content);\n  \n  // Validate and enhance interpretation results\n  const enhancedInterpretation = {\n    interpretation_id: generateInterpretationId(),\n    timestamp: new Date().toISOString(),\n    original_goal: originalContext.character_goal,\n    character_context: originalContext.character_context,\n    business_domain: originalContext.business_domain,\n    interpretation_result: interpretationResult,\n    technical_roadmap: createTechnicalRoadmap(interpretationResult),\n    business_case: createBusinessCase(interpretationResult, originalContext),\n    implementation_readiness: {\n      complexity_score: calculateComplexityScore(interpretationResult),\n      resource_requirements: estimateResourceRequirements(interpretationResult),\n      risk_assessment: performRiskAssessment(interpretationResult),\n      success_probability: calculateSuccessProbability(interpretationResult)\n    },\n    next_actions: generateNextActions(interpretationResult),\n    metadata: {\n      ai_provider: 'deepseek',\n      model: 'deepseek-chat',\n      tokens_used: aiResponse.usage?.total_tokens || 0,\n      analysis_depth: originalContext.analysis_depth\n    }\n  };\n  \n  function generateInterpretationId() {\n    return 'bli_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);\n  }\n  \n  function createTechnicalRoadmap(interpretation) {\n    return {\n      architecture_components: interpretation.technical_requirements?.core_functionality || [],\n      integration_needs: interpretation.technical_requirements?.integration_points || [],\n      development_phases: interpretation.implementation_strategy?.phases || [],\n      testing_strategy: generateTestingStrategy(interpretation),\n      deployment_approach: generateDeploymentApproach(interpretation)\n    };\n  }\n  \n  function createBusinessCase(interpretation, context) {\n    return {\n      problem_solving: interpretation.strategic_analysis?.problem_statement || '',\n      value_proposition: interpretation.business_value?.value_proposition || '',\n      stakeholder_benefits: interpretation.stakeholder_alignment || {},\n      roi_projection: interpretation.business_value?.roi_projection || '',\n      competitive_advantage: interpretation.business_value?.competitive_advantage || ''\n    };\n  }\n  \n  function calculateComplexityScore(interpretation) {\n    let score = 0;\n    if (interpretation.strategic_analysis?.complexity_assessment === 'complex') score += 3;\n    if (interpretation.strategic_analysis?.complexity_assessment === 'medium') score += 2;\n    if (interpretation.technical_requirements?.integration_points?.length > 2) score += 2;\n    if (interpretation.technical_requirements?.core_functionality?.length > 5) score += 1;\n    return Math.min(score, 5);\n  }\n  \n  function estimateResourceRequirements(interpretation) {\n    return {\n      development_time: interpretation.implementation_strategy?.phases?.length * 2 || 4,\n      complexity_level: interpretation.strategic_analysis?.complexity_assessment || 'medium',\n      dependencies: interpretation.technical_requirements?.integration_points?.length || 0,\n      testing_effort: interpretation.technical_requirements?.performance_requirements ? 3 : 1\n    };\n  }\n  \n  function performRiskAssessment(interpretation) {\n    const risks = [];\n    if (interpretation.strategic_analysis?.complexity_assessment === 'complex') {\n      risks.push('High complexity may lead to implementation challenges');\n    }\n    if (interpretation.technical_requirements?.integration_points?.length > 3) {\n      risks.push('Multiple integrations may create dependencies');\n    }\n    if (!interpretation.stakeholder_alignment?.success_alignment) {\n      risks.push('Unclear success criteria may impact effectiveness');\n    }\n    return risks;\n  }\n  \n  function calculateSuccessProbability(interpretation) {\n    let probability = 0.7; // Base probability\n    \n    if (interpretation.strategic_analysis?.business_impact) probability += 0.1;\n    if (interpretation.success_framework?.success_criteria?.length > 0) probability += 0.1;\n    if (interpretation.implementation_strategy?.risk_mitigation?.length > 0) probability += 0.1;\n    \n    return Math.min(probability, 0.95);\n  }\n  \n  function generateNextActions(interpretation) {\n    const actions = ['Validate business requirements with stakeholder'];\n    \n    if (interpretation.technical_requirements?.core_functionality) {\n      actions.push('Begin technical architecture design');\n    }\n    \n    if (interpretation.implementation_strategy?.phases?.length > 1) {\n      actions.push('Create detailed project timeline');\n    }\n    \n    actions.push('Proceed to solution architecture generation');\n    \n    return actions;\n  }\n  \n  function generateTestingStrategy(interpretation) {\n    return {\n      unit_tests: true,\n      integration_tests: interpretation.technical_requirements?.integration_points?.length > 0,\n      performance_tests: interpretation.technical_requirements?.performance_requirements ? true : false,\n      user_acceptance: true\n    };\n  }\n  \n  function generateDeploymentApproach(interpretation) {\n    return {\n      approach: interpretation.strategic_analysis?.complexity_assessment === 'complex' ? 'phased' : 'direct',\n      rollback_plan: true,\n      monitoring: interpretation.success_framework?.kpi_definitions?.length > 0,\n      post_deployment_review: true\n    };\n  }\n  \n  return [{\n    json: enhancedInterpretation\n  }];\n  \n} catch (error) {\n  return [{\n    json: {\n      error: 'Failed to process business logic interpretation',\n      details: error.message,\n      raw_response: aiResponse.choices[0].message.content,\n      status: 'processing_error'\n    }\n  }];\n}"
+      },
+      "id": "code-process-interpretation",
+      "name": "Process Business Interpretation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.technical_roadmap.development_phases.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-has-implementation-plan",
+      "name": "Has Implementation Plan?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Trigger solution architecture generation\nconst interpretation = $input.first().json;\n\nconst architectureRequest = {\n  interpretation_id: interpretation.interpretation_id,\n  business_logic_result: interpretation.interpretation_result,\n  technical_roadmap: interpretation.technical_roadmap,\n  business_case: interpretation.business_case,\n  implementation_readiness: interpretation.implementation_readiness,\n  character_context: interpretation.character_context,\n  original_goal: interpretation.original_goal,\n  request_metadata: {\n    source: 'business_logic_interpreter',\n    complexity_score: interpretation.implementation_readiness.complexity_score,\n    success_probability: interpretation.implementation_readiness.success_probability,\n    business_domain: interpretation.business_domain\n  },\n  architecture_requirements: {\n    include_business_logic: true,\n    include_stakeholder_considerations: true,\n    include_success_metrics: true,\n    include_implementation_phases: true\n  }\n};\n\nreturn [{\n  json: architectureRequest\n}];"
+      },
+      "id": "code-trigger-architecture",
+      "name": "Trigger Architecture Generation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/webhook/solution-architecture-generator",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "payload",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-architecture-generation",
+      "name": "Request Solution Architecture",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare final business logic interpretation response\nconst interpretation = $input.first().json;\n\nconst response = {\n  status: 'success',\n  timestamp: new Date().toISOString(),\n  interpretation_id: interpretation.interpretation_id,\n  character_goal: interpretation.original_goal,\n  business_domain: interpretation.business_domain,\n  strategic_analysis: {\n    problem_statement: interpretation.interpretation_result.strategic_analysis?.problem_statement,\n    business_impact: interpretation.interpretation_result.strategic_analysis?.business_impact,\n    complexity_assessment: interpretation.interpretation_result.strategic_analysis?.complexity_assessment\n  },\n  business_case: {\n    value_proposition: interpretation.business_case.value_proposition,\n    stakeholder_benefits: interpretation.business_case.stakeholder_benefits,\n    roi_projection: interpretation.business_case.roi_projection\n  },\n  implementation_readiness: {\n    complexity_score: interpretation.implementation_readiness.complexity_score,\n    resource_requirements: interpretation.implementation_readiness.resource_requirements,\n    success_probability: interpretation.implementation_readiness.success_probability,\n    risk_assessment: interpretation.implementation_readiness.risk_assessment\n  },\n  technical_roadmap: {\n    development_phases: interpretation.technical_roadmap.development_phases.length,\n    architecture_components: interpretation.technical_roadmap.architecture_components.length,\n    integration_needs: interpretation.technical_roadmap.integration_needs.length\n  },\n  next_actions: interpretation.next_actions,\n  architecture_generation_triggered: interpretation.technical_roadmap.development_phases.length > 0,\n  metadata: {\n    tokens_used: interpretation.metadata.tokens_used,\n    ai_provider: interpretation.metadata.ai_provider,\n    analysis_depth: interpretation.metadata.analysis_depth\n  }\n};\n\nreturn [{\n  json: response\n}];"
+      },
+      "id": "code-prepare-response",
+      "name": "Prepare Final Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.webhookResponse",
+      "typeVersion": 1,
+      "position": [2440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Error handling\nconst error = $input.first().json;\n\nconst errorResponse = {\n  status: 'error',\n  timestamp: new Date().toISOString(),\n  error: error.error || 'Business logic interpretation failed',\n  details: error.details || 'No additional details available',\n  character_goal: error.original_goal || 'Unknown goal',\n  suggestions: [\n    'Clarify the specific business objective you want to achieve',\n    'Provide more context about your current situation',\n    'Specify what success looks like for this goal',\n    'Describe any constraints or limitations'\n  ]\n};\n\nreturn [{\n  json: errorResponse\n}];"
+      },
+      "id": "code-error-handling",
+      "name": "Error Handling",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "webhook-error-response",
+      "name": "Send Error Response",
+      "type": "n8n-nodes-base.webhookResponse",
+      "typeVersion": 1,
+      "position": [1560, 500]
+    }
+  ],
+  "connections": {
+    "Business Logic Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Business Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Business Request": {
+      "main": [
+        [
+          {
+            "node": "Build Business Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Business Context": {
+      "main": [
+        [
+          {
+            "node": "Create Interpretation Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Interpretation Prompt": {
+      "main": [
+        [
+          {
+            "node": "Business Logic Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Business Logic Analysis": {
+      "main": [
+        [
+          {
+            "node": "Process Business Interpretation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Business Interpretation": {
+      "main": [
+        [
+          {
+            "node": "Has Implementation Plan?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Implementation Plan?": {
+      "main": [
+        [
+          {
+            "node": "Trigger Architecture Generation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Architecture Generation": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Final Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handling": {
+      "main": [
+        [
+          {
+            "node": "Send Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T15:00:00.000Z",
+      "updatedAt": "2024-10-23T15:00:00.000Z",
+      "id": "business-logic",
+      "name": "Business Logic"
+    },
+    {
+      "createdAt": "2024-10-23T15:00:00.000Z",
+      "updatedAt": "2024-10-23T15:00:00.000Z",
+      "id": "strategic-analysis",
+      "name": "Strategic Analysis"
+    },
+    {
+      "createdAt": "2024-10-23T15:00:00.000Z",
+      "updatedAt": "2024-10-23T15:00:00.000Z",
+      "id": "technical-strategy",
+      "name": "Technical Strategy"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T15:00:00.000Z",
+  "versionId": "1"
+}

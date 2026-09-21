@@ -1,0 +1,393 @@
+{
+  "name": "Test Execution Dashboard and Scheduling System",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "scheduler-trigger",
+      "name": "Test Scheduler Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/scheduler/check",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "manual-scheduler-trigger",
+      "name": "Manual Scheduler Trigger",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [240, 400],
+      "webhookId": "manual-scheduler-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize test scheduling session\nconst schedulingSession = {\n  sessionId: 'schedule_' + Date.now(),\n  startTime: new Date().toISOString(),\n  triggerType: $json.triggerType || 'scheduled',\n  testSuites: {\n    end_to_end: {\n      name: 'End-to-End Test Suite',\n      schedule: 'daily',\n      time: '02:00',\n      duration: 30,\n      priority: 'high',\n      lastRun: null,\n      nextRun: null,\n      enabled: true\n    },\n    performance: {\n      name: 'Performance Testing Suite',\n      schedule: 'weekly',\n      day: 'sunday',\n      time: '03:00',\n      duration: 120,\n      priority: 'medium',\n      lastRun: null,\n      nextRun: null,\n      enabled: true\n    },\n    data_integrity: {\n      name: 'Data Integrity Testing Suite',\n      schedule: 'daily',\n      time: '04:00',\n      duration: 45,\n      priority: 'high',\n      lastRun: null,\n      nextRun: null,\n      enabled: true\n    },\n    ai_systems: {\n      name: 'AI System Testing Suite',\n      schedule: 'weekly',\n      day: 'wednesday',\n      time: '02:00',\n      duration: 90,\n      priority: 'medium',\n      lastRun: null,\n      nextRun: null,\n      enabled: true\n    },\n    user_experience: {\n      name: 'User Experience Testing Suite',\n      schedule: 'bi_weekly',\n      day: 'friday',\n      time: '01:00',\n      duration: 60,\n      priority: 'low',\n      lastRun: null,\n      nextRun: null,\n      enabled: true\n    }\n  },\n  runningTests: [],\n  queuedTests: [],\n  completedTests: [],\n  failedTests: [],\n  testHistory: []\n};\n\nreturn [{\n  json: {\n    ...schedulingSession,\n    status: 'scheduler_initialized',\n    currentPhase: 'check_scheduled_tests'\n  }\n}];"
+      },
+      "id": "initialize-scheduler",
+      "name": "Initialize Test Scheduler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:3000/api/scheduler/active-sessions",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "check-active-sessions",
+      "name": "Check Active Test Sessions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Determine which tests should run now\nconst now = new Date();\nconst currentHour = now.getHours();\nconst currentDay = now.getDay(); // 0 = Sunday, 6 = Saturday\nconst currentDate = now.toISOString().split('T')[0];\n\nconst testSuites = $json.testSuites;\nconst testsToRun = [];\nconst skippedTests = [];\n\n// Check each test suite against its schedule\nObject.keys(testSuites).forEach(suiteKey => {\n  const suite = testSuites[suiteKey];\n  \n  if (!suite.enabled) {\n    skippedTests.push({\n      suite: suiteKey,\n      reason: 'disabled',\n      nextCheck: 'next_schedule'\n    });\n    return;\n  }\n  \n  let shouldRun = false;\n  \n  // Daily schedules\n  if (suite.schedule === 'daily') {\n    const [scheduledHour, scheduledMinute] = suite.time.split(':').map(Number);\n    const scheduledTime = new Date();\n    scheduledTime.setHours(scheduledHour, scheduledMinute, 0, 0);\n    \n    // Check if we're within the scheduled hour and haven't run today\n    const timeDiff = now - scheduledTime;\n    const hoursDiff = timeDiff / (1000 * 60 * 60);\n    \n    if (hoursDiff >= 0 && hoursDiff < 1) {\n      // Check if already run today\n      const lastRunToday = suite.lastRun && suite.lastRun.startsWith(currentDate);\n      if (!lastRunToday) {\n        shouldRun = true;\n      }\n    }\n  }\n  \n  // Weekly schedules\n  else if (suite.schedule === 'weekly') {\n    const dayMap = { 'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5, 'saturday': 6 };\n    const scheduledDay = dayMap[suite.day];\n    \n    if (currentDay === scheduledDay) {\n      const [scheduledHour, scheduledMinute] = suite.time.split(':').map(Number);\n      const scheduledTime = new Date();\n      scheduledTime.setHours(scheduledHour, scheduledMinute, 0, 0);\n      \n      const timeDiff = now - scheduledTime;\n      const hoursDiff = timeDiff / (1000 * 60 * 60);\n      \n      if (hoursDiff >= 0 && hoursDiff < 1) {\n        const lastRunToday = suite.lastRun && suite.lastRun.startsWith(currentDate);\n        if (!lastRunToday) {\n          shouldRun = true;\n        }\n      }\n    }\n  }\n  \n  // Bi-weekly schedules\n  else if (suite.schedule === 'bi_weekly') {\n    // Simplified: run every other Friday\n    const dayMap = { 'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5, 'saturday': 6 };\n    const scheduledDay = dayMap[suite.day];\n    \n    if (currentDay === scheduledDay) {\n      const weekNumber = Math.ceil((now.getDate() - 1) / 7) + 1;\n      \n      // Run on odd weeks (1st, 3rd, 5th Friday of the month)\n      if (weekNumber % 2 === 1) {\n        const [scheduledHour, scheduledMinute] = suite.time.split(':').map(Number);\n        const scheduledTime = new Date();\n        scheduledTime.setHours(scheduledHour, scheduledMinute, 0, 0);\n        \n        const timeDiff = now - scheduledTime;\n        const hoursDiff = timeDiff / (1000 * 60 * 60);\n        \n        if (hoursDiff >= 0 && hoursDiff < 1) {\n          const lastRunToday = suite.lastRun && suite.lastRun.startsWith(currentDate);\n          if (!lastRunToday) {\n            shouldRun = true;\n          }\n        }\n      }\n    }\n  }\n  \n  if (shouldRun) {\n    testsToRun.push({\n      suite: suiteKey,\n      name: suite.name,\n      priority: suite.priority,\n      estimatedDuration: suite.duration,\n      scheduledTime: now.toISOString()\n    });\n  } else {\n    skippedTests.push({\n      suite: suiteKey,\n      reason: 'not_scheduled_time',\n      nextRun: suite.nextRun || 'next_schedule'\n    });\n  }\n});\n\n// Sort by priority\nconst priorityOrder = { 'critical': 1, 'high': 2, 'medium': 3, 'low': 4 };\ntestsToRun.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);\n\nreturn [{\n  json: {\n    sessionId: $json.sessionId,\n    timestamp: now.toISOString(),\n    testsToRun,\n    skippedTests,\n    schedulingDecision: {\n      totalSuites: Object.keys(testSuites).length,\n      testsScheduled: testsToRun.length,\n      testsSkipped: skippedTests.length\n    }\n  }\n}];"
+      },
+      "id": "check-schedule",
+      "name": "Check Test Schedule",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "tests-to-run-condition",
+              "leftValue": "={{ $json.testsToRun.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "test-execution-router",
+      "name": "Test Execution Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/tests/execute",
+        "jsonParameters": true,
+        "json": {
+          "sessionId": "={{ $json.sessionId }}",
+          "testSuite": "={{ $item.json.suite }}",
+          "testName": "={{ $item.json.name }}",
+          "priority": "={{ $item.json.priority }}",
+          "estimatedDuration": "={{ $item.json.estimatedDuration }}",
+          "executionContext": "scheduled",
+n          "notificationSettings": {\n            "onStart": true,\n            "onComplete": true,\n            "onFailure": true,\n            "channels": ["email", "dashboard"]\n          }\n        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "execute-test-suite",
+      "name": "Execute Test Suite",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/dashboard/update",
+        "jsonParameters": true,
+        "json": {
+          "sessionId": "={{ $json.sessionId }}",
+n          "dashboardData": {\n            "schedulerStatus": "active",\n            "currentTests": $json.testsToRun || [],\n            "skippedTests": $json.skippedTests || [],\n            "activeSessions": $input.item(0).json.activeSessions || [],\n            "recentExecutions": $input.item(1).json.recentExecutions || [],\n            "nextScheduledRuns": this._calculateNextRuns($json.testSuites),\n            "lastUpdated": new Date().toISOString()\n          }\n        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "update-dashboard",
+      "name": "Update Test Dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:3000/api/tests/recent",
+        "qs": {
+          "limit": 20,
+          "hours": 24\n        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "get-recent-executions",
+      "name": "Get Recent Test Executions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate dashboard summary and insights\nconst recentExecutions = $json.recentExecutions || [];\nconst scheduledTests = $input.item(2).json.testsToRun || [];\nconst skippedTests = $input.item(2).json.skippedTests || [];\n\n// Calculate execution statistics\nconst totalExecutions = recentExecutions.length;\nconst successfulExecutions = recentExecutions.filter(e => e.status === 'passed').length;\nconst failedExecutions = recentExecutions.filter(e => e.status === 'failed').length;\nconst runningExecutions = recentExecutions.filter(e => e.status === 'running').length;\n\nconst successRate = totalExecutions > 0 ? (successfulExecutions / totalExecutions * 100).toFixed(1) : 0;\n\n// Calculate average execution time\nconst completedExecutions = recentExecutions.filter(e => e.duration && e.duration > 0);\nconst avgExecutionTime = completedExecutions.length > 0 ? \n  completedExecutions.reduce((sum, e) => sum + e.duration, 0) / completedExecutions.length : 0;\n\n// Test suite performance\nconst suitePerformance = {};\nrecentExecutions.forEach(execution => {\n  if (!suitePerformance[execution.suite]) {\n    suitePerformance[execution.suite] = {\n      total: 0,\n      passed: 0,\n      failed: 0,\n      avgDuration: 0,\n      lastRun: null\n    };\n  }\n  \n  suitePerformance[execution.suite].total++;\n  if (execution.status === 'passed') suitePerformance[execution.suite].passed++;\n  if (execution.status === 'failed') suitePerformance[execution.suite].failed++;\n  if (execution.duration) {\n    suitePerformance[execution.suite].avgDuration += execution.duration;\n  }\n  if (!suitePerformance[execution.suite].lastRun || \n      new Date(execution.timestamp) > new Date(suitePerformance[execution.suite].lastRun)) {\n    suitePerformance[execution.suite].lastRun = execution.timestamp;\n  }\n});\n\n// Calculate averages\nObject.keys(suitePerformance).forEach(suite => {\n  const completed = recentExecutions.filter(e => e.suite === suite && e.duration);\n  if (completed.length > 0) {\n    suitePerformance[suite].avgDuration = \n      suitePerformance[suite].avgDuration / completed.length;\n  }\n  suitePerformance[suite].successRate = \n    suitePerformance[suite].total > 0 ? \n    (suitePerformance[suite].passed / suitePerformance[suite].total * 100).toFixed(1) : 0;\n});\n\n// Generate insights\nconst insights = [];\n\nif (successRate < 85) {\n  insights.push({\n    type: 'concern',\n    message: `Test success rate (${successRate}%) is below target (85%)`,\n    priority: 'high'\n  });\n}\n\nif (failedExecutions > successfulExecutions) {\n  insights.push({\n    type: 'alert',\n    message: 'More tests are failing than passing',\n    priority: 'critical'\n  });\n}\n\nif (avgExecutionTime > 60) {\n  insights.push({\n    type: 'performance',\n    message: `Average test execution time (${avgExecutionTime.toFixed(1)}s) is high`,\n    priority: 'medium'\n  });\n}\n\n// Check for consistently failing suites\nObject.keys(suitePerformance).forEach(suite => {\n  if (suitePerformance[suite].successRate < 70 && suitePerformance[suite].total >= 3) {\n    insights.push({\n      type: 'suite_issue',\n      message: `${suite} test suite has low success rate (${suitePerformance[suite].successRate}%)`,\n      priority: 'high',\n      suite: suite\n    });\n  }\n});\n\n// Scheduling insights\nif (scheduledTests.length > 0) {\n  insights.push({\n    type: 'schedule',\n    message: `${scheduledTests.length} test suite(s) scheduled for execution`,\n    priority: 'info'\n  });\n}\n\nreturn [{\n  json: {\n    sessionId: $input.item(2).json.sessionId,\n    timestamp: new Date().toISOString(),\n    executionStats: {\n      total: totalExecutions,\n      successful: successfulExecutions,\n      failed: failedExecutions,\n      running: runningExecutions,\n      successRate: parseFloat(successRate),\n      avgExecutionTime\n    },\n    suitePerformance,\n    currentSchedule: {\n      scheduled: scheduledTests.length,\n      skipped: skippedTests.length,\n      nextRuns: this._calculateNextRuns($input.item(2).json.testSuites)\n    },\n    insights,\n    summary: {\n      overallHealth: successRate >= 85 ? 'healthy' : successRate >= 70 ? 'warning' : 'critical',\n      totalInsights: insights.length,\n      criticalIssues: insights.filter(i => i.priority === 'critical').length,\n      highPriorityIssues: insights.filter(i => i.priority === 'high').length\n    }\n  }\n}];"
+      },
+      "id": "generate-dashboard-summary",
+      "name": "Generate Dashboard Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/dashboard/summary",
+        "jsonParameters": true,
+        "json": "={{ $json }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "update-dashboard-summary",
+      "name": "Update Dashboard Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/scheduler/update-status",
+        "jsonParameters": true,
+        "json": {
+          "sessionId": "={{ $json.sessionId }}",
+          "status": "completed",\n          "actionsTaken": {\n            "testsScheduled": "={{ $input.item(2).json.testsToRun.length }}",\n            "testsExecuted": "={{ $input.item(2).json.testsToRun.length }}",\n            "dashboardUpdated": true,\n            "summaryGenerated": true\n          },\n          "nextRun": new Date(Date.now() + 3600000).toISOString() // 1 hour from now\n        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "update-scheduler-status",
+      "name": "Update Scheduler Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1",
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/scheduler/cleanup",
+        "jsonParameters": true,
+        "json": {
+          "sessionId": "={{ $json.sessionId }}",
+          "cleanupTasks": [\n            "archive_old_sessions",\n            "cleanup_temp_data",\n            "update_statistics"\n          ],\n          "retentionPeriod": "7d"\n        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "cleanup-scheduler-data",
+      "name": "Cleanup Scheduler Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2220, 300]
+    }
+  ],
+  "connections": {
+    "Test Scheduler Trigger": {
+      "main": [
+        [
+          {
+            "node": "Initialize Test Scheduler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Scheduler Trigger": {
+      "main": [
+        [
+          {
+            "node": "Initialize Test Scheduler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Test Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Check Active Test Sessions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Test Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Active Test Sessions": {
+      "main": [
+        [
+          {
+            "node": "Test Execution Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Test Schedule": {
+      "main": [
+        [
+          {
+            "node": "Test Execution Router",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Test Execution Router": {
+      "main": [
+        [
+          {
+            "node": "Execute Test Suite",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Test Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Test Suite": {
+      "main": [
+        [
+          {
+            "node": "Update Test Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Test Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Get Recent Test Executions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Recent Test Executions": {
+      "main": [
+        [
+          {
+            "node": "Generate Dashboard Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Dashboard Summary": {
+      "main": [
+        [
+          {
+            "node": "Update Dashboard Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Dashboard Summary": {
+      "main": [
+        [
+          {
+            "node": "Update Scheduler Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Scheduler Status": {
+      "main": [
+        [
+          {
+            "node": "Cleanup Scheduler Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T18:00:00.000Z",
+      "updatedAt": "2024-10-23T18:00:00.000Z",
+      "id": "tag-scheduling",
+      "name": "Scheduling"
+    },
+    {
+      "createdAt": "2024-10-23T18:00:00.000Z",
+      "updatedAt": "2024-10-23T18:00:00.000Z",
+      "id": "tag-dashboard",
+      "name": "Dashboard"
+    },
+    {
+      "createdAt": "2024-10-23T18:00:00.000Z",
+      "updatedAt": "2024-10-23T18:00:00.000Z",
+      "id": "tag-automation",
+      "name": "Automation"
+    }
+  ],
+  "triggerCount": 2,
+  "updatedAt": "2024-10-23T18:00:00.000Z",
+  "versionId": "1"
+}

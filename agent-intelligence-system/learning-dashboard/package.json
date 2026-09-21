@@ -1,0 +1,77 @@
+{
+  "name": "agent-intelligence-learning-dashboard",
+  "version": "1.0.0",
+  "description": "Real-time intelligence growth dashboard for DMlogn8n AI agents",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint:fix": "eslint src --ext ts,tsx --fix",
+    "type-check": "tsc --noEmit",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage",
+    "serve": "node dist/server.js",
+    "start": "concurrently \"npm run dev\" \"node backend/server.js\""
+  },
+  "keywords": [
+    "ai",
+    "machine-learning",
+    "dashboard",
+    "react",
+    "typescript",
+    "real-time",
+    "agent-intelligence",
+    "dnd",
+    "game-ai"
+  ],
+  "author": "DMlogn8n Development Team",
+  "license": "MIT",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.8.0",
+    "recharts": "^2.5.0",
+    "socket.io-client": "^4.6.1",
+    "@heroicons/react": "^2.0.18",
+    "clsx": "^1.2.1",
+    "date-fns": "^2.29.3"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.28",
+    "@types/react-dom": "^18.0.11",
+    "@typescript-eslint/eslint-plugin": "^5.54.0",
+    "@typescript-eslint/parser": "^5.54.0",
+    "@vitejs/plugin-react": "^3.1.0",
+    "autoprefixer": "^10.4.14",
+    "concurrently": "^7.6.0",
+    "eslint": "^8.35.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.3.4",
+    "postcss": "^8.4.21",
+    "tailwindcss": "^3.2.7",
+    "typescript": "^4.9.3",
+    "vite": "^4.1.0",
+    "vitest": "^0.29.1",
+    "@vitest/ui": "^0.29.1",
+    "jsdom": "^21.1.0"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}

@@ -1,0 +1,562 @@
+# Redis Streams Configuration for DMLogn8n Message Queue System
+# This file contains all configuration options for Redis Streams backend
+
+# Redis Connection Settings
+redis:
+  # Connection parameters
+  host: "localhost"
+  port: 6379
+  db: 0
+  username: null  # Set if using Redis ACL
+  password: null  # Set if Redis requires authentication
+
+  # SSL Configuration
+  ssl_enabled: false
+  # ssl_context: null  # Provide SSL context object if needed
+
+  # Connection timeouts and retries
+  connection_timeout: 10
+  socket_timeout: 5
+  socket_connect_timeout: 5
+  retry_on_timeout: true
+
+  # Health check and keepalive
+  health_check_interval: 30
+  tcp_keepalive: true
+
+  # Connection pooling
+  max_connections: 100
+  connection_pool_kwargs:
+    retry_on_timeout: true
+    health_check_interval: 30
+
+# Redis Streams Configuration
+streams:
+  # Stream naming and key prefixes
+  stream_key_prefix: "stream:"
+  pending_key_prefix: "pending:"
+  consumer_group_prefix: "dmlogn8n"
+  consumer_prefix: "consumer:"
+
+  # Stream management
+  stream_max_len: null  # Set to limit stream length (e.g., 10000)
+  auto_trim: true
+  trim_strategy: "maxlen"  # maxlen, minid
+  trim_approximate: true
+
+  # Consumer group settings
+  consumer_group_auto_create: true
+  consumer_group_start_id: "0"
+  consumer_group_block_time: 1000  # milliseconds
+  consumer_group_count: 10  # messages per read
+
+  # Consumer settings
+  consumer_batch_size: 10
+  consumer_timeout: 1000  # milliseconds
+  consumer_retry_delay: 5000  # milliseconds
+  consumer_max_retries: 3
+
+  # Lag monitoring
+  lag_check_interval: 10  # seconds
+  lag_alert_threshold: 1000  # messages
+  lag_critical_threshold: 5000  # messages
+
+# Stream Definitions
+stream_definitions:
+  # Agent communication streams
+  agent_communication:
+    name: "agent.communication"
+    partitions: 1  # Redis Streams doesn't have native partitioning
+    retention:
+      max_length: 10000
+      trim_strategy: "maxlen"
+    consumer_groups:
+      - name: "agent_processors"
+        consumers: 5
+        start_id: ">"
+      - name: "agent_monitors"
+        consumers: 2
+        start_id: "0"
+
+  # Direct agent messages
+  agent_direct_template:
+    name_template: "agent.direct.{agent_id}"
+    retention:
+      max_length: 1000
+      ttl: 300000  # 5 minutes in milliseconds
+    consumer_groups:
+      - name: "agent_{agent_id}_receiver"
+        consumers: 1
+        start_id: ">"
+
+  # Group broadcasts
+  agent_group_template:
+    name_template: "agent.group.{group_id}"
+    retention:
+      max_length: 5000
+      ttl: 600000  # 10 minutes
+    consumer_groups:
+      - name: "group_{group_id}_listeners"
+        consumers: 10
+        start_id: ">"
+
+  # Game event streams
+  game_events_template:
+    name_template: "game.events.{game_id}"
+    retention:
+      max_length: 10000
+      ttl: 3600000  # 1 hour
+    consumer_groups:
+      - name: "game_{game_id}_processors"
+        consumers: 3
+        start_id: ">"
+      - name: "game_monitors"
+        consumers: 1
+        start_id: "0"
+
+  # Game state streams
+  game_state_template:
+    name_template: "game.state.{game_id}"
+    retention:
+      max_length: 1000
+      ttl: 7200000  # 2 hours
+    consumer_groups:
+      - name: "game_{game_id}_state"
+        consumers: 2
+        start_id: ">"
+
+  # System event streams
+  system_alerts:
+    name: "system.alerts"
+    retention:
+      max_length: 5000
+      ttl: 86400000  # 24 hours
+    consumer_groups:
+      - name: "system_processors"
+        consumers: 5
+        start_id: ">"
+      - name: "system_archivers"
+        consumers: 1
+        start_id: "0"
+
+  system_metrics:
+    name: "system.metrics"
+    retention:
+      max_length: 10000
+      ttl: 3600000  # 1 hour
+    consumer_groups:
+      - name: "metric_collectors"
+        consumers: 3
+        start_id: ">"
+      - name: "metric_aggregators"
+        consumers: 2
+        start_id: "0"
+
+  system_health:
+    name: "system.health"
+    retention:
+      max_length: 1000
+      ttl: 3600000  # 1 hour
+    consumer_groups:
+      - name: "health_monitors"
+        consumers: 2
+        start_id: ">"
+
+  # Dialogue event streams
+  dialogue_events_template:
+    name_template: "dialogue.events.{instance_id}"
+    retention:
+      max_length: 5000
+      ttl: 1800000  # 30 minutes
+    consumer_groups:
+      - name: "dialogue_{instance_id}_processors"
+        consumers: 3
+        start_id: ">"
+
+  dialogue_sessions_template:
+    name_template: "dialogue.sessions.{instance_id}"
+    retention:
+      max_length: 1000
+      ttl: 3600000  # 1 hour
+    consumer_groups:
+      - name: "dialogue_{instance_id}_manager"
+        consumers: 1
+        start_id: ">"
+
+  # Combat event streams
+  combat_events_template:
+    name_template: "combat.events.{instance_id}"
+    retention:
+      max_length: 5000
+      ttl: 1800000  # 30 minutes
+    consumer_groups:
+      - name: "combat_{instance_id}_processors"
+        consumers: 3
+        start_id: ">"
+
+  combat_encounters_template:
+    name_template: "combat.encounters.{instance_id}"
+    retention:
+      max_length: 1000
+      ttl: 3600000  # 1 hour
+    consumer_groups:
+      - name: "combat_{instance_id}_manager"
+        consumers: 1
+        start_id: ">"
+
+  # Dead letter streams
+  dead_letter:
+    name: "dead.letter"
+    retention:
+      max_length: 10000
+      ttl: 604800000  # 7 days
+    consumer_groups:
+      - name: "dlq_processors"
+        consumers: 2
+        start_id: ">"
+
+  # Audit log streams
+  audit_log:
+    name: "audit.log"
+    retention:
+      max_length: 50000
+      ttl: 2592000000  # 30 days
+    consumer_groups:
+      - name: "audit_processors"
+        consumers: 3
+        start_id: ">"
+      - name: "audit_archivers"
+        consumers: 1
+        start_id: "0"
+
+# Consumer Configuration
+consumers:
+  # Default consumer settings
+  default:
+    block_time: 1000  # milliseconds
+    count: 10
+    start_id: ">"
+    noack: false
+    consumer_name: null  # Auto-generated
+
+  # High-throughput consumers
+  high_throughput:
+    block_time: 500
+    count: 100
+    start_id: ">"
+    noack: false
+    prefetch_size: 1000
+
+  # Low-latency consumers
+  low_latency:
+    block_time: 100
+    count: 5
+    start_id: ">"
+    noack: false
+
+  # Reliable consumers (with manual ack)
+  reliable:
+    block_time: 2000
+    count: 5
+    start_id: ">"
+    noack: false
+    retry_delay: 5000
+
+  # Monitoring consumers
+  monitoring:
+    block_time: 5000
+    count: 1
+    start_id: "0"
+    noack: true  # Don't need to ack monitoring data
+
+# Message Serialization
+serialization:
+  # Default serialization format
+  default_format: "json"
+
+  # Supported formats
+  formats:
+    json:
+      content_type: "application/json"
+      encoding: "utf-8"
+      compress: false
+
+    msgpack:
+      content_type: "application/msgpack"
+      encoding: "binary"
+      compress: false
+
+    protobuf:
+      content_type: "application/protobuf"
+      encoding: "binary"
+      compress: false
+
+  # Compression options
+  compression:
+    enabled: false
+    algorithm: "gzip"  # gzip, lz4, snappy
+    threshold: 1024  # bytes
+
+# Performance Tuning
+performance:
+  # Memory optimization
+  memory_limit: "2gb"
+  maxmemory_policy: "allkeys-lru"
+
+  # Persistence
+  save:
+    enabled: true
+    interval: 900  # seconds
+    changes: 1
+
+  appendonly:
+    enabled: true
+    fsync: "everysec"
+    rewrite_policy: "aof_rewrite_incr"
+
+  # Network optimization
+  tcp_keepalive: 300
+  timeout: 0
+
+  # Client optimization
+  tcp_backlog: 511
+  maxclients: 10000
+
+  # Slow log
+  slowlog_log_slower_than: 10000  # microseconds
+  slowlog_max_len: 128
+
+# Monitoring and Metrics
+monitoring:
+  # Enable monitoring
+  enabled: true
+
+  # Metrics collection
+  metrics_interval: 60  # seconds
+  collect_stream_info: true
+  collect_consumer_info: true
+  collect_memory_info: true
+
+  # Prometheus metrics
+  prometheus:
+    enabled: true
+    port: 9091
+    endpoint: "/metrics"
+
+  # Alerting thresholds
+  alerts:
+    memory_usage_warning: 80  # percentage
+    memory_usage_critical: 90
+    stream_length_warning: 10000
+    stream_length_critical: 50000
+    consumer_lag_warning: 1000
+    consumer_lag_critical: 5000
+    connection_count_warning: 100
+    connection_count_critical: 200
+
+# High Availability and Replication
+replication:
+  # Master-slave configuration
+  role: "master"  # master, slave
+
+  # Slave configuration
+  master_host: null
+  master_port: 6379
+  master_auth: null
+
+  # Replication settings
+  repl_backlog_size: "100mb"
+  repl_timeout: 60
+  repl_ping_slave_period: 10
+  repl_timeout: 60
+
+  # Sentinel configuration (for high availability)
+  sentinel:
+    enabled: false
+    masters:
+      - name: "dmlogn8n-master"
+        host: "redis-master.example.com"
+        port: 26379
+        quorum: 2
+    sentinels:
+      - host: "redis-sentinel-1.example.com"
+        port: 26379
+      - host: "redis-sentinel-2.example.com"
+        port: 26379
+      - host: "redis-sentinel-3.example.com"
+        port: 26379
+
+# Clustering Configuration
+clustering:
+  # Enable Redis clustering
+  enabled: false
+
+  # Cluster nodes
+  nodes:
+    - host: "redis-cluster-1.example.com"
+      port: 7000
+    - host: "redis-cluster-2.example.com"
+      port: 7000
+    - host: "redis-cluster-3.example.com"
+      port: 7000
+    - host: "redis-cluster-4.example.com"
+      port: 7000
+    - host: "redis-cluster-5.example.com"
+      port: 7000
+    - host: "redis-cluster-6.example.com"
+      port: 7000
+
+  # Cluster settings
+  cluster_node_timeout: 5000
+  cluster_migration_barrier: 1
+  cluster_require_full_coverage: true
+  cluster_slave_validity_factor: 10
+
+  # Slot allocation
+  cluster_replicas: 1
+  cluster_slots: 16384
+
+# Security Configuration
+security:
+  # Authentication
+  requirepass: null
+  masterauth: null
+
+  # Access Control Lists (ACL)
+  acl_enabled: false
+  acl_users:
+    - username: "dmlogn8n"
+      password: "secure_password_here"
+      enabled: true
+      commands:
+        - "+@all"
+      keys:
+        - "stream:*"
+        - "system:*"
+      channels:
+        - "*"
+
+  # Network security
+  protected_mode: true
+  bind_interfaces:
+    - "127.0.0.1"
+    - "10.0.0.0/8"
+
+  # SSL/TLS
+  ssl_enabled: false
+  ssl_cert_file: null
+  ssl_key_file: null
+  ssl_ca_cert_file: null
+
+# Backup and Recovery
+backup:
+  # Automated backups
+  enabled: false
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention_days: 30
+
+  # Backup destination
+  destination: "s3://redis-backups/dmlogn8n/"
+  encryption: true
+
+  # Backup methods
+  rdb_backups:
+    enabled: true
+    compression: true
+    checksum: true
+
+  aof_backups:
+    enabled: true
+    compression: true
+
+# Logging Configuration
+logging:
+  # Log level
+  level: "INFO"
+
+  # Log file settings
+  file: "/var/log/redis/redis-server.log"
+  syslog:
+    enabled: false
+    facility: "local0"
+    ident: "redis"
+
+  # Log rotation
+  logrotate:
+    enabled: true
+    size: "100M"
+    count: 10
+
+  # Log categories
+  categories:
+    general: "notice"
+    slow_queries: "warning"
+    persistence: "warning"
+    replication: "warning"
+    clustering: "warning"
+    networking: "warning"
+
+# Development and Testing
+development:
+  # Test environment settings
+  test_mode: false
+  flush_on_startup: false
+
+  # Debug options
+  debug_mode: false
+  verbose_logging: false
+
+  # Performance testing
+  benchmark_enabled: false
+  benchmark_duration: 60  # seconds
+
+# Environment-specific overrides
+environments:
+  development:
+    redis:
+      host: "localhost"
+      port: 6379
+      db: 1
+      stream_max_len: 1000
+    monitoring:
+      enabled: true
+      metrics_interval: 30
+
+  staging:
+    redis:
+      host: "staging-redis.example.com"
+      port: 6379
+      db: 0
+      password: "staging_password"
+      ssl_enabled: true
+      stream_max_len: 5000
+    clustering:
+      enabled: true
+    replication:
+      role: "slave"
+      master_host: "staging-redis-master.example.com"
+
+  production:
+    redis:
+      host: "prod-redis-cluster.example.com"
+      port: 6379
+      db: 0
+      password: "prod_password"
+      ssl_enabled: true
+      stream_max_len: 10000
+      max_connections: 200
+    clustering:
+      enabled: true
+      nodes: 6
+      cluster_replicas: 1
+    replication:
+      enabled: true
+    backup:
+      enabled: true
+      schedule: "0 3 * * *"
+    monitoring:
+      enabled: true
+      prometheus:
+        enabled: true
+      alerts:
+        enabled: true

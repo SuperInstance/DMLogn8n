@@ -1,0 +1,364 @@
+{
+  "name": "Message Queue & Priority System - Intelligent Message Management",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "message-queue",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Message Queue Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "message-queue-priority"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse message queuing request\nconst request = $input.first().json;\n\n// Required fields validation\nif (!request.message || !request.queue_operation) {\n  return [{\n    json: {\n      error: 'Missing required fields: message, queue_operation',\n      status: 'invalid'\n    }\n  }];\n}\n\n// Create queue request\nconst queueRequest = {\n  ...request,\n  queue_id: `queue_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,\n  timestamp: new Date().toISOString(),\n  processed_by: 'message_queue_system'\n};\n\nreturn [{\n  json: queueRequest\n}];"
+      },
+      "id": "code-1",
+      "name": "Process Queue Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {\n          "options": {\n            "caseSensitive": true,\n            "leftValue": "",\n            "typeValidation": "strict"\n          },\n          "conditions": [\n            {\n              "leftValue": "={{ $json.queue_operation }}",\n              "rightValue": "enqueue",\n              "operator": {\n                "type": "string",\n                "operation": "equals\"\n              }\n            }\n          ],\n          "combinator": "and"\n        }
+      },
+      "id": "if-1",
+      "name": "Route Queue Operation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process message enqueue\nconst request = $input.first().json;\nconst message = request.message;\n\n// Calculate priority score\nconst priorityScore = calculatePriorityScore(message);\n\n// Create queued message\nconst queuedMessage = {\n  queue_id: request.queue_id,\n  message_id: message.id || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,\n  message_data: message,\n  priority_score: priorityScore,\n  priority_level: getPriorityLevel(priorityScore),\n  queue_status: 'queued',\n  queue_position: null, // Will be assigned when inserted\n  enqueued_at: request.timestamp,\n  estimated_delivery: calculateEstimatedDelivery(priorityScore),\n  delivery_attempts: 0,\n  max_attempts: message.max_delivery_attempts || 3,\n  expires_at: calculateExpiryTime(message),\n  metadata: {\n    queue_type: message.queue_type || 'standard',\n    persistent: message.persistent !== false,\n    retry_policy: message.retry_policy || 'exponential_backoff',\n    depends_on: message.depends_on || [],\n    tags: message.tags || []\n  }\n};\n\nfunction calculatePriorityScore(msg) {\n  let score = 50; // Base score\n  \n  // Priority level adjustments\n  if (msg.priority === 'critical') score += 40;\n  else if (msg.priority === 'high') score += 25;\n  else if (msg.priority === 'low') score -= 15;\n  \n  // Urgency adjustments\n  if (msg.urgency === 'immediate') score += 30;\n  else if (msg.urgency === 'urgent') score += 15;\n  \n  // Sender importance\n  if (msg.from_agent === 'dungeon_master') score += 10;\n  if (msg.from_agent === 'conflict_resolution') score += 20;\n  \n  // Message type importance\n  if (msg.message_type === 'emergency') score += 35;\n  if (msg.message_type === 'coordination_request') score += 15;\n  if (msg.message_type === 'conflict_report') score += 25;\n  \n  // Time sensitivity\n  if (msg.time_sensitive) score += 10;\n  \n  return Math.min(100, Math.max(0, score));\n}\n\nfunction getPriorityLevel(score) {\n  if (score >= 80) return 'critical';\n  if (score >= 60) return 'high';\n  if (score >= 40) return 'normal';\n  if (score >= 20) return 'low';\n  return 'background';\n}\n\nfunction calculateEstimatedDelivery(score) {\n  const now = new Date();\n  let delayMinutes;\n  \n  if (score >= 80) delayMinutes = 0;\n  else if (score >= 60) delayMinutes = 1;\n  else if (score >= 40) delayMinutes = 5;\n  else if (score >= 20) delayMinutes = 15;\n  else delayMinutes = 30;\n  \n  return new Date(now.getTime() + delayMinutes * 60000).toISOString();\n}\n\nfunction calculateExpiryTime(msg) {\n  const ttl = msg.ttl_minutes || 60; // Default 1 hour\n  return new Date(Date.now() + ttl * 60000).toISOString();\n}\n\nreturn [{\n  json: {\n    action: 'message_queued',\n    queue_request: request,\n    queued_message: queuedMessage\n  }\n}];"
+      },
+      "id": "code-2",
+      "name": "Enqueue Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process dequeue operation\nconst request = $input.first().json;\n\nconst dequeueRequest = {\n  queue_id: request.queue_id,\n  operation: 'dequeue',\n  target_agent: request.target_agent || 'any',\n  priority_filter: request.priority_filter || 'all',\n  batch_size: request.batch_size || 1,\n  ack_timeout: request.ack_timeout || 30,\n  timestamp: request.timestamp\n};\n\nreturn [{\n  json: {\n    action: 'dequeue_requested',\n    queue_request: request,\n    dequeue_request: dequeueRequest\n  }\n}];"
+      },
+      "id": "code-3",
+      "name": "Process Dequeue Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process queue status query\nconst request = $input.first().json;\n\nconst statusQuery = {\n  queue_id: request.queue_id,\n  query_type: 'queue_status',\n  filters: request.filters || {},\n  include_metrics: request.include_metrics !== false,\n  timestamp: request.timestamp\n};\n\nreturn [{\n  json: {\n    action: 'status_queried',\n    queue_request: request,\n    status_query: statusQuery\n  }\n}];"
+      },
+      "id": "code-4",
+      "name": "Process Status Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Insert message into priority queue and manage queue state\nconst enqueueResult = $input.first().json;\nconst queuedMessage = enqueueResult.queued_message;\n\n// Simulate queue management\nconst queueState = {\n  total_messages: 125,\n  messages_by_priority: {\n    critical: 3,\n    high: 12,\n    normal: 78,\n    low: 25,\n    background: 7\n  },\n  average_wait_time: '2.3 minutes',\n  processing_rate: '15.2 messages/minute',\n  queue_health: 'healthy'\n};\n\n// Insert message based on priority\nconst insertionResult = {\n  message_id: queuedMessage.message_id,\n  queue_position: calculateQueuePosition(queuedMessage.priority_score, queueState),\n  estimated_wait_time: calculateWaitTime(queuedMessage.priority_score, queueState),\n  queue_status: queuedMessage.queue_status,\n  enqueued_at: queuedMessage.enqueued_at\n};\n\nfunction calculateQueuePosition(priorityScore, queue) {\n  // Estimate position based on priority and current queue state\n  let position = 1;\n  \n  if (priorityScore >= 80) {\n    position = Math.floor(Math.random() * 3) + 1; // Top 3 positions\n  } else if (priorityScore >= 60) {\n    position = Math.floor(Math.random() * 10) + 4; // Positions 4-13\n  } else if (priorityScore >= 40) {\n    position = Math.floor(Math.random() * 30) + 14; // Positions 14-43\n  } else {\n    position = Math.floor(Math.random() * 50) + 44; // Positions 44-93\n  }\n  \n  return position;\n}\n\nfunction calculateWaitTime(priorityScore, queue) {\n  // Estimate wait time based on priority and processing rate\n  if (priorityScore >= 80) return '< 1 minute';\n  if (priorityScore >= 60) return '1-3 minutes';\n  if (priorityScore >= 40) return '3-8 minutes';\n  if (priorityScore >= 20) return '8-15 minutes';\n  return '15-30 minutes';\n}\n\nreturn [{\n  json: {\n    action: 'message_inserted',\n    insertion_result: insertionResult,\n    queue_state: queueState,\n    queued_message: queuedMessage\n  }\n}];"
+      },
+      "id": "code-5",
+      "name": "Manage Queue Insertion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/api/v1/queue/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "queue_operation",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-1",
+      "name": "Store Queued Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check for message dependencies and schedule delivery\nconst insertResult = $input.first().json;\nconst queuedMessage = insertResult.queued_message;\n\n// Check if message can be delivered immediately\nconst canDeliverImmediately = (\n  queuedMessage.priority_score >= 80 || // Critical priority\n  queuedMessage.metadata.depends_on.length === 0 || // No dependencies\n  queuedMessage.message_type === 'emergency' // Emergency messages\n);\n\nif (canDeliverImmediately) {\n  // Schedule immediate delivery\n  return [{\n    json: {\n      action: 'schedule_immediate_delivery',\n      message_id: queuedMessage.message_id,\n      delivery_time: 'immediate',\n      queue_position: insertResult.insertion_result.queue_position,\n      queued_message: queuedMessage\n    }\n  }];\n} else {\n  // Schedule for normal queue processing\n  return [{\n    json: {\n      action: 'schedule_queued_delivery',\n      message_id: queuedMessage.message_id,\n      delivery_time: queuedMessage.estimated_delivery,\n      queue_position: insertResult.insertion_result.queue_position,\n      estimated_wait: insertResult.insertion_result.estimated_wait_time,\n      queued_message: queuedMessage\n    }\n  }];\n}"
+      },
+      "id": "code-6",
+      "name": "Schedule Delivery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/webhook/agent-message",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "={{ $json.queued_message.message_data }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-2",
+      "name": "Deliver Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1780, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process message delivery confirmation\nconst deliveryResult = $input.first().json;\nconst originalMessage = $('Schedule Delivery').first().json;\n\nconst deliveryConfirmation = {\n  message_id: originalMessage.message_id,\n  delivery_status: deliveryResult.status >= 200 && deliveryResult.status < 300 ? 'delivered' : 'failed',\n  delivered_at: new Date().toISOString(),\n  delivery_response: {\n    status_code: deliveryResult.status,\n    response_time: deliveryResult.responseTime || 'unknown'\n  },\n  queue_position: originalMessage.queue_position,\n  total_wait_time: calculateTotalWaitTime(originalMessage.queued_message.enqueued_at),\n  next_action: determineNextAction(deliveryResult.status)\n};\n\nfunction calculateTotalWaitTime(enqueuedAt) {\n  const now = new Date();\n  const enqueued = new Date(enqueuedAt);\n  const waitMinutes = Math.floor((now - enqueued) / 60000);\n  return `${waitMinutes} minutes`;\n}\n\nfunction determineNextAction(statusCode) {\n  if (statusCode >= 200 && statusCode < 300) {\n    return 'remove_from_queue';\n  } else if (statusCode >= 400 && statusCode < 500) {\n    return 'retry_or_fail';\n  } else {\n    return 'retry_with_backoff';\n  }\n}\n\nreturn [{\n  json: {\n    action: 'delivery_confirmed',\n    delivery_confirmation: deliveryConfirmation\n  }\n}];"
+      },
+      "id": "code-7",
+      "name": "Confirm Delivery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/api/v1/queue/delivery-log",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "delivery_log",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-3",
+      "name": "Log Delivery",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2220, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"queue_operation_completed\",\n  \"action\": \"{{ $json.action }}\",\n  \"message_id\": \"{{ $json.delivery_confirmation.message_id }}\",\n  \"queue_position\": \"{{ $json.delivery_confirmation.queue_position }}\",\n  \"delivery_status\": \"{{ $json.delivery_confirmation.delivery_status }}\",\n  \"message\": \"Message queue operation completed successfully\"\n}"
+      },
+      "id": "respond-1",
+      "name": "Send Queue Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2440, 200]
+    }
+  ],
+  "connections": {
+    "Message Queue Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Queue Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Queue Request": {
+      "main": [
+        [
+          {
+            "node": "Route Queue Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Queue Operation": {
+      "main": [
+        [
+          {
+            "node": "Enqueue Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Dequeue Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Status Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enqueue Message": {
+      "main": [
+        [
+          {
+            "node": "Manage Queue Insertion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manage Queue Insertion": {
+      "main": [
+        [
+          {
+            "node": "Store Queued Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Queued Message": {
+      "main": [
+        [
+          {
+            "node": "Schedule Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Delivery": {
+      "main": [
+        [
+          {
+            "node": "Deliver Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deliver Message": {
+      "main": [
+        [
+          {
+            "node": "Confirm Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm Delivery": {
+      "main": [
+        [
+          {
+            "node": "Log Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Delivery": {
+      "main": [
+        [
+          {
+            "node": "Send Queue Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Dequeue Request": {
+      "main": [
+        [
+          {
+            "node": "Send Queue Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Status Query": {
+      "main": [
+        [
+          {
+            "node": "Send Queue Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T21:00:00.000Z",
+      "updatedAt": "2024-10-23T21:00:00.000Z",
+      "id": "tag-message-queue",
+      "name": "Message Queue"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T21:00:00.000Z",
+  "versionId": "1"
+}

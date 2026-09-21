@@ -1,0 +1,229 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dmlogn8n-app-config
+  namespace: dmlogn8n
+  labels:
+    app: dmlogn8n
+    component: config
+data:
+  # Application Configuration
+  APP_ENV: "production"
+  LOG_LEVEL: "INFO"
+  DEBUG: "false"
+
+  # Database Configuration
+  DB_HOST: "postgres-service"
+  DB_PORT: "5432"
+  DB_NAME: "dmlogn8n_prod"
+
+  # Redis Configuration
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+
+  # N8n Configuration
+  N8N_HOST: "n8n-service"
+  N8N_PORT: "5678"
+
+  # Voice Service Configuration
+  VOICE_CHAT_HOST: "voice-chat-service"
+  VOICE_CHAT_PORT: "8001"
+  VOICE_SFU_HOST: "voice-sfu-service"
+  VOICE_SFU_PORT: "8002"
+  SOUND_EFFECTS_HOST: "sound-effects-service"
+  SOUND_EFFECTS_PORT: "8003"
+  DYNAMIC_MUSIC_HOST: "dynamic-music-service"
+  DYNAMIC_MUSIC_PORT: "8004"
+
+  # File Storage Configuration
+  UPLOAD_PATH: "/app/uploads"
+  MAX_FILE_SIZE: "104857600"  # 100MB
+
+  # Security Configuration
+  JWT_SECRET_KEY: "your-jwt-secret-key-change-in-production"
+  SESSION_TIMEOUT: "3600"
+
+  # Performance Configuration
+  WORKER_PROCESSES: "4"
+  MAX_CONNECTIONS: "1000"
+  KEEPALIVE_TIMEOUT: "65"
+
+  # Monitoring Configuration
+  METRICS_ENABLED: "true"
+  METRICS_PORT: "9090"
+  HEALTH_CHECK_INTERVAL: "30"
+
+  # Feature Flags
+  ENABLE_VOICE_CHAT: "true"
+  ENABLE_SPATIAL_AUDIO: "true"
+  ENABLE_REAL_TIME_EFFECTS: "true"
+  ENABLE_ADAPTIVE_MUSIC: "true"
+  ENABLE_CONTENT_PROCESSING: "true"
+
+  # Rate Limiting
+  RATE_LIMIT_REQUESTS: "100"
+  RATE_LIMIT_WINDOW: "60"
+
+  # Cache Configuration
+  CACHE_TTL: "300"
+  CACHE_MAX_SIZE: "1000"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: dmlogn8n
+  labels:
+    app: dmlogn8n
+    component: nginx
+data:
+  nginx.conf: |
+    user nginx;
+    worker_processes auto;
+    error_log /var/log/nginx/error.log warn;
+    pid /var/run/nginx.pid;
+
+    events {
+        worker_connections 1024;
+        use epoll;
+        multi_accept on;
+    }
+
+    http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+
+        # Logging format
+        log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" "$http_x_forwarded_for"';
+
+        access_log /var/log/nginx/access.log main;
+
+        # Performance optimizations
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        keepalive_timeout 65;
+        types_hash_max_size 2048;
+
+        # Gzip compression
+        gzip on;
+        gzip_vary on;
+        gzip_min_length 1024;
+        gzip_proxied any;
+        gzip_comp_level 6;
+        gzip_types
+            text/plain
+            text/css
+            text/xml
+            text/javascript
+            application/json
+            application/javascript
+            application/xml+rss
+            application/atom+xml
+            image/svg+xml;
+
+        # Rate limiting
+        limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+        limit_req_zone $binary_remote_addr zone=login:10m rate=1r/s;
+
+        # Upstream servers
+        upstream backend {
+            least_conn;
+            server backend-service:8000 max_fails=3 fail_timeout=30s;
+            keepalive 32;
+        }
+
+        upstream voice-chat {
+            least_conn;
+            server voice-chat-service:8001 max_fails=3 fail_timeout=30s;
+            keepalive 16;
+        }
+
+        upstream voice-sfu {
+            least_conn;
+            server voice-sfu-service:8002 max_fails=3 fail_timeout=30s;
+            keepalive 16;
+        }
+
+        # Load balancer
+        server {
+            listen 80;
+            server_name _;
+
+            # Security headers
+            add_header X-Frame-Options DENY;
+            add_header X-Content-Type-Options nosniff;
+            add_header X-XSS-Protection "1; mode=block";
+            add_header Referrer-Policy strict-origin-when-cross-origin;
+
+            # Health check endpoint
+            location /health {
+                access_log off;
+                return 200 "healthy\n";
+                add_header Content-Type text/plain;
+            }
+
+            # API routes
+            location /api/ {
+                limit_req zone=api burst=20 nodelay;
+                proxy_pass http://backend;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection 'upgrade';
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_cache_bypass $http_upgrade;
+                proxy_read_timeout 300s;
+                proxy_connect_timeout 75s;
+            }
+
+            # Voice chat routes
+            location /voice/ {
+                proxy_pass http://voice-chat;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_read_timeout 86400s;
+                proxy_send_timeout 86400s;
+            }
+
+            # SFU routes
+            location /sfu/ {
+                proxy_pass http://voice-sfu;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_read_timeout 86400s;
+            }
+
+            # Static files
+            location /static/ {
+                alias /app/public/;
+                expires 1y;
+                add_header Cache-Control "public, immutable";
+            }
+
+            # Default route
+            location / {
+                proxy_pass http://backend;
+                proxy_http_version 1.1;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+        }
+    }

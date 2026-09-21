@@ -1,0 +1,38 @@
+{
+  "service": {
+    "name": "qdrant",
+    "id": "qdrant-1",
+    "tags": [
+      "vector-database",
+      "qdrant",
+      "dmlogn8n",
+      "primary",
+      "version:1.3"
+    ],
+    "address": "qdrant.dmlogn8n.local",
+    "port": 6333,
+    "meta": {
+      "service_id": "qdrant-1",
+      "service_type": "database",
+      "version": "1.3.0",
+      "owner": "data-team",
+      "team": "data",
+      "environment": "production",
+      "region": "us-east-1",
+      "availability_zone": "us-east-1a",
+      "database_type": "vector",
+      "role": "primary",
+      "vector_size": "1536"
+    },
+    "enable_tag_override": false,
+    "check": {
+      "id": "qdrant-health",
+      "name": "Qdrant Health Check",
+      "http": "http://qdrant.dmlogn8n.local:6333/health",
+      "method": "GET",
+      "interval": "10s",
+      "timeout": "3s",
+      "deregister_critical_service_after": "30s"
+    }
+  }
+}

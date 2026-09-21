@@ -1,0 +1,304 @@
+{
+  "name": "Advanced Trading - Price Updates & Market Analysis",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "price-update-trigger",
+      "name": "Price Update Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Fetch all active items that need price updates\nconst regions = ['global', 'north', 'south', 'east', 'west'];\nconst categories = await fetchCategories();\nconst itemsToUpdate = [];\n\nfor (const region of regions) {\n  for (const category of categories) {\n    const items = await fetchItemsForCategory(category.id, region);\n    itemsToUpdate.push(...items.map(item => ({\n      ...item,\n      regionId: region,\n      categoryId: category.id\n    })));\n  }\n}\n\nconsole.log(`Found ${itemsToUpdate.length} items to update prices for`);\n\nreturn itemsToUpdate.map(item => ({ json: item }));\n\nasync function fetchCategories() {\n  // This would fetch from the DMlogn8n API\n  return [\n    { id: 1, name: 'Weapons' },\n    { id: 2, name: 'Armor' },\n    { id: 3, name: 'Consumables' },\n    { id: 4, name: 'Materials' },\n    { id: 5, name: 'Rare Items' }\n  ];\n}\n\nasync function fetchItemsForCategory(categoryId, regionId) {\n  // This would fetch actual items from the database\n  const mockItems = [];\n  for (let i = 1; i <= 10; i++) {\n    mockItems.push({\n      id: `${categoryId}_${i}`,\n      name: `Item ${categoryId}-${i}`,\n      categoryId: categoryId,\n      basePrice: Math.floor(Math.random() * 1000) + 100\n    });\n  }\n  return mockItems;\n}"
+      },
+      "id": "fetch-items-for-update",
+      "name": "Fetch Items for Update",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Calculate dynamic pricing for each item\nconst item = $input.first().json;\n\n// Fetch market data for this item/region combination\nconst marketData = await fetchMarketData(item.id, item.regionId);\n\n// Calculate supply/demand ratio\nconst supplyDemandRatio = calculateSupplyDemandRatio(marketData);\n\n// Calculate price based on economic engine\nconst newPrice = calculateDynamicPrice(item, marketData, supplyDemandRatio);\n\n// Calculate price trend\nconst priceTrend = calculatePriceTrend(item.id, item.regionId);\n\n// Calculate volatility\nconst volatility = calculateVolatility(marketData);\n\n// Check for market manipulation\nconst manipulationScore = detectMarketManipulation(marketData);\n\nconst priceUpdate = {\n  itemId: item.id,\n  regionId: item.regionId,\n  categoryId: item.categoryId,\n  oldPrice: marketData.currentPrice || item.basePrice,\n  newPrice: newPrice,\n  priceChange: newPrice - (marketData.currentPrice || item.basePrice),\n  priceChangePercent: ((newPrice - (marketData.currentPrice || item.basePrice)) / (marketData.currentPrice || item.basePrice)) * 100,\n  supplyDemandRatio: supplyDemandRatio,\n  priceTrend: priceTrend,\n  volatility: volatility,\n  manipulationScore: manipulationScore,\n  timestamp: new Date().toISOString()\n};\n\nreturn [{ json: priceUpdate }];\n\nasync function fetchMarketData(itemId, regionId) {\n  // Mock market data - in production this would query the database\n  return {\n    currentPrice: Math.floor(Math.random() * 1000) + 100,\n    totalSupply: Math.floor(Math.random() * 1000),\n    totalDemand: Math.floor(Math.random() * 1000),\n    recentSales: Math.floor(Math.random() * 50),\n    averagePrice: Math.floor(Math.random() * 1000) + 100,\n    priceHistory: Array.from({ length: 24 }, () => Math.floor(Math.random() * 1000) + 100)\n  };\n}\n\nfunction calculateSupplyDemandRatio(marketData) {\n  if (marketData.totalDemand === 0) return 10; // Very high demand\n  return marketData.totalSupply / marketData.totalDemand;\n}\n\nfunction calculateDynamicPrice(item, marketData, supplyDemandRatio) {\n  const basePrice = item.basePrice;\n  const elasticity = 0.5; // Price elasticity coefficient\n  \n  // Apply supply/demand modifier\n  const supplyDemandModifier = 1 / Math.pow(supplyDemandRatio, elasticity);\n  \n  // Apply trend modifier\n  const trendModifier = 1 + (marketData.recentSales > 20 ? 0.1 : marketData.recentSales < 5 ? -0.05 : 0);\n  \n  // Calculate final price\n  let finalPrice = basePrice * supplyDemandModifier * trendModifier;\n  \n  // Apply bounds (prevent extreme price changes)\n  const maxChange = 0.5; // Max 50% change per update\n  const minPrice = basePrice * 0.1;\n  const maxPrice = basePrice * 10;\n  \n  finalPrice = Math.max(minPrice, Math.min(maxPrice, finalPrice));\n  finalPrice = Math.max(basePrice * (1 - maxChange), Math.min(basePrice * (1 + maxChange), finalPrice));\n  \n  return Math.round(finalPrice * 100) / 100; // Round to 2 decimal places\n}\n\nfunction calculatePriceTrend(itemId, regionId) {\n  // Simple trend calculation based on recent price history\n  return (Math.random() - 0.5) * 0.2; // Random between -10% and +10%\n}\n\nfunction calculateVolatility(marketData) {\n  if (!marketData.priceHistory || marketData.priceHistory.length < 2) return 0.05;\n  \n  const prices = marketData.priceHistory;\n  const mean = prices.reduce((sum, price) => sum + price, 0) / prices.length;\n  const variance = prices.reduce((sum, price) => sum + Math.pow(price - mean, 2), 0) / prices.length;\n  const standardDeviation = Math.sqrt(variance);\n  \n  return standardDeviation / mean;\n}\n\nfunction detectMarketManipulation(marketData) {\n  let score = 0;\n  \n  // Check for unusual volume spikes\n  if (marketData.recentSales > 100) score += 0.3;\n  \n  // Check for price anomalies\n  const priceVariance = calculateVolatility(marketData);\n  if (priceVariance > 0.3) score += 0.4;\n  \n  // Check for supply/demand imbalances\n  const ratio = calculateSupplyDemandRatio(marketData);\n  if (ratio > 5 || ratio < 0.2) score += 0.3;\n  \n  return Math.min(score, 1.0);\n}"
+      },
+      "id": "calculate-prices",
+      "name": "Calculate Dynamic Prices",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.manipulationScore}}",
+              "operation": "larger",
+              "value2": 0.7
+            }
+          ]
+        }
+      },
+      "id": "manipulation-check",
+      "name": "Check for Manipulation",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.DMLOGN8N_API_URL}}/market/prices",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "itemId",
+              "value": "={{$json.itemId}}"
+            },
+            {
+              "name": "regionId",
+              "value": "={{$json.regionId}}"
+            },
+            {
+              "name": "newPrice",
+              "value": "={{$json.newPrice}}"
+            },
+            {
+              "name": "priceChange",
+              "value": "={{$json.priceChange}}"
+            },
+            {
+              "name": "priceChangePercent",
+              "value": "={{$json.priceChangePercent}}"
+            }
+          ]
+        }
+      },
+      "id": "update-normal-prices",
+      "name": "Update Normal Prices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.DMLOGN8N_API_URL}}/security/price-manipulation",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "itemId",
+              "value": "={{$json.itemId}}"
+            },
+            {
+              "name": "regionId",
+              "value": "={{$json.regionId}}"
+            },
+            {
+              "name": "manipulationScore",
+              "value": "={{$json.manipulationScore}}"
+            },
+            {
+              "name": "marketData",
+              "value": "={{$json}}"
+            }
+          ]
+        }
+      },
+      "id": "report-manipulation",
+      "name": "Report Price Manipulation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Collect all price updates and generate market summary\nconst allUpdates = $input.all().map(item => item.json);\n\n// Calculate market statistics\nconst summary = {\n  totalUpdates: allUpdates.length,\n  averagePriceChange: allUpdates.reduce((sum, update) => sum + update.priceChangePercent, 0) / allUpdates.length,\n  priceIncreases: allUpdates.filter(update => update.priceChangePercent > 0).length,\n  priceDecreases: allUpdates.filter(update => update.priceChangePercent < 0).length,\n  significantChanges: allUpdates.filter(update => Math.abs(update.priceChangePercent) > 10).length,\n  highVolatilityItems: allUpdates.filter(update => update.volatility > 0.2).length,\n  manipulationFlags: allUpdates.filter(update => update.manipulationScore > 0.7).length,\n  timestamp: new Date().toISOString(),\n  regions: [...new Set(allUpdates.map(update => update.regionId))],\n  categories: [...new Set(allUpdates.map(update => update.categoryId))]\n};\n\n// Identify top movers\nconst topMovers = allUpdates\n  .sort((a, b) => Math.abs(b.priceChangePercent) - Math.abs(a.priceChangePercent))\n  .slice(0, 10);\n\n// Identify most volatile items\nconst mostVolatile = allUpdates\n  .sort((a, b) => b.volatility - a.volatility)\n  .slice(0, 5);\n\n// Regional breakdown\nconst regionalBreakdown = {};\nsummary.regions.forEach(region => {\n  const regionUpdates = allUpdates.filter(update => update.regionId === region);\n  regionalBreakdown[region] = {\n    updateCount: regionUpdates.length,\n    averageChange: regionUpdates.reduce((sum, update) => sum + update.priceChangePercent, 0) / regionUpdates.length,\n    volatility: regionUpdates.reduce((sum, update) => sum + update.volatility, 0) / regionUpdates.length\n  };\n});\n\nconst marketSummary = {\n  summary: summary,\n  topMovers: topMovers,\n  mostVolatile: mostVolatile,\n  regionalBreakdown: regionalBreakdown,\n  alerts: generateMarketAlerts(summary, topMovers, mostVolatile)\n};\n\nreturn [{ json: marketSummary }];\n\nfunction generateMarketAlerts(summary, topMovers, mostVolatile) {\n  const alerts = [];\n  \n  // High volatility alert\n  if (summary.highVolatilityItems > summary.totalUpdates * 0.3) {\n    alerts.push({\n      type: 'high_volatility',\n      severity: 'warning',\n      message: `High market volatility detected: ${summary.highVolatilityItems} items showing volatile behavior`,\n      affectedItems: mostVolatile.length\n    });\n  }\n  \n  // Significant price movement alert\n  if (summary.significantChanges > summary.totalUpdates * 0.2) {\n    alerts.push({\n      type: 'significant_price_movement',\n      severity: 'info',\n      message: `Significant price movements: ${summary.significantChanges} items changed by more than 10%`,\n      topMovers: topMovers.slice(0, 3)\n    });\n  }\n  \n  // Manipulation alert\n  if (summary.manipulationFlags > 0) {\n    alerts.push({\n      type: 'potential_manipulation',\n      severity: 'critical',\n      message: `Potential market manipulation detected in ${summary.manipulationFlags} items`,\n      requiresInvestigation: true\n    });\n  }\n  \n  return alerts;\n}"
+      },
+      "id": "generate-market-summary",
+      "name": "Generate Market Summary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.DMLOGN8N_API_URL}}/notifications/broadcast",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "market_update"
+            },
+            {
+              "name": "data",
+              "value": "={{$json}}"
+            }
+          ]
+        }
+      },
+      "id": "broadcast-market-update",
+      "name": "Broadcast Market Update",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Check for price alerts triggered by updates\nconst marketSummary = $input.first().json;\nconst alerts = [];\n\n// Get active price alerts from database\nconst priceAlerts = await fetchActivePriceAlerts();\n\nfor (const alert of priceAlerts) {\n  const relevantUpdate = marketSummary.topMovers.find(mover => \n    mover.itemId === alert.itemId && mover.regionId === alert.regionId\n  );\n  \n  if (relevantUpdate) {\n    let triggered = false;\n    \n    switch (alert.type) {\n      case 'above':\n        triggered = relevantUpdate.newPrice >= alert.threshold;\n        break;\n      case 'below':\n        triggered = relevantUpdate.newPrice <= alert.threshold;\n        break;\n      case 'percentage_change':\n        triggered = Math.abs(relevantUpdate.priceChangePercent) >= alert.threshold;\n        break;\n    }\n    \n    if (triggered) {\n      alerts.push({\n        alertId: alert.id,\n        playerId: alert.playerId,\n        itemId: alert.itemId,\n        triggerPrice: relevantUpdate.newPrice,\n        triggerData: relevantUpdate,\n        alertType: alert.type,\n        threshold: alert.threshold\n      });\n    }\n  }\n}\n\nconsole.log(`Triggered ${alerts.length} price alerts`);\n\nreturn alerts.map(alert => ({ json: alert }));\n\nasync function fetchActivePriceAlerts() {\n  // Mock data - in production this would query the database\n  return [\n    {\n      id: 'alert_1',\n      playerId: 'player_123',\n      itemId: '1_5',\n      regionId: 'global',\n      type: 'above',\n      threshold: 500\n    },\n    {\n      id: 'alert_2',\n      playerId: 'player_456',\n      itemId: '2_3',\n      regionId: 'north',\n      type: 'percentage_change',\n      threshold: 15\n    }\n  ];\n}"
+      },
+      "id": "check-price-alerts",
+      "name": "Check Price Alerts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1560, 500]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.DMLOGN8N_API_URL}}/notifications/send-alerts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "alerts",
+              "value": "={{$json}}"
+            }
+          ]
+        }
+      },
+      "id": "send-price-alerts",
+      "name": "Send Price Alerts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1780, 500]
+    }
+  ],
+  "connections": {
+    "price-update-trigger": {
+      "main": [
+        [
+          {
+            "node": "fetch-items-for-update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch-items-for-update": {
+      "main": [
+        [
+          {
+            "node": "calculate-prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "calculate-prices": {
+      "main": [
+        [
+          {
+            "node": "manipulation-check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "manipulation-check": {
+      "main": [
+        [
+          {
+            "node": "report-manipulation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "update-normal-prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update-normal-prices": {
+      "main": [
+        [
+          {
+            "node": "generate-market-summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "report-manipulation": {
+      "main": [
+        [
+          {
+            "node": "generate-market-summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "generate-market-summary": {
+      "main": [
+        [
+          {
+            "node": "broadcast-market-update",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "check-price-alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-price-alerts": {
+      "main": [
+        [
+          {
+            "node": "send-price-alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "createdAt": "2024-01-15T10:00:00.000Z",
+  "updatedAt": "2024-01-15T10:00:00.000Z"
+}

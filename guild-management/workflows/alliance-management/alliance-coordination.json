@@ -1,0 +1,1030 @@
+{
+  "name": "Alliance Management Workflow",
+  "description": "n8n workflows for alliance coordination, diplomacy, and inter-guild operations",
+  "workflows": [
+    {
+      "id": "alliance-application-processing",
+      "name": "Alliance Application Processing",
+      "description": "Automated workflow for processing alliance applications and voting",
+      "nodes": [
+        {
+          "id": "alliance-application-webhook",
+          "name": "Alliance Application Webhook",
+          "type": "webhook",
+          "parameters": {
+            "httpMethod": "POST",
+            "path": "alliance-application",
+            "responseMode": "responseNode"
+          },
+          "position": [250, 150]
+        },
+        {
+          "id": "validate-alliance-application",
+          "name": "Validate Alliance Application",
+          "type": "function",
+          "parameters": {
+            "functionCode": "const application = $input.item.json;\nconst validation = {\n  valid: true,\n  errors: []\n};\n\nif (!application.guildId || !application.allianceId) {\n  validation.valid = false;\n  validation.errors.push('Missing required guild or alliance ID');\n}\n\nif (!application.applicantId) {\n  validation.valid = false;\n  validation.errors.push('Missing applicant ID');\n}\n\nreturn [{\n  json: {\n    application,\n    validation\n  }\n}];"
+          },
+          "position": [450, 150]
+        },
+        {
+          "id": "get-alliance-details",
+          "name": "Get Alliance Details",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "GET",
+            "url": "http://localhost:3000/api/alliances/{{$node[\"Validate Alliance Application\"].json[\"application\"][\"allianceId\"]}}",
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [650, 150]
+        },
+        {
+          "id": "get-guild-details",
+          "name": "Get Guild Details",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "GET",
+            "url": "http://localhost:3000/api/guilds/{{$node[\"Validate Alliance Application\"].json[\"application\"][\"guildId\"]}}",
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [650, 350]
+        },
+        {
+          "id": "check-requirements",
+          "name": "Check Alliance Requirements",
+          "type": "function",
+          "parameters": {
+            "functionCode": "const allianceData = $input.item.json;\nconst application = $input.item.json.application;\n\n// Check guild against alliance requirements\nconst requirementsMet = {\n  guildLevel: allianceData.requirements.minGuildLevel <= application.guildLevel,\n  memberCount: application.memberCount >= allianceData.requirements.minMemberCount,\n  maxGuilds: allianceData.memberGuilds.length < allianceData.requirements.maxGuilds\n};\n\nconst allRequirementsMet = Object.values(requirementsMet).every(met => met);\n\nreturn [{\n  json: {\n    application,\n    alliance: allianceData,\n    requirementsMet,\n    allRequirementsMet\n  }\n}];"
+          },
+          "position": [850, 250]
+        },
+        {
+          "id": "check-voting-required",
+          "name": "Check if Voting Required",
+          "type": "if",
+          "parameters": {
+            "conditions": {
+              "options": {
+                "caseSensitive": true,
+                "leftValue": "",
+                "typeValidation": "strict"
+              },
+              "conditions": [
+                {
+                  "id": "voting-required",
+                  "leftValue": "={{$json.alliance.requirements.votingRequired}}",
+                  "rightValue": true,
+                  "operator": {
+                    "type": "boolean",
+                    "operation": "equal"
+                  }
+                }
+              ],
+              "combinator": "and"
+            }
+          },
+          "position": [1050, 250]
+        },
+        {
+          "id": "initiate-voting",
+          "name": "Initiate Alliance Voting",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:3000/api/alliances/voting/create",
+            "body": {
+              "allianceId": "={{$json.alliance.id}}",
+n              "type": "guild_application",
+              "subject": "Guild Application: {{$json.application.guildName}}",
+              "applicationId": "={{$json.application.id}}",
+              "voteThreshold": "={{$json.alliance.requirements.voteThreshold}}",
+              "duration": "72h",
+              "initiatedBy": "system"
+            },
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [1250, 150]
+        },
+        {
+          "id": "notify-alliance-members",
+          "name": "Notify Alliance Members",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:3000/api/notifications/alliance-members",
+            "body": {
+              "allianceId": "={{$json.alliance.id}}",
+              "type": "alliance_vote_started",
+              "title": "Alliance Vote: New Guild Application",
+              "message": "{{$json.application.guildName}} has applied to join the alliance. Cast your vote now!",
+              "applicationId": "={{$json.application.id}}"
+            },
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [1450, 150]
+        },
+        {
+          "id": "auto-accept-check",
+          "name": "Check Auto-Accept Conditions",
+          "type": "if",
+          "parameters": {
+            "conditions": {
+              "options": {
+                "caseSensitive": true,
+                "leftValue": "",
+                "typeValidation": "strict"
+              },
+              "conditions": [
+                {
+                  "id": "requirements-met",
+                  "leftValue": "={{$json.allRequirementsMet}}",
+                  "rightValue": true,
+                  "operator": {
+                    "type": "boolean",
+                    "operation": "equal"
+                  }
+                },
+                {
+                  "id": "auto-accept-enabled",
+                  "leftValue": "={{$json.alliance.settings.autoAcceptRequests}}",
+                  "rightValue": true,
+                  "operator": {
+                    "type": "boolean",
+                    "operation": "equal"
+                  },
+                  "combineOperation": "and"
+                }
+              ],
+              "combinator": "and"
+            }
+          },
+          "position": [1250, 350]
+        },
+        {
+          "id": "accept-application",
+          "name": "Accept Application",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:3000/api/alliances/accept-application",
+            "body": {
+              "allianceId": "={{$json.alliance.id}}",
+              "applicationId": "={{$json.application.id}}",
+              "acceptedBy": "system_auto"
+            },
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [1450, 350]
+        },
+        {
+          "id": "create-application-record",
+          "name": "Create Application Record",
+          "type": "mongodb",
+          "parameters": {
+            "operation": "insert",
+            "database": "dmln8n",
+            "collection": "alliance_applications",
+            "fields": {
+              "allianceId": "={{$json.alliance.id}}",
+              "guildId": "={{$json.application.guildId}}",
+              "guildName": "={{$json.application.guildName}}",
+              "applicantId": "={{$json.application.applicantId}}",
+              "applicationData": "={{$json.application}}",
+              "allianceData": "={{$json.alliance}}",
+              "status": "pending",
+              "submittedAt": "{{new Date().toISOString()}}"
+            }
+          },
+          "position": [1250, 550]
+        },
+        {
+          "id": "notify-guild-leadership",
+          "name": "Notify Guild Leadership",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:3000/api/notifications/guild-leadership",
+            "body": {
+              "guildId": "={{$json.application.guildId}}",
+              "type": "alliance_application_submitted",
+              "allianceName": "={{$json.alliance.name}}",
+              "applicationId": "={{$json.application.id}}",
+              "status": "pending_review"
+            },
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [1450, 550]
+        }
+      ],
+      "connections": {
+        "Alliance Application Webhook": {
+          "main": [
+            [
+              {
+                "node": "Validate Alliance Application",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Validate Alliance Application": {
+          "main": [
+            [
+              {
+                "node": "Get Alliance Details",
+                "type": "main",
+                "index": 0
+              },
+              {
+                "node": "Get Guild Details",
+                "type": "main",
+                "index": 1
+              }
+            ]
+          ]
+        },
+        "Get Alliance Details": {
+          "main": [
+            [
+              {
+                "node": "Check Alliance Requirements",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Get Guild Details": {
+          "main": [
+            [
+              {
+                "node": "Check Alliance Requirements",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Check Alliance Requirements": {
+          "main": [
+            [
+              {
+                "node": "Check if Voting Required",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Check if Voting Required": {
+          "main": [
+            [
+              {
+                "node": "Initiate Alliance Voting",
+                "type": "main",
+                "index": 0
+              }
+            ],
+            [
+              {
+                "node": "Auto-Accept Check",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Initiate Alliance Voting": {
+          "main": [
+            [
+              {
+                "node": "Notify Alliance Members",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Auto-Accept Check": {
+          "main": [
+            [
+              {
+                "node": "Accept Application",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Accept Application": {
+          "main": [
+            [
+              {
+                "node": "Create Application Record",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Create Application Record": {
+          "main": [
+            [
+              {
+                "node": "Notify Guild Leadership",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "alliance-war-coordination",
+      "name": "Alliance War Coordination",
+      "description": "Coordinate alliance-wide war efforts and resource allocation",
+      "nodes": [
+        {
+          "id": "war-declaration-trigger",
+          "name": "War Declaration Trigger",
+          "type": "webhook",
+          "parameters": {
+            "httpMethod": "POST",
+            "path": "alliance-war-declaration",
+            "responseMode": "responseNode"
+          },
+          "position": [250, 150]
+        },
+        {
+          "id": "validate-war-declaration",
+          "name": "Validate War Declaration",
+          "type": "function",
+          "parameters": {
+            "functionCode": "const warData = $input.item.json;\nconst validation = {\n  valid: true,\n  errors: []\n};\n\nif (!warData.allianceId || !warData.targetAllianceId) {\n  validation.valid = false;\n  validation.errors.push('Missing alliance IDs');\n}\n\nif (!warData.declaredBy || !warData.warType) {\n  validation.valid = false;\n  validation.errors.push('Missing declaration details');\n}\n\nreturn [{\n  json: {\n    warData,\n    validation\n  }\n}];"
+          },
+          "position": [450, 150]
+        },
+        {
+          "id": "check-alliance-capacity",
+          "name": "Check Alliance Capacity for War",
+          "type": "function",
+          "parameters": {
+            "functionCode": "const { warData } = $input.item.json;\n\n// Check if both alliances can support a war\nconst canSupportWar = {\n  attackerActive: Math.random() > 0.2, // 80% chance active\n  defenderActive: Math.random() > 0.2, // 80% chance active\n  sufficientMembers: Math.random() > 0.1, // 90% chance sufficient\n  noExistingWar: Math.random() > 0.3 // 70% chance no existing war\n};\n\nconst warPossible = Object.values(canSupportWar).every(can => can);\n\nreturn [{\n  json: {\n    warData,\n    canSupportWar,\n    warPossible\n  }\n}];"
+          },
+          "position": [650, 150]
+        },
+        {
+          "id": "create-war-instance",
+          "name": "Create War Instance",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:3000/api/alliance-wars/create",
+            "body": {
+              "alliance1Id": "={{$json.warData.allianceId}}",
+              "alliance2Id": "={{$json.warData.targetAllianceId}}",
+              "declaredBy": "={{$json.warData.declaredBy}}",
+              "warType": "={{$json.warData.warType}}",
+              "objectives": "={{$json.warData.objectives}}",
+              "rules": "={{$json.warData.rules}}",
+              "duration": "={{$json.warData.duration || 604800000}}", // 7 days default
+              "stakes": "={{$json.warData.stakes}}"
+            },
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [850, 150]
+        },
+        {
+          "id": "organize-alliance-forces",
+          "name": "Organize Alliance Forces",
+          "type": "function",
+          "parameters": {
+            "functionCode": "const war = $input.item.json;\n\n// Organize guilds within the alliance for war effort\nconst forceOrganization = {\n  warId: war.id,\n  attackingGuilds: [],\n  defendingGuilds: [],\n  resourcePools: {\n    gold: 0,\n    materials: {},\n    specializedUnits: {}\n  },\n  strategy: {\n    primaryTarget: 'territory_control',\n    secondaryObjectives: ['resource_denial', 'morale_boost'],\n    tactics: ['coordinated_assault', 'hit_and_run', 'defensive_positions']\n  }\n};\n\nreturn [{\n  json: {\n    war,\n    forceOrganization\n  }\n}];"
+          },
+          "position": [1050, 150]
+        },
+        {
+          "id": "create-war-rooms",
+          "name": "Create War Coordination Rooms",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:3000/api/voice-channels/create",
+            "body": {
+              "name": "War Room: {{$json.forceOrganization.warId}}",
+              "type": "temporary",
+              "maxUsers": 50,
+              "permissions": "alliance_officers",
+              "guildId": "{{$json.war.alliance1Id}}"
+            },
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [1250, 150]
+        },
+        {
+          "id": "setup-war-chat",
+          "name": "Setup War Communication Channels",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:3000/api/chat/channels/create",
+            "body": {
+              "allianceId": "={{$json.war.alliance1Id}}",
+              "name": "war-command",
+              "type": "restricted",
+              "description": "War coordination and strategy discussions",
+              "permissions": ["Leader", "Officer"]\n            },
+            "headers": {\              "Content-Type": "application/json"
+            }
+          },
+          "position": [1450, 150]
+        },
+        {
+          "id": "allocate-resources",
+          "name": "Allocate War Resources",
+          "type": "function",
+          "parameters": {
+            "functionCode": "const { war, forceOrganization } = $input.item.json;\n\n// Calculate resource allocation for war effort\nconst resourceAllocation = {\n  warId: war.id,\n  allianceId: war.alliance1Id,\n  allocation: {\n    offensiveBudget: 0.6, // 60% for offensive operations\n    defensiveBudget: 0.3, // 30% for defensive operations\n    reserveBudget: 0.1, // 10% for reserves\n  },\n  guildContributions: [],\n  logistics: {\n    supplyLines: [],\n    reinforcementRoutes: [],\n    evacuationPlans: []\n  }\n};\n\nreturn [{\n  json: {\n    war,\n    forceOrganization,\n    resourceAllocation\n  }\n}];"
+          },
+          "position": [1250, 350]
+        },
+        {
+          "id": "notify-alliance-members",
+          "name": "Notify Alliance Members",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:3000/api/notifications/alliance-members",
+            "body": {
+              "allianceId": "={{$json.war.alliance1Id}}",
+              "type": "alliance_war_declared",
+              "title": "War Declaration!",
+              "message": "Our alliance has declared war on another alliance. Prepare for battle!",
+              "warId": "={{$json.war.id}}",
+              "warType": "={{$json.war.warType}}",
+              "duration": "={{$json.war.duration}}"
+            },
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [1450, 350]
+        },
+        {
+          "id": "notify-target-alliance",
+          "name": "Notify Target Alliance",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:3000/api/notifications/alliance-members",
+            "body": {
+              "allianceId": "={{$json.war.alliance2Id}}",
+              "type": "alliance_war_received",
+              "title": "War Declared Against Us!",
+              "message": "Another alliance has declared war on our alliance. Prepare defenses!",
+              "warId": "={{$json.war.id}}",
+              "attackerAlliance": "={{$json.war.alliance1Id}}"
+            },
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [1450, 550]
+        },
+        {
+          "id": "create-war-timeline",
+          "name": "Create War Timeline & Objectives",
+          "type": "function",
+          "parameters": {
+            "functionCode": "const { war } = $input.item.json;\n\n// Create war timeline with key objectives and milestones\nconst warTimeline = {\n  warId: war.id,\n  startDate: new Date(),\n  endDate: new Date(Date.now() + war.duration),\n  phases: [\n    {\n      phase: 'preparation',\n      start: new Date(),\n      end: new Date(Date.now() + 24 * 60 * 60 * 1000), // 1 day\n      objectives: ['gather_forces', 'establish_bases', 'reconnaissance']\n    },\n    {\n      phase: 'engagement',\n      start: new Date(Date.now() + 24 * 60 * 60 * 1000),\n      end: new Date(Date.now() + 6 * 24 * 60 * 60 * 1000), // 5 days\n      objectives: ['territory_control', 'resource_battles', 'strategic_victories']\n    },\n    {\n      phase: 'resolution',\n      start: new Date(Date.now() + 6 * 24 * 60 * 60 * 1000),\n      end: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 1 day\n      objectives: ['final_battles', 'settlement_negotiations', 'victory_conditions']\n    }\n  ]\n};\n\nreturn [{\n  json: {\n    war,\n    warTimeline\n  }\n}];"
+          },
+          "position": [1250, 550]
+        },
+        {
+          "id": "log-war-declaration",
+          "name": "Log War Declaration",
+          "type": "mongodb",
+          "parameters": {
+            "operation": "insert",
+            "database": "dmln8n",
+            "collection": "alliance_war_log",
+            "fields": {
+              "warId": "={{$json.war.id}}",
+              "alliance1Id": "={{$json.war.alliance1Id}}",
+              "alliance2Id": "={{$json.war.alliance2Id}}",
+              "declaredBy": "={{$json.war.declaredBy}}",
+              "warType": "={{$json.war.warType}}",
+              "duration": "={{$json.war.duration}}",
+              "stakes": "={{$json.war.stakes}}",
+              "declaredAt": "{{new Date().toISOString()}}"
+            }
+          },
+          "position": [1650, 350]
+        }
+      ],
+      "connections": {
+        "War Declaration Trigger": {
+          "main": [
+            [
+              {
+                "node": "Validate War Declaration",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Validate War Declaration": {
+          "main": [
+            [
+              {
+                "node": "Check Alliance Capacity for War",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Check Alliance Capacity for War": {
+          "main": [
+            [
+              {
+                "node": "Create War Instance",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Create War Instance": {
+          "main": [
+            [
+              {
+                "node": "Organize Alliance Forces",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Organize Alliance Forces": {
+          "main": [
+            [
+              {
+                "node": "Create War Coordination Rooms",
+                "type": "main",
+                "index": 0
+              },
+              {
+                "node": "Allocate War Resources",
+                "type": "main",
+                "index": 1
+              },
+              {
+                "node": "Create War Timeline & Objectives",
+                "type": "main",
+                "index": 2
+              }
+            ]
+          ]
+        },
+        "Create War Coordination Rooms": {
+          "main": [
+            [
+              {
+                "node": "Setup War Communication Channels",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Setup War Communication Channels": {
+          "main": [
+            [
+              {
+                "node": "Notify Alliance Members",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Allocate War Resources": {
+          "main": [
+            [
+              {
+                "node": "Notify Alliance Members",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Notify Alliance Members": {
+          "main": [
+            [
+              {
+                "node": "Notify Target Alliance",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Notify Target Alliance": {
+          "main": [
+            [
+              {
+                "node": "Log War Declaration",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Create War Timeline & Objectives": {
+          "main": [
+            [
+              {
+                "node": "Log War Declaration",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "alliance-resource-sharing",
+      "name": "Alliance Resource Sharing",
+      "description": "Automated resource sharing and trade coordination between alliance members",
+      "nodes": [
+        {
+          "id": "resource-request-webhook",
+          "name": "Resource Request Webhook",
+          "type": "webhook",
+          "parameters": {
+            "httpMethod": "POST",
+            "path": "alliance-resource-request",
+            "responseMode": "responseNode"
+          },
+          "position": [250, 150]
+        },
+        {
+          "id": "validate-resource-request",
+          "name": "Validate Resource Request",
+          "type": "function",
+          "parameters": {
+            "functionCode": "const request = $input.item.json;\nconst validation = {\n  valid: true,\n  errors: []\n};\n\nif (!request.allianceId || !request.requestingGuildId) {\n  validation.valid = false;\n  validation.errors.push('Missing alliance or guild ID');\n}\n\nif (!request.resourceType || request.quantity <= 0) {\n  validation.valid = false;\n  validation.errors.push('Invalid resource request');\n}\n\nreturn [{\n  json: {\n    request,\n    validation\n  }\n}];"
+          },
+          "position": [450, 150]
+        },
+        {
+          "id": "check-alliance-permissions",
+          "name": "Check Alliance Resource Permissions",
+          "type": "function",
+          "parameters": {
+            "functionCode": "const { request } = $input.item.json;\n\n// Check if alliance allows resource sharing\nconst allianceSettings = {\n  sharedResources: true,\n  requireApproval: true,\n  tradingEnabled: true,\n  resourceLimits: {\n    gold: 10000,\n    materials: 1000,\n    items: 50\n  }\n};\n\nconst canShare = \n  allianceSettings.sharedResources &&\n  allianceSettings.tradingEnabled &&\n  (!allianceSettings.resourceLimits[request.resourceType] || \n   request.quantity <= allianceSettings.resourceLimits[request.resourceType]);\n\nreturn [{\n  json: {\n    request,\n    allianceSettings,\n    canShare\n  }\n}];"
+          },
+          "position": [650, 150]
+        },
+        {
+          "id": "find-donor-guilds",
+          "name": "Find Potential Donor Guilds",
+          "type": "function",
+          "parameters": {
+            "functionCode": "const { request, canShare } = $input.item.json;\n\nif (!canShare) {\n  return [{ json: { request, donorGuilds: [], canShare: false } }];\n}\n\n// Find guilds in alliance that can provide the resource\nconst donorGuilds = [\n  {\n    guildId: 'guild_001',\n    guildName: 'Dragon Slayers',\n    resourceAmount: 5000,\n    canProvide: true,\n    conditions: 'Reciprocal trade preferred'\n  },\n  {\n    guildId: 'guild_002',\n    guildName: 'Phoenix Rising',\n    resourceAmount: 3000,\n    canProvide: true,\n    conditions: 'Alliance contribution required'\n  },\n  {\n    guildId: 'guild_003',\n    guildName: 'Shadow Walkers',\n    resourceAmount: 2000,\n    canProvide: true,\n    conditions: 'None'\n  }\n].filter(guild => guild.resourceAmount >= request.quantity && guild.canProvide);\n\nreturn [{\n  json: {\n    request,\n    donorGuilds,\n    canShare\n  }\n}];"
+          },
+          "position": [850, 150]
+        },
+        {
+          "id": "check-approval-required",
+          "name": "Check if Approval Required",
+          "type": "if",
+          "parameters": {
+            "conditions": {
+              "options": {
+                "caseSensitive": true,
+                "leftValue": "",
+                "typeValidation": "strict"
+              },
+              "conditions": [
+                {
+                  "id": "approval-required",
+                  "leftValue": "={{$json.canShare}}",
+                  "rightValue": true,
+                  "operator": {
+                    "type": "boolean",
+                    "operation": "equal"
+                  }
+                }
+              ],
+              "combinator": "and"
+            }
+          },
+          "position": [1050, 150]
+        },
+        {
+          "id": "create-trade-proposal",
+          "name": "Create Trade Proposal",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:3000/api/alliance/trade/create",
+            "body": {
+              "allianceId": "={{$json.request.allianceId}}",
+              "requestingGuildId": "={{$json.request.requestingGuildId}}",
+              "resourceType": "={{$json.request.resourceType}}",
+              "quantity": "={{$json.request.quantity}}",
+              "donorGuilds": "={{$json.donorGuilds}}",
+              "status": "pending_approval",
+              "priority": "={{$json.request.priority || 'normal'}}",
+              "expiresAt": "{{new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString()}}"
+            },
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [1250, 50]
+        },
+        {
+          "id": "notify-alliance-officers",
+          "name": "Notify Alliance Officers",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:3000/api/notifications/alliance-officers",
+            "body": {
+              "allianceId": "={{$json.request.allianceId}}",
+              "type": "resource_trade_request",
+              "title": "Resource Trade Request",
+              "message": "{{$json.request.requestingGuildName}} requests {{$json.request.quantity}} {{$json.request.resourceType}} from alliance resources.",
+              "requestId": "={{$json.request.id}}",
+              "donorOptions": "={{$json.donorGuilds.length}}"
+            },
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [1450, 50]
+        },
+        {
+          "id": "auto-match-best-donor",
+          "name": "Auto-Match Best Donor",
+          "type": "function",
+          "parameters": {
+            "functionCode": "const { request, donorGuilds } = $input.item.json;\n\nif (donorGuilds.length === 0) {\n  return [{ json: { request, match: null, noDonors: true } }];\n}\n\n// Find best donor based on conditions and amount\nconst bestDonor = donorGuilds.reduce((best, current) => {\n  const currentScore = current.resourceAmount * (current.conditions === 'None' ? 1.2 : 1.0);\n  const bestScore = best.resourceAmount * (best.conditions === 'None' ? 1.2 : 1.0);\n  return currentScore > bestScore ? current : best;\n});\n\nreturn [{\n  json: {\n    request,\n    bestDonor,\n    autoMatched: true\n  }\n}];"
+          },
+          "position": [1250, 250]
+        },
+        {
+          "id": "execute-resource-transfer",
+          "name": "Execute Resource Transfer",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:3000/api/alliance/resource-transfer",
+            "body": {
+              "allianceId": "={{$json.request.allianceId}}",
+              "fromGuildId": "={{$json.bestDonor.guildId}}",
+              "toGuildId": "={{$json.request.requestingGuildId}}",
+              "resourceType": "={{$json.request.resourceType}}",
+              "quantity": "={{$json.request.quantity}}",
+              "transferType": "alliance_sharing",
+              "initiatedBy": "system_auto"
+            },
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [1450, 250]
+        },
+        {
+          "id": "notify-participants",
+          "name": "Notify Trade Participants",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:3000/api/notifications/guilds",
+            "body": {
+              "guildIds": ["={{$json.request.requestingGuildId}}", "={{$json.bestDonor.guildId}}"],
+              "type": "resource_transfer_completed",
+              "message": "Resource transfer completed: {{$json.request.quantity}} {{$json.request.resourceType}} transferred from {{$json.bestDonor.guildName}} to {{$json.request.requestingGuildName}}.",
+              "allianceId": "={{$json.request.allianceId}}"
+            },
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [1650, 250]
+        },
+        {
+          "id": "handle-no-donors",
+          "name": "Handle No Available Donors",
+          "name": "Handle No Available Donors",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:3000/api/notifications/guild-leadership",
+            "body": {
+              "guildId": "={{$json.request.requestingGuildId}}",
+              "type": "resource_request_failed",
+              "message": "No alliance members available to fulfill your request for {{$json.request.quantity}} {{$json.request.resourceType}}.",
+              "suggestions": ["Check external markets", "Wait for resource regeneration", "Consider alternative resources"]
+            },
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [1250, 450]
+        },
+        {
+          "id": "log-resource-request",
+          "name": "Log Resource Request",
+          "type": "mongodb",
+          "parameters": {
+            "operation": "insert",
+            "database": "dmln8n",
+            "collection": "alliance_resource_requests",
+            "fields": {
+              "allianceId": "={{$json.request.allianceId}}",
+              "requestingGuildId": "={{$json.request.requestingGuildId}}",
+              "resourceType": "={{$json.request.resourceType}}",
+              "quantity": "={{$json.request.quantity}}",
+              "status": "={{$json.bestDonor ? 'fulfilled' : 'failed'}}",
+              "donorGuildId": "={{$json.bestDonor ? $json.bestDonor.guildId : null}}",
+              "processedAt": "{{new Date().toISOString()}}"
+            }
+          },
+          "position": [1650, 50]
+        }
+      ],
+      "connections": {
+        "Resource Request Webhook": {
+          "main": [
+            [
+              {
+                "node": "Validate Resource Request",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Validate Resource Request": {
+          "main": [
+            [
+              {
+                "node": "Check Alliance Resource Permissions",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Check Alliance Resource Permissions": {
+          "main": [
+            [
+              {
+                "node": "Find Potential Donor Guilds",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Find Potential Donor Guilds": {
+          "main": [
+            [
+              {
+                "node": "Check if Approval Required",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Check if Approval Required": {
+          "main": [
+            [
+              {
+                "node": "Create Trade Proposal",
+                "type": "main",
+                "index": 0
+              }
+            ],
+            [
+              {
+                "node": "Auto-Match Best Donor",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Create Trade Proposal": {
+          "main": [
+            [
+              {
+                "node": "Notify Alliance Officers",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Notify Alliance Officers": {
+          "main": [
+            [
+              {
+                "node": "Log Resource Request",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Auto-Match Best Donor": {
+          "main": [
+            [
+              {
+                "node": "Execute Resource Transfer",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Execute Resource Transfer": {
+          "main": [
+            [
+              {
+                "node": "Notify Trade Participants",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Notify Trade Participants": {
+          "main": [
+            [
+              {
+                "node": "Log Resource Request",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Auto-Match Best Donor": {
+          "main": [
+            [
+              {
+                "node": "Handle No Available Donors",
+                "type": "main",
+                "index": 1
+              }
+            ]
+          ]
+        },
+        "Handle No Available Donors": {
+          "main": [
+            [
+              {
+                "node": "Log Resource Request",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      }
+    }
+  ],
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicyDefaultOption": "workflowsFromSameOwner"
+  }
+}

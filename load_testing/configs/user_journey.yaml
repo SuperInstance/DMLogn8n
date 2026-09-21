@@ -1,0 +1,244 @@
+# User Journey Load Testing Configuration
+# Comprehensive load testing for user behavior patterns
+
+tests:
+  - name: "New User Onboarding Journey"
+    scenario: "user_journey"
+    target_url: "http://localhost:8000"
+    duration: 600  # 10 minutes
+    users: 200
+    spawn_rate: 5  # users per second
+    ramp_up: 45  # seconds
+    ramp_down: 30  # seconds
+    think_time: 3.0  # seconds between actions
+    timeout: 30  # seconds
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "DMLogn8n-UserJourney-Tester/1.0"
+    auth:
+      type: "session"
+      session_cookie: "${SESSION_COOKIE}"
+    test_data:
+      user_personas: ["new_player", "casual_gamer"]
+      journey_stages: ["registration", "character_creation", "tutorial", "first_session"]
+      device_types: ["mobile", "desktop"]
+      network_speeds: ["average", "fast"]
+    monitoring:
+      metrics_interval: 10  # seconds
+      user_journey_tracking: true
+      conversion_tracking: true
+    reporting:
+      generate_html: true
+      generate_json: true
+      generate_dashboard: true
+      include_user_journey_analysis: true
+
+  - name: "Regular Player Journey"
+    scenario: "user_journey"
+    target_url: "http://localhost:8000"
+    duration: 900  # 15 minutes
+    users: 500
+    spawn_rate: 15  # users per second
+    ramp_up: 60  # seconds
+    ramp_down: 45  # seconds
+    think_time: 2.0  # seconds between actions
+    timeout: 30  # seconds
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "DMLogn8n-UserJourney-Tester/1.0"
+    auth:
+      type: "session"
+      session_cookie: "${SESSION_COOKIE}"
+    test_data:
+      user_personas: ["regular_player", "social_player", "explorer"]
+      journey_stages: ["login", "dashboard", "session_join", "gameplay", "social_interaction"]
+      device_types: ["mobile", "tablet", "desktop"]
+      network_speeds: ["average", "fast"]
+      session_durations: [30, 45, 60]  # minutes
+    monitoring:
+      metrics_interval: 10  # seconds
+      user_journey_tracking: true
+      session_analytics: true
+      engagement_tracking: true
+    reporting:
+      generate_html: true
+      generate_json: true
+      generate_dashboard: true
+      include_user_journey_analysis: true
+      include_engagement_metrics: true
+
+  - name: "Power User Journey"
+    scenario: "user_journey"
+    target_url: "http://localhost:8000"
+    duration: 1200  # 20 minutes
+    users: 300
+    spawn_rate: 10  # users per second
+    ramp_up: 90  # seconds
+    ramp_down: 60  # seconds
+    think_time: 1.5  # seconds between actions
+    timeout: 30  # seconds
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "DMLogn8n-UserJourney-Tester/1.0"
+    auth:
+      type: "session"
+      session_cookie: "${SESSION_COOKIE}"
+    test_data:
+      user_personas: ["power_player", "dungeon_master", "story_seeker"]
+      journey_stages: ["login", "advanced_dashboard", "campaign_management", "complex_interactions", "content_creation"]
+      device_types: ["desktop"]
+      network_speeds: ["fast"]
+      session_durations: [90, 120]  # minutes
+      interaction_intensity: "high"
+    monitoring:
+      metrics_interval: 5  # seconds
+      user_journey_tracking: true
+      session_analytics: true
+      engagement_tracking: true
+      advanced_metrics: true
+    reporting:
+      generate_html: true
+      generate_json: true
+      generate_dashboard: true
+      include_user_journey_analysis: true
+      include_engagement_metrics: true
+      include_performance_profiling: true
+
+  - name: "Mobile User Journey"
+    scenario: "user_journey"
+    target_url: "http://localhost:8000"
+    duration: 900  # 15 minutes
+    users: 400
+    spawn_rate: 20  # users per second
+    ramp_up: 30  # seconds
+    ramp_down: 30  # seconds
+    think_time: 2.5  # seconds between actions
+    timeout: 45  # seconds
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "DMLogn8n-Mobile-Tester/1.0"
+    auth:
+      type: "session"
+      session_cookie: "${SESSION_COOKIE}"
+    test_data:
+      user_personas: ["casual_gamer", "social_player", "story_seeker"]
+      journey_stages: ["mobile_login", "touch_navigation", "simplified_gameplay", "social_features"]
+      device_types: ["mobile", "tablet"]
+      network_speeds: ["slow", "average"]
+      session_durations: [15, 30, 45]  # minutes
+      interaction_patterns: ["touch_optimized", "gesture_based"]
+    monitoring:
+      metrics_interval: 10  # seconds
+      mobile_metrics: true
+      touch_analytics: true
+      network_condition_simulation: true
+    reporting:
+      generate_html: true
+      generate_json: true
+      generate_dashboard: true
+      include_mobile_optimization_analysis: true
+
+  - name: "Peak Load User Journey"
+    scenario: "user_journey"
+    target_url: "http://localhost:8000"
+    duration: 1800  # 30 minutes
+    users: 1000
+    spawn_rate: 50  # users per second
+    ramp_up: 120  # seconds
+    ramp_down: 180  # seconds
+    think_time: 1.8  # seconds between actions
+    timeout: 60  # seconds
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "DMLogn8n-PeakLoad-Tester/1.0"
+    auth:
+      type: "session"
+      session_cookie: "${SESSION_COOKIE}"
+    test_data:
+      user_personas: ["regular_player", "social_player", "power_player", "casual_gamer"]
+      journey_stages: ["login", "concurrent_sessions", "peak_gameplay", "social_interaction", "content_consumption"]
+      device_types: ["mobile", "tablet", "desktop"]
+      network_speeds: ["slow", "average", "fast"]
+      peak_behavior: true
+      concurrent_sessions: true
+    monitoring:
+      metrics_interval: 5  # seconds
+      user_journey_tracking: true
+      session_analytics: true
+      engagement_tracking: true
+      concurrency_tracking: true
+      peak_load_analysis: true
+    reporting:
+      generate_html: true
+      generate_json: true
+      generate_dashboard: true
+      include_peak_performance_analysis: true
+      include_scalability_metrics: true
+      baseline_comparison: true
+
+# Global settings
+global:
+  # Load testing parameters
+  max_concurrent_tests: 2
+  test_cleanup: true
+  resource_monitoring: true
+
+  # User journey specific settings
+  journey_recording: true
+  session_tracking: true
+  conversion_goals:
+    - "user_registration"
+    - "character_creation"
+    - "first_session_completion"
+    - "return_visit"
+    - "premium_conversion"
+
+  # Database settings
+  metrics_storage: "sqlite"
+  metrics_retention_days: 30
+
+  # Reporting settings
+  reports_output_dir: "./reports"
+  auto_open_reports: false
+
+  # Alerting settings
+  alert_thresholds:
+    journey_completion_rate: 80.0  # %
+    avg_session_duration: 300  # seconds
+    conversion_rate: 15.0  # %
+    bounce_rate: 40.0  # %
+    mobile_response_time: 1500  # ms
+
+  # Performance baselines
+  baseline_comparison:
+    enabled: true
+    baseline_file: "./baselines/user_journey_baseline.json"
+    deviation_threshold: 20.0  # %
+
+# Environment-specific overrides
+environments:
+  development:
+    target_url: "http://localhost:8000"
+    users_multiplier: 0.3
+    monitoring:
+      detailed_logging: true
+      journey_recording: true
+
+  staging:
+    target_url: "https://staging.dmlogn8n.com"
+    users_multiplier: 0.7
+    monitoring:
+      detailed_logging: true
+      session_tracking: true
+
+  production:
+    target_url: "https://app.dmlogn8n.com"
+    users_multiplier: 1.0
+    monitoring:
+      detailed_logging: false
+      session_tracking: true
+      privacy_mode: true
+    auth:
+      type: "oauth2"
+      client_id: "${OAUTH_CLIENT_ID}"
+      client_secret: "${OAUTH_CLIENT_SECRET}"

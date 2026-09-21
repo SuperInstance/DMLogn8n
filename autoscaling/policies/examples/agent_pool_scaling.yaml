@@ -1,0 +1,289 @@
+# AI Agent Pool Scaling Policy
+# Comprehensive scaling configuration for AI model inference services
+
+apiVersion: autoscaling.dmlogn8n/v1
+kind: ScalingPolicy
+metadata:
+  name: ai-agent-pool-scaling
+  namespace: dmlogn8n
+  labels:
+    team: ai
+    component: model-inference
+    environment: production
+  annotations:
+    description: "Auto-scaling policy for AI agent pool with GPU optimization"
+    version: "1.2.0"
+    lastModified: "2025-10-23T00:00:00Z"
+
+spec:
+  # Service identification
+  serviceId: "ai-model-pool"
+  serviceType: "ai_model_pool"
+
+  # Instance limits
+  minInstances: 2
+  maxInstances: 12
+  desiredInstances: 3
+
+  # Target performance metrics
+  targetMetrics:
+    cpuUtilization: 70      # Target CPU utilization percentage
+    gpuUtilization: 80      # Target GPU utilization percentage
+    memoryUtilization: 75   # Target memory utilization percentage
+    inferenceQueueLength: 10 # Target queue length
+    responseTime: 500       # Target response time in milliseconds
+
+  # Scaling thresholds
+  scaleUpThresholds:
+    cpuUtilization: 80      # Scale up when CPU > 80%
+    gpuUtilization: 85      # Scale up when GPU > 85%
+    memoryUtilization: 85   # Scale up when memory > 85%
+    inferenceQueueLength: 25 # Scale up when queue > 25
+    responseTime: 1000      # Scale up when response time > 1000ms
+    duration: 120           # Sustained for 2 minutes
+
+  scaleDownThresholds:
+    cpuUtilization: 40      # Scale down when CPU < 40%
+    gpuUtilization: 30      # Scale down when GPU < 30%
+    memoryUtilization: 45   # Scale down when memory < 45%
+    inferenceQueueLength: 5  # Scale down when queue < 5
+    responseTime: 200       # Scale down when response time < 200ms
+    duration: 300           # Sustained for 5 minutes
+
+  # Scaling behavior
+  scaling:
+    cooldownPeriod: 600     # 10 minutes between scaling operations
+    scaleUpStepSize: 2      # Add 2 instances when scaling up
+    scaleDownStepSize: 1    # Remove 1 instance when scaling down
+    stabilizationWindow: 300 # 5 minutes stabilization window
+
+  # Predictive scaling
+  predictiveScaling:
+    enabled: true
+    modelType: "random_forest"
+    predictionWindow: 600   # 10 minutes prediction window
+    confidenceThreshold: 0.75 # Only scale if confidence > 75%
+    trainingDataWindow: 7   # Use 7 days of historical data
+
+  # Cost optimization
+  costOptimization:
+    enabled: true
+    strategy: "balanced"     # balanced, aggressive, or performance_priority
+    hourlyBudget: 500       # $500 per hour budget
+    costSavingsThreshold: 5 # Only scale down if savings > $5/hour
+    idleTimeout: 1800       # Terminate idle instances after 30 minutes
+
+  # Resource specifications
+  resources:
+    instanceTypes:
+      - type: "p3.2xlarge"  # AWS GPU instance
+        cpu: "8"
+        memory: "61Gi"
+        gpu: "1"
+        cost_per_hour: 3.06
+        priority: 1
+      - type: "p3.8xlarge"  # Larger GPU instance
+        cpu: "32"
+        memory: "244Gi"
+        gpu: "4"
+        cost_per_hour: 12.24
+        priority: 2
+      - type: "g4dn.xlarge"  # Cost-effective GPU
+        cpu: "4"
+        memory: "16Gi"
+        gpu: "1"
+        cost_per_hour: 0.526
+        priority: 3
+
+    resourceAllocation:
+      cpuRequest: "2000m"    # 2 CPU cores requested
+      cpuLimit: "4000m"      # 4 CPU cores limit
+      memoryRequest: "8Gi"   # 8GB memory requested
+      memoryLimit: "16Gi"    # 16GB memory limit
+      gpuRequest: "1"        # 1 GPU requested
+      nvidia.com/gpu: "1"    # NVIDIA GPU resource
+
+  # Health checks
+  healthChecks:
+    readinessProbe:
+      httpGet:
+        path: "/health/ready"
+        port: 8085
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+
+    livenessProbe:
+      httpGet:
+        path: "/health/live"
+        port: 8085
+      initialDelaySeconds: 60
+      periodSeconds: 30
+      timeoutSeconds: 10
+      failureThreshold: 3
+
+    startupProbe:
+      httpGet:
+        path: "/health/startup"
+        port: 8085
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 30
+
+  # Custom metrics
+  customMetrics:
+    - name: "inference_queue_length"
+      description: "Number of pending inference requests"
+      query: "avg(inference_queue_length)"
+
+    - name: "model_loading_time"
+      description: "Time taken to load models"
+      query: "histogram_quantile(0.95, model_loading_time_seconds)"
+
+    - name: "gpu_memory_usage"
+      description: "GPU memory utilization percentage"
+      query: "avg(100 * (gpu_memory_used_bytes / gpu_memory_total_bytes))"
+
+    - name: "batch_size"
+      description: "Average batch processing size"
+      query: "avg(inference_batch_size)"
+
+    - name: "model_accuracy"
+      description: "Model inference accuracy"
+      query: "avg(model_accuracy_score)"
+
+  # Event-based scaling rules
+  eventScaling:
+    - name: "high-demand-event"
+      eventType: "user_surge"
+      condition: "active_users > 5000"
+      action: "scale_to_max"
+      cooldown: 1800
+
+    - name: "model-update-event"
+      eventType: "model_deployment"
+      condition: "new_model_available == true"
+      action: "scale_up"
+      instances: 2
+      cooldown: 600
+
+    - name: "cost-emergency"
+      eventType: "cost_alert"
+      condition: "hourly_cost > 1000"
+      action: "scale_to_min"
+      cooldown: 3600
+
+  # Schedule-based scaling
+  scheduleScaling:
+    - name: "business-hours-scale-up"
+      schedule: "0 8 * * 1-5"  # 8 AM Monday-Friday
+      timezone: "UTC"
+      action: "scale_to"
+      instances: 6
+
+    - name: "after-hours-scale-down"
+      schedule: "0 20 * * 1-5"  # 8 PM Monday-Friday
+      timezone: "UTC"
+      action: "scale_to"
+      instances: 3
+
+    - name: "weekend-minimum"
+      schedule: "0 22 * * 6"    # 10 PM Saturday
+      timezone: "UTC"
+      action: "scale_to"
+      instances: 2
+
+  # Notifications
+  notifications:
+    channels:
+      - type: "slack"
+        webhook_url: "https://hooks.slack.com/services/..."
+        channel: "#ai-alerts"
+        severity_threshold: "warning"
+
+      - type: "email"
+        recipients: ["ai-team@company.com"]
+        severity_threshold: "error"
+
+      - type: "pagerduty"
+        service_key: "your-pagerduty-service-key"
+        severity_threshold: "critical"
+
+    alertRules:
+      - name: "gpu-overutilization"
+        condition: "gpu_utilization > 95"
+        severity: "critical"
+        duration: 300
+
+      - name: "high-inference-latency"
+        condition: "response_time > 2000"
+        severity: "error"
+        duration: 180
+
+      - name: "queue-backlog"
+        condition: "inference_queue_length > 100"
+        severity: "warning"
+        duration: 120
+
+  # Advanced features
+  advanced:
+    # Load balancing strategy
+    loadBalancing:
+      strategy: "least_connections"
+      sessionAffinity: "none"
+      healthCheckInterval: 30
+
+    # Traffic splitting for A/B testing
+    trafficSplitting:
+      enabled: true
+      versions:
+        - version: "v1.2"
+          weight: 80
+          instances: 3
+        - version: "v1.3"
+          weight: 20
+          instances: 1
+
+    # Autoscaling for specific models
+    modelSpecificScaling:
+      - modelName: "character-dialogue"
+        minInstances: 1
+        maxInstances: 4
+        targetLatency: 300
+
+      - modelName: "combat-ai"
+        minInstances: 2
+        maxInstances: 6
+        targetLatency: 200
+
+      - modelName: "world-simulation"
+        minInstances: 1
+        maxInstances: 3
+        targetLatency: 500
+
+# Status and metrics
+status:
+  phase: "active"
+  observedGeneration: 3
+  lastScaleTime: "2025-10-23T15:30:00Z"
+  currentReplicas: 4
+  readyReplicas: 4
+  desiredReplicas: 4
+
+  conditions:
+    - type: "AbleToScale"
+      status: "True"
+      reason: "ReadyForNewScale"
+      lastTransitionTime: "2025-10-23T15:30:00Z"
+
+    - type: "ScalingActive"
+      status: "True"
+      reason: "ValidMetricFound"
+      lastTransitionTime: "2025-10-23T15:30:00Z"
+
+    - type: "ScalingLimited"
+      status: "False"
+      reason: "DesiredWithinReplicaLimits"
+      lastTransitionTime: "2025-10-23T15:30:00Z"

@@ -1,0 +1,470 @@
+# Web Application Firewall Rules Configuration
+# DMLogn8n Security System
+
+# General Settings
+waf:
+  enabled: true
+  mode: "active"  # active, monitoring, disabled
+  log_level: "INFO"
+  block_duration: 3600  # seconds
+
+# Rate Limiting Rules
+rate_limiting:
+  default:
+    requests_per_minute: 60
+    burst_size: 10
+
+  api_endpoints:
+    requests_per_minute: 120
+    burst_size: 20
+
+  auth_endpoints:
+    requests_per_minute: 10
+    burst_size: 5
+
+  admin_endpoints:
+    requests_per_minute: 30
+    burst_size: 10
+
+# IP Blocking Rules
+ip_blocking:
+  enabled: true
+  automatic_blocking: true
+  block_threshold: 10  # violations before blocking
+  block_duration: 3600  # seconds
+
+  # Permanently blocked IPs
+  permanent_blocks:
+    - "192.168.1.100"
+    - "10.0.0.50"
+
+  # Trusted IPs (never block)
+  trusted_ips:
+    - "127.0.0.1"
+    - "::1"
+    - "192.168.1.0/24"
+    - "10.0.0.0/8"
+
+# SQL Injection Detection
+sql_injection:
+  enabled: true
+  strict_mode: true
+
+  # Common SQL injection patterns
+  patterns:
+    - "union.*select"
+    - "or.*1=1"
+    - "drop.*table"
+    - "insert.*into"
+    - "delete.*from"
+    - "update.*set"
+    - "exec.*sp_"
+    - "waitfor.*delay"
+    - "convert.*int"
+    - "cast.*as"
+    - "char.*concat"
+    - "ascii.*substring"
+    - "benchmark.*("  # MySQL
+    - "sleep.*("       # MySQL
+    - "pg_sleep.*("    # PostgreSQL
+    - "dbms_pipe.*"    # Oracle
+    - "xp_cmdshell"    # SQL Server
+    - "sp_oacreate"    # SQL Server
+
+  # Additional checks
+  check_url_encoding: true
+  check_unicode_encoding: true
+  check_comment_sequences: true
+
+# Cross-Site Scripting (XSS) Detection
+xss:
+  enabled: true
+  strict_mode: true
+
+  # XSS attack patterns
+  patterns:
+    - "<script"
+    - "javascript:"
+    - "onload="
+    - "onerror="
+    - "onclick="
+    - "onmouseover="
+    - "onfocus="
+    - "onblur="
+    - "onchange="
+    - "onsubmit="
+    - "eval("
+    - "alert("
+    - "confirm("
+    - "prompt("
+    - "document.cookie"
+    - "document.location"
+    - "window.location"
+    - "innerHTML"
+    - "outerHTML"
+    - "insertAdjacentHTML"
+    - "document.write"
+    - "document.writeln"
+
+  # HTML5 event handlers
+  html5_events:
+    - "onabort"
+    - "onblur"
+    - "oncanplay"
+    - "oncanplaythrough"
+    - "onchange"
+    - "onclick"
+    - "oncontextmenu"
+    - "ondblclick"
+    - "ondrag"
+    - "ondragend"
+    - "ondragenter"
+    - "ondragleave"
+    - "ondragover"
+    - "ondragstart"
+    - "ondrop"
+    - "ondurationchange"
+    - "onemptied"
+    - "onended"
+    - "onerror"
+    - "onfocus"
+    - "onformchange"
+    - "onforminput"
+    - "oninput"
+    - "oninvalid"
+    - "onkeydown"
+    - "onkeypress"
+    - "onkeyup"
+    - "onload"
+    - "onloadeddata"
+    - "onloadedmetadata"
+    - "onloadstart"
+    - "onmousedown"
+    - "onmousemove"
+    - "onmouseout"
+    - "onmouseover"
+    - "onmouseup"
+    - "onmousewheel"
+    - "onpause"
+    - "onplay"
+    - "onplaying"
+    - "onprogress"
+    - "onratechange"
+    - "onreadystatechange"
+    - "onreset"
+    - "onscroll"
+    - "onseeked"
+    - "onseeking"
+    - "onselect"
+    - "onshow"
+    - "onstalled"
+    - "onsubmit"
+    - "onsuspend"
+    - "ontimeupdate"
+    - "onvolumechange"
+    - "onwaiting"
+
+# Command Injection Detection
+command_injection:
+  enabled: true
+
+  patterns:
+    - ";cat"
+    - ";ls"
+    - ";dir"
+    - ";pwd"
+    - ";whoami"
+    - ";id"
+    - ";uname"
+    - ";ps"
+    - ";netstat"
+    - ";ifconfig"
+    - "|cat"
+    - "|ls"
+    - "|dir"
+    - "|whoami"
+    - "|id"
+    - "&cat"
+    - "&ls"
+    - "&dir"
+    - "&&cat"
+    - "&&ls"
+    - "&&dir"
+    - "`cat"
+    - "`ls"
+    - "`whoami"
+    - "$(cat"
+    - "$(ls"
+    - "$(whoami"
+    - "/etc/passwd"
+    - "/etc/shadow"
+    - "/etc/hosts"
+    - "/proc/version"
+    - "/proc/self/environ"
+    - "wget.*http"
+    - "curl.*http"
+    - "nc.*-l"
+    - "netcat.*-l"
+    - "telnet"
+    - "ssh.*@"
+    - "ftp"
+    - "tftp"
+    - "python.*-c"
+    - "perl.*-e"
+    - "ruby.*-e"
+    - "php.*-r"
+    - "bash.*-c"
+    - "sh.*-c"
+    - "powershell.*-c"
+    - "cmd.exe"
+    - "wscript.exe"
+    - "cscript.exe"
+
+# Path Traversal Detection
+path_traversal:
+  enabled: true
+
+  patterns:
+    - "../"
+    - "..\\"
+    - "%2e%2e%2f"
+    - "%2e%2e\\"
+    - "..%2f"
+    - "..%5c"
+    - "%252e%252e%252f"
+    - "....//"
+    - "....\\\\"
+    - "/etc/passwd"
+    - "/etc/shadow"
+    - "/etc/hosts"
+    - "/proc/self/environ"
+    - "/proc/version"
+    - "/windows/system32"
+    - "c:\\windows\\system32"
+    - "c:/windows/system32"
+
+# File Upload Validation
+file_upload:
+  enabled: true
+
+  # Allowed file types
+  allowed_types:
+    - "image/jpeg"
+    - "image/png"
+    - "image/gif"
+    - "text/plain"
+    - "application/pdf"
+    - "application/msword"
+    - "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+  # Blocked file extensions
+  blocked_extensions:
+    - ".exe"
+    - ".bat"
+    - ".cmd"
+    - ".com"
+    - ".pif"
+    - ".scr"
+    - ".vbs"
+    - ".js"
+    - ".jar"
+    - ".php"
+    - ".asp"
+    - ".aspx"
+    - ".jsp"
+    - ".sh"
+    - ".py"
+    - ".rb"
+    - ".pl"
+    - ".ps1"
+
+  max_file_size: 10485760  # 10MB
+  scan_uploads: true
+
+# HTTP Method Validation
+http_methods:
+  allowed:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+    - "HEAD"
+    - "OPTIONS"
+
+  # Strict method validation for sensitive endpoints
+  strict_paths:
+    - "/api/v1/users"
+    - "/api/v1/auth"
+    - "/api/v1/admin"
+
+# Header Validation
+headers:
+  required:
+    - "User-Agent"
+    - "Accept"
+
+  blocked:
+    - "X-Forwarded-For: 127.0.0.1"  # Proxy header abuse
+
+  # Suspicious header patterns
+  suspicious_patterns:
+    - "User-Agent: .*bot.*"
+    - "User-Agent: .*crawler.*"
+    - "User-Agent: .*scanner.*"
+    - "User-Agent: .*nikto.*"
+    - "User-Agent: .*sqlmap.*"
+    - "User-Agent: .*nmap.*"
+
+# Content Type Validation
+content_types:
+  allowed:
+    - "application/json"
+    - "application/x-www-form-urlencoded"
+    - "multipart/form-data"
+    - "text/plain"
+    - "text/html"
+
+  # Strict content type for API endpoints
+  api_strict: true
+
+# HTTP Parameter Pollution
+parameter_pollution:
+  enabled: true
+  max_params_per_name: 3
+
+# Request Size Limits
+request_limits:
+  max_url_length: 2048
+  max_header_size: 8192
+  max_body_size: 10485760  # 10MB
+  max_param_count: 1000
+
+# Geographic Blocking
+geo_blocking:
+  enabled: false
+
+  # Blocked countries (ISO country codes)
+  blocked_countries: []
+
+  # Allowed countries (whitelist - if specified, only these are allowed)
+  allowed_countries: []
+
+  # Block anonymous proxies
+  block_anonymous_proxy: true
+
+# Bot Detection
+bot_detection:
+  enabled: true
+
+  # Known bot signatures
+  bot_patterns:
+    - "Googlebot"
+    - "Bingbot"
+    - "Slurp"
+    - "DuckDuckBot"
+    - "Baiduspider"
+    - "YandexBot"
+    - "facebookexternalhit"
+    - "Twitterbot"
+    - "LinkedInBot"
+    - "WhatsApp"
+
+  # Malicious bot patterns
+  malicious_patterns:
+    - "sqlmap"
+    - "nikto"
+    - "nmap"
+    - "masscan"
+    - "zap"
+    - "burp"
+    - "owasp"
+    - "acunetix"
+    - "netsparker"
+    - "appscan"
+
+# DDoS Protection
+ddos_protection:
+  enabled: true
+
+  # Thresholds
+  requests_per_second: 100
+  burst_threshold: 500
+  auto_block_duration: 300  # 5 minutes
+
+  # Advanced detection
+  enable_behavioral_analysis: true
+  enable_rate_limiting: true
+
+# Custom Rules
+custom_rules:
+  - name: "Admin Access Protection"
+    enabled: true
+    pattern: "/admin"
+    conditions:
+      - field: "remote_addr"
+        operator: "not_in"
+        value: ["127.0.0.1", "192.168.1.0/24"]
+    action: "block"
+    log_level: "WARNING"
+
+  - name: "API Key Validation"
+    enabled: true
+    pattern: "/api/"
+    conditions:
+      - field: "headers"
+        operator: "contains"
+        value: "X-API-Key"
+    action: "allow"
+    log_level: "INFO"
+
+  - name: "Suspicious User Agent"
+    enabled: true
+    pattern: "User-Agent"
+    conditions:
+      - field: "headers"
+        operator: "regex"
+        value: ".*(bot|crawler|scanner|sqlmap|nikto).*"
+    action: "log"
+    log_level: "WARNING"
+
+# Exception Handling
+exceptions:
+  # Paths that bypass WAF
+  bypass_paths:
+    - "/health"
+    - "/metrics"
+    - "/status"
+    - "/ping"
+
+  # IPs that bypass WAF
+  bypass_ips:
+    - "127.0.0.1"
+    - "::1"
+
+# Logging Configuration
+logging:
+  enabled: true
+  log_all_requests: false
+  log_blocked_requests: true
+  log_suspicious_requests: true
+  retention_days: 30
+
+  # Log format
+  format: "json"
+  include_request_body: false
+  include_response_body: false
+
+# Integration Settings
+integrations:
+  # SIEM integration
+  siem:
+    enabled: false
+    endpoint: ""
+    api_key: ""
+
+  # Alert integration
+  alerts:
+    enabled: false
+    webhook_url: ""
+    slack_channel: ""
+    email_recipients: []

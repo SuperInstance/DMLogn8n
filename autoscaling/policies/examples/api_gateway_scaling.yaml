@@ -1,0 +1,435 @@
+# API Gateway Scaling Policy
+# High-performance scaling for DMLogn8n API Gateway
+
+apiVersion: autoscaling.dmlogn8n/v1
+kind: ScalingPolicy
+metadata:
+  name: api-gateway-scaling
+  namespace: dmlogn8n
+  labels:
+    team: platform
+    component: api-gateway
+    environment: production
+    tier: frontend
+  annotations:
+    description: "Auto-scaling policy for API Gateway with high availability"
+    version: "2.1.0"
+    lastModified: "2025-10-23T00:00:00Z"
+
+spec:
+  # Service identification
+  serviceId: "api-gateway"
+  serviceType: "api_gateway"
+
+  # Instance limits for high availability
+  minInstances: 3
+  maxInstances: 20
+  desiredInstances: 5
+
+  # Target performance metrics
+  targetMetrics:
+    cpuUtilization: 65      # Target CPU utilization percentage
+    memoryUtilization: 70   # Target memory utilization percentage
+    requestRate: 500        # Target requests per second per instance
+    responseTime: 250       # Target response time in milliseconds
+    errorRate: 1.0          # Target error rate percentage
+
+  # Scaling thresholds
+  scaleUpThresholds:
+    cpuUtilization: 75      # Scale up when CPU > 75%
+    memoryUtilization: 80   # Scale up when memory > 80%
+    requestRate: 700        # Scale up when RPS > 700
+    responseTime: 500       # Scale up when response time > 500ms
+    errorRate: 3.0          # Scale up when error rate > 3%
+    duration: 60            # Sustained for 1 minute
+
+  scaleDownThresholds:
+    cpuUtilization: 35      # Scale down when CPU < 35%
+    memoryUtilization: 45   # Scale down when memory < 45%
+    requestRate: 200        # Scale down when RPS < 200
+    responseTime: 150       # Scale down when response time < 150ms
+    errorRate: 0.5          # Scale down when error rate < 0.5%
+    duration: 300           # Sustained for 5 minutes
+
+  # Scaling behavior
+  scaling:
+    cooldownPeriod: 180     # 3 minutes between scaling operations
+    scaleUpStepSize: 3      # Add 3 instances when scaling up
+    scaleDownStepSize: 1    # Remove 1 instance when scaling down
+    stabilizationWindow: 120 # 2 minutes stabilization window
+    scaleUpDelay: 30        # Wait 30 seconds before scaling up
+    scaleDownDelay: 300     # Wait 5 minutes before scaling down
+
+  # Predictive scaling
+  predictiveScaling:
+    enabled: true
+    modelType: "lstm"       # LSTM model for time series prediction
+    predictionWindow: 900   # 15 minutes prediction window
+    confidenceThreshold: 0.70 # Only scale if confidence > 70%
+    trainingDataWindow: 14  # Use 14 days of historical data
+    features:
+      - "hour_of_day"
+      - "day_of_week"
+      - "is_weekend"
+      - "request_rate_trend"
+      - "seasonal_patterns"
+
+  # Cost optimization
+  costOptimization:
+    enabled: true
+    strategy: "performance_priority" # Prioritize performance over cost
+    hourlyBudget: 100       # $100 per hour budget
+    costSavingsThreshold: 2 # Only scale down if savings > $2/hour
+    idleTimeout: 600        # Terminate idle instances after 10 minutes
+
+  # Resource specifications
+  resources:
+    instanceTypes:
+      - type: "c5.2xlarge"   # AWS Compute Optimized
+        cpu: "8"
+        memory: "16Gi"
+        cost_per_hour: 0.34
+        priority: 1
+        networkPerformance: "10Gbps"
+
+      - type: "c5.4xlarge"   # Larger compute instance
+        cpu: "16"
+        memory: "32Gi"
+        cost_per_hour: 0.68
+        priority: 2
+        networkPerformance: "10Gbps"
+
+      - type: "c6g.2xlarge"  # Graviton (ARM) instance
+        cpu: "8"
+        memory: "16Gi"
+        cost_per_hour: 0.272
+        priority: 3
+        networkPerformance: "10Gbps"
+
+    resourceAllocation:
+      cpuRequest: "1000m"    # 1 CPU core requested
+      cpuLimit: "2000m"      # 2 CPU cores limit
+      memoryRequest: "2Gi"   # 2GB memory requested
+      memoryLimit: "4Gi"     # 4GB memory limit
+      ephemeralStorage: "10Gi"
+
+  # Health checks
+  healthChecks:
+    readinessProbe:
+      httpGet:
+        path: "/health/ready"
+        port: 8080
+        scheme: "HTTP"
+      initialDelaySeconds: 10
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 3
+      successThreshold: 1
+
+    livenessProbe:
+      httpGet:
+        path: "/health/live"
+        port: 8080
+        scheme: "HTTP"
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+      successThreshold: 1
+
+    startupProbe:
+      httpGet:
+        path: "/health/startup"
+        port: 8080
+        scheme: "HTTP"
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 12
+      successThreshold: 1
+
+  # Custom metrics
+  customMetrics:
+    - name: "requests_per_second"
+      description: "Request rate per instance"
+      query: "rate(http_requests_total[1m])"
+
+    - name: "average_response_time"
+      description: "Average response time in milliseconds"
+      query: "histogram_quantile(0.95, http_request_duration_seconds) * 1000"
+
+    - name: "error_rate"
+      description: "Error rate percentage"
+      query: "rate(http_requests_total{status=~\"5..\"}[1m]) / rate(http_requests_total[1m]) * 100"
+
+    - name: "active_connections"
+      description: "Number of active connections"
+      query: "websocket_connections_active"
+
+    - name: "queue_depth"
+      description: "Request queue depth"
+      query: "http_request_queue_length"
+
+    - name: "cache_hit_rate"
+      description: "Cache hit rate percentage"
+      query: "rate(cache_hits_total[1m]) / (rate(cache_hits_total[1m]) + rate(cache_misses_total[1m])) * 100"
+
+    - name: "upstream_latency"
+      description: "Latency to upstream services"
+      query: "histogram_quantile(0.95, upstream_response_time_seconds) * 1000"
+
+  # Event-based scaling rules
+  eventScaling:
+    - name: "traffic-spike-response"
+      eventType: "traffic_spike"
+      condition: "requests_per_second > 2000"
+      action: "scale_up"
+      instances: 5
+      cooldown: 600
+
+    - name: "service-degradation"
+      eventType: "service_failure"
+      condition: "upstream_error_rate > 10"
+      action: "scale_up"
+      instances: 3
+      cooldown: 300
+
+    - name: "database-overload"
+      eventType: "database_overload"
+      condition: "database_connections > 80%"
+      action: "scale_up"
+      instances: 2
+      cooldown: 180
+
+    - name: "emergency-scale-down"
+      eventType: "emergency_scale"
+      condition: "emergency_type == 'security_breach'"
+      action: "scale_to_min"
+      cooldown: 1800
+
+  # Schedule-based scaling
+  scheduleScaling:
+    - name: "morning-rush-hour"
+      schedule: "0 8 * * 1-5"  # 8 AM Monday-Friday
+      timezone: "America/New_York"
+      action: "scale_to"
+      instances: 8
+
+    - name: "lunch-peak"
+      schedule: "0 12 * * 1-5"  # 12 PM Monday-Friday
+      timezone: "America/New_York"
+      action: "scale_to"
+      instances: 12
+
+    - name: "evening-peak"
+      schedule: "0 18 * * 1-5"  # 6 PM Monday-Friday
+      timezone: "America/New_York"
+      action: "scale_to"
+      instances: 15
+
+    - name: "night-quiet-hours"
+      schedule: "0 2 * * *"      # 2 AM daily
+      timezone: "America/New_York"
+      action: "scale_to"
+      instances: 3
+
+    - name: "weekend-reduced"
+      schedule: "0 8 * * 6"      # 8 AM Saturday
+      timezone: "America/New_York"
+      action: "scale_to"
+      instances: 5
+
+  # Network and load balancing
+  networking:
+    loadBalancer:
+      type: "application"
+      algorithm: "round_robin"
+      healthCheckInterval: 30
+      healthCheckPath: "/health"
+      healthCheckTimeout: 5
+      healthyThreshold: 2
+      unhealthyThreshold: 3
+
+    trafficManagement:
+      connectionTimeout: 30
+      readTimeout: 60
+      writeTimeout: 60
+      idleTimeout: 300
+      maxConnections: 10000
+      maxRequestsPerConnection: 100
+
+    rateLimiting:
+      enabled: true
+      requestsPerSecond: 1000
+      burst: 2000
+      perClient:
+        requestsPerMinute: 100
+        burst: 200
+
+  # Security and compliance
+  security:
+    tls:
+      enabled: true
+      minVersion: "1.2"
+      cipherSuites: ["TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"]
+
+    waf:
+      enabled: true
+      mode: "prevention"
+      rules:
+        - sql_injection
+        - xss
+        - lfi
+        - rce
+
+    ddosProtection:
+      enabled: true
+      threshold: 10000  # requests per second
+      action: "rate_limit"
+
+  # Notifications
+  notifications:
+    channels:
+      - type: "slack"
+        webhook_url: "https://hooks.slack.com/services/..."
+        channel: "#api-alerts"
+        severity_threshold: "warning"
+
+      - type: "email"
+        recipients: ["platform-team@company.com", "sre-team@company.com"]
+        severity_threshold: "error"
+
+      - type: "pagerduty"
+        service_key: "your-pagerduty-service-key"
+        severity_threshold: "critical"
+
+      - type: "webhook"
+        url: "https://your-monitoring-system.com/api/alerts"
+        headers:
+          Authorization: "Bearer your-token"
+        severity_threshold: "warning"
+
+    alertRules:
+      - name: "high-error-rate"
+        condition: "error_rate > 5"
+        severity: "critical"
+        duration: 120
+        message: "API Gateway error rate is critically high"
+
+      - name: "slow-response-time"
+        condition: "average_response_time > 1000"
+        severity: "error"
+        duration: 180
+        message: "API Gateway response times are degraded"
+
+      - name: "high-cpu-usage"
+        condition: "cpu_utilization > 90"
+        severity: "warning"
+        duration: 300
+        message: "API Gateway CPU usage is high"
+
+      - name: "connection-exhaustion"
+        condition: "active_connections > 9000"
+        severity: "critical"
+        duration: 60
+        message: "API Gateway is running out of connections"
+
+      - name: "scaling-failure"
+        condition: "scaling_event_failed == true"
+        severity: "critical"
+        duration: 1
+        message: "Auto-scaling operation failed"
+
+  # Advanced features
+  advanced:
+    # Blue-green deployment support
+    blueGreenDeployment:
+      enabled: true
+      switchTrafficDelay: 30
+      healthCheckDelay: 60
+
+    # Canary deployments
+    canaryDeployment:
+      enabled: true
+      initialWeight: 10
+      stepWeight: 10
+      stepInterval: 300
+      analysisThreshold: 99
+
+    # Circuit breaker pattern
+    circuitBreaker:
+      enabled: true
+      failureThreshold: 5
+      recoveryTimeout: 30
+      halfOpenMaxRequests: 3
+
+    # Request tracing
+    tracing:
+      enabled: true
+      samplingRate: 0.1  # 10% sampling
+      headers:
+        - "x-trace-id"
+        - "x-parent-span-id"
+        - "x-sampled"
+
+    # Metrics collection
+    metricsCollection:
+      enabled: true
+      interval: 30
+      retention: 7  # days
+      aggregation:
+        - sum
+        - average
+        - percentile_95
+        - percentile_99
+
+# Status and metrics
+status:
+  phase: "active"
+  observedGeneration: 5
+  lastScaleTime: "2025-10-23T16:45:00Z"
+  currentReplicas: 8
+  readyReplicas: 8
+  desiredReplicas: 8
+
+  conditions:
+    - type: "AbleToScale"
+      status: "True"
+      reason: "ReadyForNewScale"
+      lastTransitionTime: "2025-10-23T16:45:00Z"
+
+    - type: "ScalingActive"
+      status: "True"
+      reason: "ValidMetricFound"
+      lastTransitionTime: "2025-10-23T16:45:00Z"
+
+    - type: "ScalingLimited"
+      status: "False"
+      reason: "DesiredWithinReplicaLimits"
+      lastTransitionTime: "2025-10-23T16:45:00Z"
+
+    - type: "Healthy"
+      status: "True"
+      reason: "AllPodsReady"
+      lastTransitionTime: "2025-10-23T16:45:00Z"
+
+  metrics:
+    currentMetrics:
+      - type: "Resource"
+        resource:
+          name: "cpu"
+          current:
+            averageUtilization: 68
+
+      - type: "Resource"
+        resource:
+          name: "memory"
+          current:
+            averageUtilization: 72
+
+      - type: "External"
+        external:
+          metric:
+            name: "requests_per_second"
+          current:
+            value: "450"

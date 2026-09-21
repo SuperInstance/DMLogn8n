@@ -1,0 +1,463 @@
+{
+  "name": "Seasonal/Time System - Time Passage & Seasonal Effects",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "time-passage-trigger",
+      "name": "Time Passage Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "time/advance",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "manual-time-trigger",
+      "name": "Manual Time Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 450],
+      "webhookId": "time-advance"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize time advancement system\nconst triggerData = $input.first().json;\nconst triggerType = $node['Time Passage Trigger'].isRunning ? 'scheduled' : 'manual';\n\nconst timeConfig = {\n  advancement_id: `time_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n  trigger_type: triggerType,\n  timestamp: new Date().toISOString(),\n  manual_settings: triggerData || {},\n  advancement_parameters: {\n    time_unit: triggerData.time_unit || 'hours', // minutes, hours, days, weeks, months\n    time_amount: triggerData.time_amount || (triggerType === 'scheduled' ? 1 : triggerData.time_amount || 1),\n    campaign_focus: triggerData.campaign_focus || 'all', // all, specific campaigns\n    skip_events: triggerData.skip_events || false,\n    force_events: triggerData.force_events || false,\n    seasonal_transitions: triggerData.seasonal_transitions !== false // default true\n  },\n  world_effects: {\n    natural_progression: true,\n    seasonal_effects: true,\n    npc_schedules: true,\n    faction_activities: true,\n    economic_cycles: true,\n    weather_changes: true,\n    random_encounters: triggerData.allow_encounters !== false\n  }\n};\n\nreturn [{ json: timeConfig }];"
+      },
+      "id": "initialize-time-advancement",
+      "name": "Initialize Time Advancement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.NEO4J_URI }}",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.NEO4J_PASSWORD }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "=MATCH (c:Campaign) WHERE c.status = 'active' RETURN c.id as campaignId, c.worldState as worldState, c.timeData as timeData, c.lastTimeUpdate as lastUpdate, c.settings as campaignSettings"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-time-state",
+      "name": "Neo4j - Fetch Time State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process time state and calculate time advancement\nconst timeConfig = $input.first().json;\nconst campaigns = $input.last().json.results || [];\n\nconst processedCampaigns = campaigns.map(campaign => {\n  const { campaignId, worldState, timeData, lastUpdate, campaignSettings } = campaign;\n  \n  // Calculate time advancement for this campaign\n  const currentTime = timeData ? parseTimeData(timeData) : initializeDefaultTime();\n  const advancementAmount = calculateAdvancementAmount(timeConfig.advancement_parameters, campaignSettings);\n  const newTime = advanceTime(currentTime, advancementAmount);\n  \n  // Analyze time-based changes\n  const timeAnalysis = analyzeTimeChanges(currentTime, newTime, worldState, advancementAmount);\n  \n  // Check for significant time events\n  const timeEvents = identifyTimeEvents(currentTime, newTime, worldState, timeAnalysis);\n  \n  return {\n    campaignId,\n    current_time: currentTime,\n    new_time: newTime,\n    advancement_amount: advancementAmount,\n    time_analysis: timeAnalysis,\n    time_events: timeEvents,\n    campaign_settings: campaignSettings || {},\n    world_state: worldState || {},\n    last_update: lastUpdate\n  };\n});\n\n// Sort campaigns by time sensitivity\nprocessedCampaigns.sort((a, b) => {\n  const aPriority = calculateTimePriority(a);\n  const bPriority = calculateTimePriority(b);\n  return bPriority - aPriority;\n});\n\nfunction parseTimeData(timeData) {\n  return {\n    current_date: new Date(timeData.current_date),\n    current_time: timeData.current_time || { hours: 12, minutes: 0 },\n    day_count: timeData.day_count || 1,\n    week_count: timeData.week_count || 1,\n    month_count: timeData.month_count || 1,\n    year_count: timeData.year_count || 1,\n    current_season: timeData.current_season || 'spring',\n    day_of_week: timeData.day_of_week || 1,\n    time_of_day: timeData.time_of_day || 'day',\n    weather: timeData.weather || 'clear',\n    moon_phase: timeData.moon_phase || 'new'\n  };\n}\n\nfunction initializeDefaultTime() {\n  const now = new Date();\n  return {\n    current_date: now,\n    current_time: { hours: now.getHours(), minutes: now.getMinutes() },\n    day_count: 1,\n    week_count: 1,\n    month_count: 1,\n    year_count: 1,\n    current_season: determineSeason(now),\n    day_of_week: now.getDay() || 1,\n    time_of_day: determineTimeOfDay(now.getHours()),\n    weather: 'clear',\n    moon_phase: calculateMoonPhase(now)\n  };\n}\n\nfunction calculateAdvancementAmount(parameters, campaignSettings) {\n  const { time_unit, time_amount } = parameters;\n  \n  // Check for campaign-specific time scaling\n  const timeScale = campaignSettings?.time_scale || 1.0;\n  const adjustedAmount = time_amount * timeScale;\n  \n  return {\n    unit: time_unit,\n    amount: adjustedAmount,\n    in_minutes: convertToMinutes(time_unit, adjustedAmount),\n    scaled: timeScale !== 1.0\n  };\n}\n\nfunction convertToMinutes(unit, amount) {\n  const conversions = {\n    'minutes': amount,\n    'hours': amount * 60,\n    'days': amount * 60 * 24,\n    'weeks': amount * 60 * 24 * 7,\n    'months': amount * 60 * 24 * 30 // Approximate\n  };\n  \n  return conversions[unit] || amount;\n}\n\nfunction advanceTime(currentTime, advancementAmount) {\n  const newDate = new Date(currentTime.current_date);\n  const currentMinutes = currentTime.current_time.hours * 60 + currentTime.current_time.minutes;\n  const totalMinutes = currentMinutes + advancementAmount.in_minutes;\n  \n  // Calculate new date and time\n  newDate.setTime(newDate.getTime() + advancementAmount.in_minutes * 60 * 1000);\n  \n  const newTime = {\n    current_date: newDate,\n    current_time: {\n      hours: newDate.getHours(),\n      minutes: newDate.getMinutes()\n    },\n    day_count: currentTime.day_count + Math.floor(advancementAmount.in_minutes / (60 * 24)),\n    week_count: currentTime.week_count + Math.floor(advancementAmount.in_minutes / (60 * 24 * 7)),\n    month_count: currentTime.month_count + Math.floor(advancementAmount.in_minutes / (60 * 24 * 30)),\n    year_count: currentTime.year_count + Math.floor(advancementAmount.in_minutes / (60 * 24 * 365)),\n    current_season: determineSeason(newDate),\n    day_of_week: newDate.getDay() || 1,\n    time_of_day: determineTimeOfDay(newDate.getHours()),\n    weather: currentTime.weather, // Will be updated by weather system\n    moon_phase: calculateMoonPhase(newDate)\n  };\n  \n  return newTime;\n}\n\nfunction determineSeason(date) {\n  const month = date.getMonth(); // 0-11\n  \n  if (month >= 2 && month <= 4) return 'spring';\n  if (month >= 5 && month <= 7) return 'summer';\n  if (month >= 8 && month <= 10) return 'autumn';\n  return 'winter';\n}\n\nfunction determineTimeOfDay(hour) {\n  if (hour >= 6 && hour < 12) return 'morning';\n  if (hour >= 12 && hour < 17) return 'afternoon';\n  if (hour >= 17 && hour < 21) return 'evening';\n  if (hour >= 21 || hour < 6) return 'night';\n  return 'day';\n}\n\nfunction calculateMoonPhase(date) {\n  // Simple moon phase calculation\n  const year = date.getFullYear();\n  const month = date.getMonth() + 1;\n  const day = date.getDate();\n  \n  let c, e, jd, b;\n  \n  if (month < 3) {\n    year--;\n    month += 12;\n  }\n  \n  c = 365.25 * year;\n  e = 30.6 * month;\n  jd = c + e + day - 694039.09; // JD is Julian date\n  jd /= 29.5305882; // Divide by the moon cycle\n  1; // Remove integer part\n  jd = Math.round(jd); // Round to nearest integer\n  \n  b = jd / 8;\n  jd -= b;\n  b = jd / 4;\n  jd -= b;\n  \n  const phases = ['new', 'waxing_crescent', 'first_quarter', 'waxing_gibbous', 'full', 'waning_gibbous', 'last_quarter', 'waning_crescent'];\n  return phases[Math.floor(jd * 8)] || 'new';\n}\n\nfunction analyzeTimeChanges(oldTime, newTime, worldState, advancementAmount) {\n  const analysis = {\n    significant_changes: [],\n    seasonal_transitions: [],\n    time_of_day_changes: [],\n    date_milestones: [],\n    environmental_factors: [],\n    social_factors: [],\n    magical_factors: []\n  };\n  \n  // Check for seasonal transition\n  if (oldTime.current_season !== newTime.current_season) {\n    analysis.seasonal_transitions.push({\n      from: oldTime.current_season,\n      to: newTime.current_season,\n      transition_type: 'seasonal_change',\n      impact_level: 'major'\n    });\n  }\n  \n  // Check for time of day transitions\n  if (oldTime.time_of_day !== newTime.time_of_day) {\n    analysis.time_of_day_changes.push({\n      from: oldTime.time_of_day,\n      to: newTime.time_of_day,\n      transition_type: 'time_of_day_change',\n      impact_level: 'minor'\n    });\n  }\n  \n  // Check for date milestones\n  if (newTime.day_count % 7 === 0) {\n    analysis.date_milestones.push({\n      type: 'weekly',\n      week_number: newTime.week_count,\n      description: `Week ${newTime.week_count} begins`\n    });\n  }\n  \n  if (newTime.day_count % 30 === 0) {\n    analysis.date_milestones.push({\n      type: 'monthly',\n      month_number: newTime.month_count,\n      description: `Month ${newTime.month_count} begins`\n    });\n  }\n  \n  if (newTime.day_count % 365 === 0) {\n    analysis.date_milestones.push({\n      type: 'yearly',\n      year_number: newTime.year_count,\n      description: `Year ${newTime.year_count} begins`\n    });\n  }\n  \n  // Environmental factors based on time\n  analysis.environmental_factors = generateEnvironmentalFactors(newTime, advancementAmount);\n  \n  // Social factors based on time\n  analysis.social_factors = generateSocialFactors(newTime, worldState);\n  \n  // Magical factors based on time\n  analysis.magical_factors = generateMagicalFactors(newTime, worldState);\n  \n  return analysis;\n}\n\nfunction generateEnvironmentalFactors(newTime, advancementAmount) {\n  const factors = [];\n  \n  // Weather changes based on time advancement\n  if (advancementAmount.in_minutes >= 60) {\n    factors.push({\n      type: 'weather_change',\n      probability: 0.3,\n      description: 'Weather conditions may change',\n      impact: 'environmental'\n    });\n  }\n  \n  // Seasonal environmental effects\n  const seasonalEffects = {\n    'spring': [\n      { type: 'plant_growth', probability: 0.7, description: 'Plants begin to grow and bloom' },\n      { type: 'animal_migration', probability: 0.5, description: 'Animals migrate back to the region' },\n      { type: 'rain_increase', probability: 0.6, description: 'Increased rainfall' }\n    ],\n    'summer': [\n      { type: 'heat_waves', probability: 0.4, description: 'Periods of extreme heat' },\n      { type: 'drought_conditions', probability: 0.3, description: 'Possible drought conditions' },\n      { type: 'peak_activity', probability: 0.8, description: 'Peak plant and animal activity' }\n    ],\n    'autumn': [\n      { type: 'harvest_season', probability: 0.9, description: 'Harvest season begins' },\n      { type: 'leaf_fall', probability: 0.8, description: 'Trees begin to lose their leaves' },\n      { type: 'animal_preparation', probability: 0.7, description: 'Animals prepare for winter' }\n    ],\n    'winter': [\n      { type: 'snowfall', probability: 0.6, description: 'Snow becomes more likely' },\n      { type: 'reduced_activity', probability: 0.8, description: 'Natural activity decreases' },\n      { type: 'cold_stress', probability: 0.5, description: 'Cold weather affects creatures' }\n    ]\n  };\n  \n  factors.push(...(seasonalEffects[newTime.current_season] || []));\n  \n  // Time of day effects\n  const timeOfDayEffects = {\n    'morning': [\n      { type: 'dew_formation', probability: 0.7, description: 'Morning dew forms on surfaces' },\n      { type: 'increased_visibility', probability: 0.9, description: 'Visibility improves with daylight' }\n    ],\n    'afternoon': [\n      { type: 'peak_heat', probability: 0.8, description: 'Temperatures reach daily peak' },\n      { type: 'shadow_changes', probability: 1.0, description: 'Shadows shift throughout afternoon' }\n    ],\n    'evening': [\n      { type: 'golden_hour', probability: 0.9, description: 'Golden hour lighting conditions' },\n      { type: 'temperature_drop', probability: 0.8, description: 'Temperatures begin to drop' }\n    ],\n    'night': [\n      { type: 'reduced_visibility', probability: 1.0, description: 'Visibility significantly reduced' },\n      { type: 'nocturnal_activity', probability: 0.7, description: 'Nocturnal creatures become active' }\n    ]\n  };\n  \n  factors.push(...(timeOfDayEffects[newTime.time_of_day] || []));\n  \n  return factors;\n}\n\nfunction generateSocialFactors(newTime, worldState) {\n  const factors = [];\n  \n  // Time of day social effects\n  const timeSocialEffects = {\n    'morning': [\n      { type: 'market_opening', probability: 0.9, description: 'Markets and shops open for business' },\n      { type: 'work_day_start', probability: 0.8, description: 'Most workers begin their day' }\n    ],\n    'afternoon': [\n      { type: 'peak_business', probability: 0.9, description: 'Peak business and commercial activity' },\n      { type: 'social_gatherings', probability: 0.6, description: 'People gather for midday meals and socializing' }\n    ],\n    'evening': [\n      { type: 'tavern_activity', probability: 0.9, description: 'Taverns and entertainment venues become busy' },\n      { type: 'family_time', probability: 0.7, description: 'Families gather for evening meals' }\n    ],\n    'night': [\n      { type: 'curfew_hours', probability: 0.6, description: 'Some settlements may enforce curfews' },\n      { type: 'night_watch', probability: 0.8, description: 'City guards and night patrols become active' }\n    ]\n  };\n  \n  factors.push(...(timeSocialEffects[newTime.time_of_day] || []));\n  \n  // Day of week effects\n  const dayOfWeekEffects = [\n    { type: 'weekend_preparation', day: 5, probability: 0.7, description: 'People prepare for weekend' },\n    { type: 'weekend_leisure', day: 6, probability: 0.8, description: 'Weekend leisure activities increase' },\n    { type: 'weekend_leisure', day: 0, probability: 0.8, description: 'Weekend leisure activities continue' },\n    { type: 'week_beginning', day: 1, probability: 0.7, description: 'People return to work and routines' }\n  ];\n  \n  const dayEffect = dayOfWeekEffects.find(effect => effect.day === newTime.day_of_week);\n  if (dayEffect) {\n    factors.push({\n      type: dayEffect.type,\n      probability: dayEffect.probability,\n      description: dayEffect.description\n    });\n  }\n  \n  return factors;\n}\n\nfunction generateMagicalFactors(newTime, worldState) {\n  const factors = [];\n  \n  // Moon phase magical effects\n  const moonEffects = {\n    'new': [\n      { type: 'divination_difficulty', probability: 0.6, description: 'Divination magic becomes more difficult' },\n      { type: 'shadow_magic_boost', probability: 0.7, description: 'Shadow and illusion magic enhanced' }\n    ],\n    'full': [\n      { type: 'lycanthrope_activity', probability: 0.9, description: 'Lycanthropes become more active' },\n      { type: 'divination_power', probability: 0.8, description: 'Divination and scrying magic enhanced' },\n      { type: 'wild_magic_increase', probability: 0.5, description: 'Wild magic surges more likely' }\n    ],\n    'first_quarter': [\n      { type: 'creation_magic', probability: 0.6, description: 'Creation and growth magic favored' }\n    ],\n    'last_quarter': [\n      { type: 'destruction_magic', probability: 0.6, description: 'Destruction and banishing magic favored' }\n    ]\n  };\n  \n  factors.push(...(moonEffects[newTime.moon_phase] || []));\n  \n  // Time of day magical effects\n  const timeMagicEffects = {\n    'night': [\n      { type: 'shadow_magic_amplified', probability: 0.7, description: 'Shadow magic amplified at night' },\n      { type: 'necromancy_power', probability: 0.6, description: 'Necromantic power increases after dark' }\n    ],\n    'day': [\n      { type: 'light_magic_amplified', probability: 0.7, description: 'Light and fire magic amplified by daylight' },\n      { type: 'healing_enhanced', probability: 0.5, description: 'Healing magic slightly enhanced during day' }\n    ]\n  };\n  \n  const timeEffect = timeMagicEffects[newTime.time_of_day === 'night' ? 'night' : 'day'];\n  if (timeEffect) {\n    factors.push(...timeEffect);\n  }\n  \n  return factors;\n}\n\nfunction identifyTimeEvents(oldTime, newTime, worldState, timeAnalysis) {\n  const events = [];\n  \n  // Seasonal transition events\n  timeAnalysis.seasonal_transitions.forEach(transition => {\n    events.push({\n      id: `season_transition_${Date.now()}`,\n      type: 'seasonal_transition',\n      subtype: transition.transition_type,\n      from_season: transition.from,\n      to_season: transition.to,\n      description: generateSeasonalTransitionDescription(transition.from, transition.to),\n      impact_level: transition.impact_level,\n      environmental_effects: generateSeasonalEffects(transition.to),\n      social_effects: generateSeasonalSocialEffects(transition.from, transition.to),\n      economic_effects: generateSeasonalEconomicEffects(transition.from, transition.to),\n      player_hooks: generateSeasonalPlayerHooks(transition.from, transition.to),\n      timestamp: new Date().toISOString()\n    });\n  });\n  \n  // Date milestone events\n  timeAnalysis.date_milestones.forEach(milestone => {\n    events.push({\n      id: `${milestone.type}_milestone_${Date.now()}`,\n      type: 'date_milestone',\n      subtype: milestone.type,\n      description: milestone.description,\n      impact_level: 'minor',\n      social_effects: generateMilestoneSocialEffects(milestone.type),\n      player_hooks: generateMilestonePlayerHooks(milestone.type),\n      timestamp: new Date().toISOString()\n    });\n  });\n  \n  // Weather events\n  if (Math.random() < 0.2) {\n    events.push(generateWeatherEvent(newTime, worldState));\n  }\n  \n  // Random encounter possibilities\n  if (worldState.encounter_settings?.random_encounters !== false && Math.random() < 0.15) {\n    events.push(generateTimeBasedEncounter(newTime, worldState));\n  }\n  \n  // NPC schedule events\n  events.push(...generateNPCScheduleEvents(newTime, worldState));\n  \n  return events;\n}\n\nfunction generateSeasonalTransitionDescription(from, to) {\n  const transitions = {\n    'spring_to_summer': 'The warmth of summer begins to take hold, days grow longer and nature reaches its peak vitality',\n    'summer_to_autumn': 'The first signs of autumn appear as the air cools and leaves begin to change color',\n    'autumn_to_winter': 'Winter\\'s chill arrives with shorter days and the promise of snow',\n    'winter_to_spring': 'Spring emerges with new life as the world awakens from winter\\'s slumber'\n  };\n  \n  return transitions[`${from}_to_${to}`] || `The seasons transition from ${from} to ${to}`;\n}\n\nfunction generateSeasonalEffects(season) {\n  const effects = {\n    'spring': ['increased_plant_growth', 'animal_migration', 'mild_temperatures', 'rain_showers'],\n    'summer': ['hot_temperatures', 'peak_vegetation', 'long_daylight', 'thunderstorms'],\n    'autumn': ['falling_leaves', 'harvest_time', 'cooling_temperatures', 'migration_preparation'],\n    'winter': ['snow_fall', 'cold_temperatures', 'short_daylight', 'dormant_nature']\n  };\n  \n  return effects[season] || [];\n}\n\nfunction generateSeasonalSocialEffects(from, to) {\n  const socialEffects = {\n    'spring_to_summer': ['outdoor_activities_increase', 'festival_season_begins', 'trade_routes_open'],\n    'summer_to_autumn': ['harvest_festivals', 'winter_preparations', 'trade_slowdown'],\n    'autumn_to_winter': ['indoor_activities', 'winter_storage', 'community_gatherings'],\n    'winter_to_spring': ['spring_festivals', 'planting_season', 'renewed_activity']\n  };\n  \n  return socialEffects[`${from}_to_${to}`] || ['seasonal_routine_changes'];\n}\n\nfunction generateSeasonalEconomicEffects(from, to) {\n  const economicEffects = {\n    'spring_to_summer': ['construction_boom', 'trade_peak', 'tourism_increase'],\n    'summer_to_autumn': ['harvest_economy', 'preservation_trade', 'equipment_sales'],\n    'autumn_to_winter': ['winter_supply_demand', 'heating_costs', 'reduced_trade'],\n    'winter_to_spring': ['seed_demand', 'construction_planning', 'equipment_repair']\n  };\n  \n  return economicEffects[`${from}_to_${to}`] || ['seasonal_economic_shifts'];\n}\n\nfunction generateSeasonalPlayerHooks(from, to) {\n  const hooks = {\n    'spring_to_summer': ['outdoor_adventures', 'festival_attendance', 'long_distance_travel'],\n    'summer_to_autumn': ['harvest_work', 'winter_preparation', 'community_events'],\n    'autumn_to_winter': ['winter_survival', 'indoor_activities', 'monster_migrations'],\n    'winter_to_spring': ['spring_festivals', 'exploration', 'renewed_conflicts']\n  };\n  \n  return hooks[`${from}_to_${to}`] || ['seasonal_adventures'];\n}\n\nfunction generateMilestoneSocialEffects(milestoneType) {\n  const effects = {\n    'weekly': ['market_day', 'religious_services', 'community_meetings'],\n    'monthly': ['tax_collection', 'guild_meetings', 'long_term_planning'],\n    'yearly': ['festivals', 'elections', 'major_celebrations']\n  };\n  \n  return effects[milestoneType] || ['routine_social_activities'];\n}\n\nfunction generateMilestonePlayerHooks(milestoneType) {\n  const hooks = {\n    'weekly': ['market_opportunities', 'information_gathering', 'social_networking'],\n    'monthly': ['guild_quests', 'political_events', 'long_term_contracts'],\n    'yearly': ['major_festivals', 'tournaments', 'special_events']\n  };\n  \n  return hooks[milestoneType] || ['time_based_opportunities'];\n}\n\nfunction generateWeatherEvent(newTime, worldState) {\n  const weatherTypes = {\n    'spring': ['rain_shower', 'thunderstorm', 'clear_skies', 'light_wind'],\n    'summer': ['heat_wave', 'thunderstorm', 'clear_hot', 'hazy'],\n    'autumn': ['rain_storm', 'fog', 'clear_cool', 'strong_winds'],\n    'winter': ['snowfall', 'blizzard', 'clear_cold', 'ice_storm']\n  };\n  \n  const seasonWeather = weatherTypes[newTime.current_season] || ['clear'];\n  const weather = seasonWeather[Math.floor(Math.random() * seasonWeather.length)];\n  \n  return {\n    id: `weather_${Date.now()}`,\n    type: 'weather_event',\n    subtype: weather,\n    description: `The weather changes to ${weather.replace('_', ' ')}`,\n    impact_level: 'minor',\n    environmental_effects: generateWeatherEffects(weather),\n    travel_effects: generateWeatherTravelEffects(weather),\n    visibility_effects: generateWeatherVisibilityEffects(weather),\n    player_hooks: generateWeatherPlayerHooks(weather),\n    duration: calculateWeatherDuration(weather),\n    timestamp: new Date().toISOString()\n  };\n}\n\nfunction generateWeatherEffects(weather) {\n  const effects = {\n    'rain_shower': ['wet_conditions', 'reduced_visibility', 'plant_growth'],\n    'thunderstorm': ['lightning_risk', 'heavy_rain', 'strong_winds'],\n    'heat_wave': ['dehydration_risk', 'heat_exhaustion', 'fire_danger'],\n    'snowfall': ['cold_exposure', 'travel_difficulty', 'beauty'],\n    'blizzard': ['whiteout_conditions', 'extreme_cold', 'survival_challenge'],\n    'fog': ['severely_reduced_visibility', 'eerie_atmosphere', 'navigation_difficulty'],\n    'clear_skies': ['excellent_visibility', 'pleasant_conditions', 'travel_favorable']\n  };\n  \n  return effects[weather] || ['weather_change'];\n}\n\nfunction generateWeatherTravelEffects(weather) {\n  const effects = {\n    'rain_shower': { speed_penalty: 0.2, difficulty_increase: 0.1 },\n    'thunderstorm': { speed_penalty: 0.5, difficulty_increase: 0.3 },\n    'heat_wave': { speed_penalty: 0.3, difficulty_increase: 0.2 },\n    'snowfall': { speed_penalty: 0.4, difficulty_increase: 0.25 },\n    'blizzard': { speed_penalty: 0.8, difficulty_increase: 0.6 },\n    'fog': { speed_penalty: 0.3, difficulty_increase: 0.2 },\n    'clear_skies': { speed_bonus: 0.1, difficulty_decrease: 0.05 }\n  };\n  \n  return effects[weather] || {};\n}\n\nfunction generateWeatherVisibilityEffects(weather) {\n  const effects = {\n    'rain_shower': { visibility_penalty: 0.2 },\n    'thunderstorm': { visibility_penalty: 0.5 },\n    'fog': { visibility_penalty: 0.8 },\n    'blizzard': { visibility_penalty: 0.9 },\n    'clear_skies': { visibility_bonus: 0.1 }\n  };\n  \n  return effects[weather] || {};\n}\n\nfunction generateWeatherPlayerHooks(weather) {\n  const hooks = {\n    'rain_shower': ['shelter_seeking', 'indoor_activities', 'puddle_jumping'],\n    'thunderstorm': ['lightning_magic_enhanced', 'shelter_quests', 'storm_related_encounters'],\n    'heat_wave': ['cooling_magic', 'water_sources', 'heat_protection'],\n    'snowfall': ['winter_sports', 'tracking_difficulties', 'shelter_needs'],\n    'blizzard': ['survival_challenges', 'shelter_quests', 'extreme_weather_adventures'],\n    'fog': ['mystery_encounters', 'navigation_challenges', 'ambush_opportunities'],\n    'clear_skies': ['travel_favorable', 'outdoor_activities', 'visibility_bonuses']\n  };\n  \n  return hooks[weather] || ['weather_adaptation'];\n}\n\nfunction calculateWeatherDuration(weather) {\n  const durations = {\n    'rain_shower': '1-3 hours',\n    'thunderstorm': '2-6 hours',\n    'heat_wave': '1-3 days',\n    'snowfall': '4-12 hours',\n    'blizzard': '6-24 hours',\n    'fog': '2-8 hours',\n    'clear_skies': '1-3 days'\n  };\n  \n  return durations[weather] || 'few hours';\n}\n\nfunction generateTimeBasedEncounter(newTime, worldState) {\n  const encounterTypes = {\n    'morning': ['traveling_merchants', 'early_risers', 'dawn_patrols'],\n    'afternoon': ['bandit_ambush', 'traveling_nobles', 'merchant_caravans'],\n    'evening': ['night_creatures', 'drunk_patrons', 'city_watch'],\n    'night': ['nocturnal_predators', 'shady_dealers', 'supernatural_beings']\n  };\n  \n  const timeEncounters = encounterTypes[newTime.time_of_day] || ['random_encounter'];\n  const encounter = timeEncounters[Math.floor(Math.random() * timeEncounters.length)];\n  \n  return {\n    id: `time_encounter_${Date.now()}`,\n    type: 'time_based_encounter',\n    subtype: encounter,\n    description: `A ${encounter.replace('_', ' ')} is encountered due to the time of day`,\n    impact_level: 'moderate',\n    encounter_details: generateEncounterDetails(encounter, newTime),\n    player_hooks: generateEncounterPlayerHooks(encounter),\n    difficulty_modifier: calculateEncounterDifficultyModifier(newTime, encounter),\n    timestamp: new Date().toISOString()\n  };\n}\n\nfunction generateEncounterDetails(encounter, timeContext) {\n  const details = {\n    'traveling_merchants': {\n      count: Math.floor(Math.random() * 3) + 1,\n      goods: ['general_merchandise', 'specialty_items'],\n      attitude: 'friendly',\n      interaction_type: 'trade'\n    },\n    'bandit_ambush': {\n      count: Math.floor(Math.random() * 4) + 2,\n      motivation: 'robbery',\n      tactics: 'ambush',\n      interaction_type: 'combat'\n    },\n    'nocturnal_predators': {\n      creatures: ['wolves', 'bears', 'magical_beasts'],\n      motivation: 'hunting',\n      hostility_level: 'high',\n      interaction_type: 'combat_or_flee'\n    },\n    'shady_dealers': {\n      specialty: ['illegal_goods', 'information', 'services'],\n      location: 'shadows_or_back_rooms',\n      risk_level: 'variable',\n      interaction_type: 'negotiation'\n    }\n  };\n  \n  return details[encounter] || { interaction_type: 'roleplay' };\n}\n\nfunction generateEncounterPlayerHooks(encounter) {\n  const hooks = {\n    'traveling_merchants': ['trading_opportunities', 'information_gathering', 'employment'],\n    'bandit_ambush': ['combat_challenge', 'morality_choices', 'treasure_recovery'],\n    'nocturnal_predators': ['survival_challenge', 'combat_encounter', 'tracking_opportunity'],\n    'shady_dealers': ['illegal_acquisition', 'information_purchase', 'risk_vs_reward']\n  };\n  \n  return hooks[encounter] || ['roleplay_opportunity'];\n}\n\nfunction calculateEncounterDifficultyModifier(timeContext, encounter) {\n  let modifier = 0;\n  \n  // Time of day modifiers\n  if (timeContext.time_of_day === 'night') {\n    modifier += 0.2; // Night encounters are harder\n  }\n  \n  // Weather modifiers would be added here if weather was tracked\n  \n  // Encounter type modifiers\n  const encounterModifiers = {\n    'bandit_ambush': 0.1,\n    'nocturnal_predators': 0.15,\n    'supernatural_beings': 0.2\n  };\n  \n  modifier += encounterModifiers[encounter] || 0;\n  \n  return modifier;\n}\n\nfunction generateNPCScheduleEvents(newTime, worldState) {\n  const events = [];\n  \n  if (worldState.npcs) {\n    worldState.npcs.forEach(npc => {\n      const scheduleEvent = generateNPCScheduleEvent(npc, newTime);\n      if (scheduleEvent) {\n        events.push(scheduleEvent);\n      }\n    });\n  }\n  \n  return events;\n}\n\nfunction generateNPCScheduleEvent(npc, timeContext) {\n  // Only create events for important NPCs or those with specific schedules\n  if (!npc.important && !npc.schedule) {\n    return null;\n  }\n  \n  const scheduleActivities = {\n    'morning': ['shop_opening', 'work_start', 'patrol_begin'],\n    'afternoon': ['busy_work', 'customer_service', 'meetings'],\n    'evening': ['shop_closing', 'leisure_time', 'socializing'],\n    'night': ['sleeping', 'night_work', 'guard_duty']\n  };\n  \n  const activities = scheduleActivities[timeContext.time_of_day] || ['routine_activity'];\n  const activity = activities[Math.floor(Math.random() * activities.length)];\n  \n  return {\n    id: `npc_schedule_${npc.id}_${Date.now()}`,\n    type: 'npc_schedule_event',\n    npc_id: npc.id,\n    npc_name: npc.name,\n    activity,\n    location: npc.location || 'unknown',\n    description: `${npc.name} is ${activity.replace('_', ' ')}`,\n    impact_level: 'trivial',\n    player_relevant: npc.important || Math.random() < 0.1,\n    timestamp: new Date().toISOString()\n  };\n}\n\nfunction calculateTimePriority(campaign) {\n  let priority = 5;\n  \n  // Higher priority for campaigns with more time-sensitive elements\n  if (campaign.world_state?.quests) {\n    const timeSensitiveQuests = campaign.world_state.quests.filter(quest => \n      quest.time_limit && quest.time_limit > 0\n    );\n    priority += timeSensitiveQuests.length * 2;\n  }\n  \n  // Higher priority for campaigns with active time-based events\n  if (campaign.time_events && campaign.time_events.length > 0) {\n    priority += campaign.time_events.length;\n  }\n  \n  // Higher priority for campaigns with complex schedules\n  if (campaign.world_state?.npcs && campaign.world_state.npcs.length > 20) {\n    priority += 3;\n  }\n  \n  return Math.min(priority, 10);\n}\n\nreturn [{\n  json: {\n    ...timeConfig,\n    campaigns: processedCampaigns,\n    total_campaigns: processedCampaigns.length,\n    processing_timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "process-time-advancement",
+      "name": "Process Time Advancement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "process-campaigns-individually",
+      "name": "Process Campaigns Individually",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate time-based narrative events for campaign\nconst timeConfig = $input.first().json;\nconst campaign = $input.first().json.campaigns[$input.first().json.currentCampaignIndex || 0];\n\nconst { campaignId, current_time, new_time, time_events, time_analysis } = campaign;\n\n// Combine time events and analysis into narrative structure\nconst narrativeEvents = time_events.map(event => ({\n  ...event,\n  time_context: {\n    advancement: campaign.advancement_amount,\n    old_time: current_time,\n    new_time: new_time,\n    time_changes: time_analysis\n  },\n  campaign_context: {\n    id: campaignId,\n    world_state: campaign.world_state,\n    settings: campaign.campaign_settings\n  }\n}));\n\n// Generate additional atmospheric events based on time changes\nconst atmosphericEvents = generateAtmosphericEvents(new_time, time_analysis, campaign.world_state);\n\n// Generate player-relevant time notifications\nconst playerNotifications = generatePlayerTimeNotifications(narrativeEvents, atmosphericEvents, new_time);\n\n// Generate time advancement consequences\nconst timeConsequences = generateTimeConsequences(new_time, time_analysis, campaign.world_state);\n\nfunction generateAtmosphericEvents(newTime, timeAnalysis, worldState) {\n  const events = [];\n  \n  // Environmental descriptions based on time and season\n  const seasonalDescriptions = {\n    'spring': {\n      'morning': 'Dew glistens on new growth as birdsong fills the air',\n      'afternoon': 'Warm sunshine encourages flowers to open their petals',\n      'evening': 'Crisp air carries the scent of new blossoms',\n      'night': 'Cool breezes whisper through newly leafed trees'\n    },\n    'summer': {\n      'morning': 'The sun rises quickly, promising another hot day',\n      'afternoon': 'Heat shimmers above the earth in the midday sun',\n      'evening': 'Warm twilight extends the day\\'s golden hours',\n      'night': 'Warm night air is filled with insect song'\n    },\n    'autumn': {\n      'morning': 'Misty mornings hint at the coming winter',\n      'afternoon': 'Golden light filters through turning leaves',\n      'evening': 'Crisp air carries the scent of fallen leaves',\n      'night': 'Long nights bring the first taste of winter\\'s chill'\n    },\n    'winter': {\n      'morning': 'Frost covers everything in a crystalline layer',\n      'afternoon': 'Weak sun provides little warmth against the cold',\n      'evening': 'Early darkness descends with falling temperatures',\n      'night': 'Biting cold reminds all of winter\\'s dominance'\n    }\n  };\n  \n  const description = seasonalDescriptions[newTime.current_season]?.[newTime.time_of_day];\n  if (description) {\n    events.push({\n      id: `atmosphere_${Date.now()}`,\n      type: 'atmospheric_description',\n      description,\n      impact_level: 'trivial',\n      mood: determineMoodFromTime(newTime),\n      sensory_details: generateSensoryDetails(newTime),\n      timestamp: new Date().toISOString()\n    });\n  }\n  \n  return events;\n}\n\nfunction determineMoodFromTime(timeContext) {\n  const moods = {\n    'spring': {\n      'morning': 'hopeful',\n      'afternoon': 'energetic',\n      'evening': 'peaceful',\n      'night': 'mysterious'\n    },\n    'summer': {\n      'morning': 'vibrant',\n      'afternoon': 'intense',\n      'evening': 'relaxed',\n      'night': 'languid'\n    },\n    'autumn': {\n      'morning': 'melancholy',\n      'afternoon': 'nostalgic',\n      'evening': 'cozy',\n      'night': 'somber'\n    },\n    'winter': {\n      'morning': 'harsh',\n      'afternoon': 'enduring',\n      'evening': 'introspective',\n      'night': 'harsh'\n    }\n  };\n  \n  return moods[timeContext.current_season]?.[timeContext.time_of_day] || 'neutral';\n}\n\nfunction generateSensoryDetails(timeContext) {\n  const details = {\n    'morning': ['birdsong', 'dew', 'sunlight', 'morning_breeze'],\n    'afternoon': ['buzzing_insects', 'warmth', 'shadows', 'activity'],\n    'evening': ['crickets', 'cooling_air', 'colors', 'social_sounds'],\n    'night': ['stars', 'silence', 'nocturnal_sounds', 'darkness']\n  };\n  \n  return details[timeContext.time_of_day] || ['time_passing'];\n}\n\nfunction generatePlayerTimeNotifications(narrativeEvents, atmosphericEvents, timeContext) {\n  const notifications = [];\n  \n  // Significant time changes\n  const significantEvents = narrativeEvents.filter(e => \n    e.impact_level === 'major' || e.type === 'seasonal_transition'\n  );\n  \n  significantEvents.forEach(event => {\n    notifications.push({\n      type: 'world_change',\n      title: `Time Progress: ${event.type.replace('_', ' ').toUpperCase()}`,\n      description: event.description,\n      urgency: event.impact_level === 'major' ? 'high' : 'medium',\n      player_actionable: true\n    });\n  });\n  \n  // Atmospheric notifications\n  if (atmosphericEvents.length > 0) {\n    notifications.push({\n      type: 'atmospheric',\n      title: `Time: ${timeContext.time_of_day.charAt(0).toUpperCase() + timeContext.time_of_day.slice(1)}`,\n      description: atmosphericEvents[0].description,\n      urgency: 'low',\n      player_actionable: false\n    });\n  }\n  \n  // Weather notifications\n  const weatherEvents = narrativeEvents.filter(e => e.type === 'weather_event');\n  weatherEvents.forEach(event => {\n    notifications.push({\n      type: 'weather',\n      title: `Weather: ${event.subtype.replace('_', ' ').toUpperCase()}`,\n      description: event.description,\n      urgency: event.impact_level === 'major' ? 'medium' : 'low',\n      player_actionable: true\n    });\n  });\n  \n  return notifications;\n}\n\nfunction generateTimeConsequences(newTime, timeAnalysis, worldState) {\n  const consequences = [];\n  \n  // Seasonal consequences\n  timeAnalysis.seasonal_transitions.forEach(transition => {\n    consequences.push({\n      type: 'seasonal_consequence',\n      transition: `${transition.from}_to_${transition.to}`,\n      effects: [\n        'environmental_changes',\n        'social_routine_adjustments',\n        'economic_shifts'\n      ],\n      duration: 'seasonal',\n      player_impact: 'moderate'\n    });\n  });\n  \n  // Time of day consequences\n  consequences.push({\n    type: 'time_of_day_consequence',\n    period: newTime.time_of_day,\n    effects: [\n      'npc_availability_changes',\n      'activity_level_adjustments',\n      'service_availability'\n    ],\n    duration: 'daily_cycle',\n    player_impact: 'minor'\n  });\n  \n  // Weather consequences\n  const weatherEvents = timeAnalysis.environmental_factors.filter(f => f.type === 'weather_change');\n  weatherEvents.forEach(weather => {\n    consequences.push({\n      type: 'weather_consequence',\n      weather_type: 'dynamic',\n      effects: [\n        'travel_condition_changes',\n        'visibility_adjustments',\n        'comfort_level_changes'\n      ],\n      duration: 'hours_to_days',\n      player_impact: 'minor_to_moderate'\n    });\n  });\n  \n  return consequences;\n}\n\nreturn [{\n  json: {\n    campaignId,\n    time_advancement: {\n      old_time: current_time,\n      new_time: newTime,\n      advancement: campaign.advancement_amount,\n      time_analysis\n    },\n    narrative_events: narrativeEvents,\n    atmospheric_events: atmosphericEvents,\n    player_notifications: playerNotifications,\n    time_consequences: timeConsequences,\n    total_events: narrativeEvents.length + atmosphericEvents.length,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "generate-time-narratives",
+      "name": "Generate Time Narratives",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.DEEPSEEK_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "deepseek-chat"
+            },
+            {
+              "name": "messages",
+              "value": "={{[{\n  \"role\": \"system\",\n  \"content\": \"You are a master time and atmosphere storyteller for a D&D campaign. Transform the passage of time and seasonal changes into beautiful, immersive descriptions that make the world feel alive and breathing. Focus on sensory details, emotional resonance, and how time affects the world and its inhabitants.\\n\\nFor each time-based event, provide:\\n1. A vivid, literary description (2-3 sentences) that appeals to multiple senses\\n2. How different character classes might perceive this time change\\n3. Subtle hints of adventures or mysteries that might unfold\\n4. How the world's inhabitants react to this time progression\\n5. Foreshadowing of what this time change might bring\\n\\nFormat as JSON with keys: literary_description, character_perceptions, adventure_hints, world_reactions, foreshadowing\"\n}], [\n  {\n    \"role\": \"user\",\n    \"content\": \"Generate time-based narratives for campaign {{ $json.campaignId }}:\\n\\nTime Advancement: {{ JSON.stringify($json.time_advancement, null, 2) }}\\n\\nNarrative Events: {{ JSON.stringify($json.narrative_events, null, 2) }}\\n\\nAtmospheric Events: {{ JSON.stringify($json.atmospheric_events, null, 2) }}\\n\\nPlayer Notifications: {{ JSON.stringify($json.player_notifications, null, 2) }}\"\n  }\n])}}"
+            },
+            {
+              "name": "temperature",
+              "value": "0.9"
+            },
+            {
+              "name": "max_tokens",
+              "value": "2000"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "deepseek-time-narratives",
+      "name": "DeepSeek - Generate Time Narratives",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process DeepSeek narratives and prepare time state updates\nconst timeData = $input.first().json;\nconst deepseekResponse = $input.last().json;\n\nlet narrativeData = {};\ntry {\n  const content = deepseekResponse.choices[0].message.content;\n  narrativeData = JSON.parse(content);\n} catch (error) {\n  console.error('Failed to parse DeepSeek time narrative:', error);\n  narrativeData = {\n    literary_description: 'Time passes in the world, bringing changes both subtle and profound.',\n    character_perceptions: 'Different characters notice different aspects of the passing time.',\n    adventure_hints: 'New opportunities may arise with the changing time.',\n    world_reactions: 'The world and its inhabitants adapt to the flow of time.',\n    foreshadowing: 'Further changes may come with continued time progression.'\n  };\n}\n\n// Enrich time events with literary descriptions\nconst enrichedEvents = timeData.narrative_events.map((event, index) => {\n  const eventNarrative = narrativeData.events?.[index] || narrativeData;\n  \n  return {\n    ...event,\n    literary_description: eventNarrative.literary_description || event.description,\n    character_perceptions: eventNarrative.character_perceptions || 'Various characters notice this change.',\n    adventure_hints: eventNarrative.adventure_hints || 'This may present new opportunities.',\n    world_reactions: eventNarrative.world_reactions || 'The world responds to this change.',\n    foreshadowing: eventNarrative.foreshadowing || 'Further developments may follow.',\n    processed: true\n  };\n});\n\n// Enrich atmospheric events\nconst enrichedAtmosphericEvents = timeData.atmospheric_events.map(event => ({\n  ...event,\n  literary_description: narrativeData.literary_description || event.description,\n  character_perceptions: narrativeData.character_perceptions || 'This affects different characters in various ways.',\n  processed: true\n}));\n\n// Prepare time state updates\nconst timeStateUpdates = {\n  new_time: timeData.time_advancement.new_time,\n  time_passed: timeData.time_advancement.advancement,\n  time_analysis: timeData.time_advancement.time_analysis,\n  last_update: new Date().toISOString(),\n  narrative_summary: narrativeData.literary_description || 'Time progresses naturally',\n  significant_events: enrichedEvents.filter(e => e.impact_level === 'major'),\n  player_notifications: timeData.player_notifications,\n  consequences: timeData.time_consequences\n};\n\n// Generate time advancement summary\nconst timeSummary = generateTimeSummary(timeData, enrichedEvents, enrichedAtmosphericEvents, narrativeData);\n\nfunction generateTimeSummary(timeData, events, atmosphericEvents, narrativeData) {\n  return {\n    time_advancement_id: `time_${timeData.campaignId}_${Date.now()}`,\n    campaign_id: timeData.campaignId,\n    processing_time: new Date().toISOString(),\n    time_changes: {\n      old_time: {\n        date: timeData.time_advancement.old_time.current_date.toISOString().split('T')[0],\n        time: `${timeData.time_advancement.old_time.current_time.hours}:${String(timeData.time_advancement.old_time.current_time.minutes).padStart(2, '0')}`,\n        season: timeData.time_advancement.old_time.current_season,\n        day_of_week: timeData.time_advancement.old_time.day_of_week,\n        time_of_day: timeData.time_advancement.old_time.time_of_day\n      },\n      new_time: {\n        date: timeData.time_advancement.new_time.current_date.toISOString().split('T')[0],\n        time: `${timeData.time_advancement.new_time.current_time.hours}:${String(timeData.time_advancement.new_time.current_time.minutes).padStart(2, '0')}`,\n        season: timeData.time_advancement.new_time.current_season,\n        day_of_week: timeData.time_advancement.new_time.day_of_week,\n        time_of_day: timeData.time_advancement.new_time.time_of_day,\n        day_count: timeData.time_advancement.new_time.day_count\n      },\n      advancement: {\n        amount: timeData.time_advancement.advancement.amount,\n        unit: timeData.time_advancement.advancement.unit,\n        minutes_passed: timeData.time_advancement.advancement.in_minutes\n      }\n    },\n    events_summary: {\n      total_events: events.length + atmosphericEvents.length,\n      narrative_events: events.length,\n      atmospheric_events: atmosphericEvents.length,\n      major_events: events.filter(e => e.impact_level === 'major').length,\n      seasonal_transitions: events.filter(e => e.type === 'seasonal_transition').length,\n      weather_events: events.filter(e => e.type === 'weather_event').length,\n      time_based_encounters: events.filter(e => e.type === 'time_based_encounter').length\n    },\n    narrative_summary: {\n      literary_description: narrativeData.literary_description,\n      character_perceptions: narrativeData.character_perceptions,\n      adventure_hints: narrativeData.adventure_hints,\n      world_reactions: narrativeData.world_reactions,\n      foreshadowing: narrativeData.foreshadowing\n    },\n    player_impact: {\n      notifications: timeData.player_notifications.length,\n      actionable_events: events.filter(e => e.player_actionable).length,\n      adventure_opportunities: events.filter(e => e.player_hooks && e.player_hooks.length > 0).length,\n      atmospheric_changes: atmosphericEvents.length\n    },\n    world_state_impact: {\n      npc_schedule_changes: events.filter(e => e.type === 'npc_schedule_event').length,\n      environmental_effects: timeData.time_advancement.time_analysis.environmental_factors.length,\n      social_factors: timeData.time_advancement.time_analysis.social_factors.length,\n      magical_factors: timeData.time_advancement.time_analysis.magical_factors.length\n    },\n    next_time_milestones: calculateNextTimeMilestones(timeData.time_advancement.new_time)\n  };\n}\n\nfunction calculateNextTimeMilestones(newTime) {\n  const milestones = [];\n  \n  // Next time of day change\n  const nextTimeOfDay = getNextTimeOfDay(newTime.time_of_day);\n  const hoursUntilNext = getHoursUntilNextTimeOfDay(newTime.current_time.hours, newTime.time_of_day);\n  \n  milestones.push({\n    type: 'time_of_day_change',\n    description: `Transition to ${nextTimeOfDay}`,\n    time_until: `${hoursUntilNext} hours`,\n    impact_level: 'minor'\n  });\n  \n  // Next day\n  const hoursUntilTomorrow = 24 - newTime.current_time.hours;\n  milestones.push({\n    type: 'new_day',\n    description: 'Beginning of new day',\n    time_until: `${hoursUntilTomorrow} hours`,\n    impact_level: 'minor'\n  });\n  \n  // Next week\n  const daysUntilWeek = 7 - (newTime.day_of_week % 7);\n  milestones.push({\n    type: 'new_week',\n    description: 'Beginning of new week',\n    time_until: `${daysUntilWeek} days`,\n    impact_level: 'minor'\n  });\n  \n  // Next season (simplified)\n  const seasons = ['spring', 'summer', 'autumn', 'winter'];\n  const currentSeasonIndex = seasons.indexOf(newTime.current_season);\n  const nextSeasonIndex = (currentSeasonIndex + 1) % 4;\n  const daysUntilSeason = getDaysUntilNextSeason(newTime.current_season, newTime.current_date);\n  \n  milestones.push({\n    type: 'seasonal_transition',\n    description: `Transition to ${seasons[nextSeasonIndex]}`,\n    time_until: `${daysUntilSeason} days`,\n    impact_level: 'major'\n  });\n  \n  return milestones.sort((a, b) => {\n    const aHours = parseTimeUntil(a.time_until);\n    const bHours = parseTimeUntil(b.time_until);\n    return aHours - bHours;\n  });\n}\n\nfunction getNextTimeOfDay(currentTimeOfDay) {\n  const sequence = ['morning', 'afternoon', 'evening', 'night'];\n  const currentIndex = sequence.indexOf(currentTimeOfDay);\n  return sequence[(currentIndex + 1) % 4];\n}\n\nfunction getHoursUntilNextTimeOfDay(currentHour, currentTimeOfDay) {\n  const transitions = {\n    'morning': 12, // noon\n    'afternoon': 17, // 5 PM\n    'evening': 21, // 9 PM\n    'night': 6 // 6 AM (next day)\n  };\n  \n  const nextHour = transitions[currentTimeOfDay];\n  if (nextHour > currentHour) {\n    return nextHour - currentHour;\n  } else {\n    return (24 - currentHour) + nextHour;\n  }\n}\n\nfunction getDaysUntilNextSeason(currentSeason, currentDate) {\n  const seasonStarts = {\n    'spring': 2, // March\n    'summer': 5, // June\n    'autumn': 8, // September\n    'winter': 11 // December\n  };\n  \n  const currentMonth = currentDate.getMonth();\n  const nextSeasonStart = seasonStarts[currentSeason];\n  \n  if (nextSeasonStart > currentMonth) {\n    return nextSeasonStart - currentMonth;\n  } else {\n    return (12 - currentMonth) + nextSeasonStart;\n  }\n}\n\nfunction parseTimeUntil(timeString) {\n  const match = timeString.match(/(\\d+)/);\n  return match ? parseInt(match[1]) : Infinity;\n}\n\nreturn [{\n  json: {\n    campaignId: timeData.campaignId,\n    time_advancement: timeData.time_advancement,\n    enriched_events: enrichedEvents,\n    enriched_atmospheric_events: enrichedAtmosphericEvents,\n    time_state_updates: timeStateUpdates,\n    time_summary: timeSummary,\n    player_notifications: timeData.player_notifications,\n    time_consequences: timeData.time_consequences,\n    narrative_data: narrativeData,\n    timestamp: new Date().toISOString(),\n    processed_by: 'seasonal-time-system'\n  }\n}];"
+      },
+      "id": "process-time-narratives",
+      "name": "Process Time Narratives",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.NEO4J_URI }}",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.NEO4J_PASSWORD }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "=MATCH (c:Campaign {id: '{{ $json.campaignId }}' }) SET c.timeData = {{ JSON.stringify($json.time_state_updates) }}, c.lastTimeUpdate = '{{ $json.timestamp }}', c.timeHistory = COALESCE(c.timeHistory, []) + [{{ JSON.stringify({ advancement_id: $json.time_summary.time_advancement_id, summary: $json.time_summary, events: $json.enriched_events }) }}] RETURN c"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-time-state-neo4j",
+      "name": "Neo4j - Update Time State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.CAMPAIGN_API_URL }}/api/campaigns/{{ $json.campaignId }}/time/advance",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.CAMPAIGN_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "time_advancement",
+              "value": "={{ $json.time_advancement }}"
+            },
+            {
+              "name": "events",
+              "value": "={{ $json.enriched_events }}"
+            },
+            {
+              "name": "atmospheric_events",
+              "value": "={{ $json.enriched_atmospheric_events }}"
+            },
+            {
+              "name": "player_notifications",
+              "value": "={{ $json.player_notifications }}"
+            },
+            {
+              "name": "time_summary",
+              "value": "={{ $json.time_summary }}"
+            },
+            {
+              "name": "narrative_data",
+              "value": "={{ $json.narrative_data }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "notify-campaign-time",
+      "name": "Notify Campaign Time",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate final time advancement response\nconst timeData = $input.first().json;\n\nconst response = {\n  success: true,\n  advancement_id: timeData.time_summary.time_advancement_id,\n  campaign_id: timeData.campaignId,\n  time_changes: {\n    old_time: timeData.time_summary.time_changes.old_time,\n    new_time: timeData.time_summary.time_changes.new_time,\n    advancement: timeData.time_summary.time_changes.advancement\n  },\n  narrative_summary: timeData.time_summary.narrative_summary.literary_description,\n  events_processed: timeData.time_summary.events_summary.total_events,\n  major_events: timeData.time_summary.events_summary.major_events,\n  seasonal_changes: timeData.time_summary.events_summary.seasonal_transitions > 0,\n  player_notifications: timeData.time_summary.player_impact.notifications,\n  actionable_events: timeData.time_summary.player_impact.actionable_events,\n  adventure_opportunities: timeData.time_summary.player_impact.adventure_opportunities,\n  next_milestones: timeData.time_summary.next_time_milestones,\n  world_state_impact: timeData.time_summary.world_state_impact,\n  timestamp: timeData.timestamp\n};\n\nreturn [{ json: response }];"
+      },
+      "id": "generate-time-response",
+      "name": "Generate Time Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2440, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_WORLD_SHEET_ID }}",
+        "range": "Time_Advancement!A:O",
+        "options": {}
+      },
+      "id": "log-time-advancement",
+      "name": "Log Time Advancement",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2660, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "time-response",
+      "name": "Time Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2880, 300]
+    }
+  ],
+  "connections": {
+    "Time Passage Trigger": {
+      "main": [
+        [
+          {
+            "node": "Initialize Time Advancement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Time Trigger": {
+      "main": [
+        [
+          {
+            "node": "Initialize Time Advancement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Time Advancement": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Fetch Time State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j - Fetch Time State": {
+      "main": [
+        [
+          {
+            "node": "Process Time Advancement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Time Advancement": {
+      "main": [
+        [
+          {
+            "node": "Process Campaigns Individually",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Campaigns Individually": {
+      "main": [
+        [
+          {
+            "node": "Generate Time Narratives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Time Narratives": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek - Generate Time Narratives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek - Generate Time Narratives": {
+      "main": [
+        [
+          {
+            "node": "Process Time Narratives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Time Narratives": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Update Time State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j - Update Time State": {
+      "main": [
+        [
+          {
+            "node": "Notify Campaign Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Campaign Time": {
+      "main": [
+        [
+          {
+            "node": "Generate Time Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Time Response": {
+      "main": [
+        [
+          {
+            "node": "Log Time Advancement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Time Advancement": {
+      "main": [
+        [
+          {
+            "node": "Time Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicyDefaultOption": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T13:00:00.000Z",
+      "updatedAt": "2024-10-23T13:00:00.000Z",
+      "id": "time-system",
+      "name": "Time System"
+    },
+    {
+      "createdAt": "2024-10-23T13:00:00.000Z",
+      "updatedAt": "2024-10-23T13:00:00.000Z",
+      "id": "world-building",
+      "name": "World Building"
+    }
+  ],
+  "triggerCount": 2,
+  "updatedAt": "2024-10-23T13:00:00.000Z",
+  "versionId": "1.0.0"
+}

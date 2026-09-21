@@ -1,0 +1,185 @@
+{
+  "name": "com.dndstreaming.streamdeck",
+  "displayName": "D&D Streaming Platform",
+  "version": "1.0.0",
+  "description": "Professional D&D streaming controls for Stream Deck",
+  "license": "MIT",
+  "main": "src/plugin.js",
+  "scripts": {
+    "build": "webpack --mode production",
+    "dev": "webpack --mode development --watch",
+    "test": "jest"
+  },
+  "keywords": [
+    "stream-deck",
+    "dnd",
+    "streaming",
+    "obs",
+    "twitch",
+    "gaming"
+  ],
+  "author": "D&D Streaming Platform",
+  "homepage": "https://github.com/dnd-streaming-platform/stream-deck-plugin",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dnd-streaming-platform/stream-deck-plugin.git"
+  },
+  "dependencies": {
+    "@elgato/streamdeck": "^5.0.0",
+    "axios": "^1.5.1",
+    "ws": "^8.14.2",
+    "node-cron": "^3.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.0",
+    "@types/ws": "^8.5.7",
+    "ts-loader": "^9.4.4",
+    "typescript": "^5.2.2",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "copy-webpack-plugin": "^11.0.0"
+  },
+  "streamdeck": {
+    "category": "D&D Streaming",
+    "categoryicon": "images/category",
+    "codePath": "./dist",
+    "description": "Professional D&D streaming controls with OBS integration, scene switching, dice rolling, and audience engagement tools.",
+    "name": "D&D Streaming Platform",
+    "icon": "images/pluginIcon",
+    "url": "https://dndstreaming.com",
+    "version": "1.0.0",
+    "os": [
+      {
+        "platform": "mac",
+        "minVersion": "10.11"
+      },
+      {
+        "platform": "windows",
+        "minVersion": "10"
+      }
+    ],
+    "software": {
+      "minimumVersion": "6.4.0"
+    },
+    "actions": [
+      {
+        "name": "Start Stream",
+        "uuid": "com.dndstreaming.streamdeck.startstream",
+        "tooltip": "Start streaming on all configured platforms",
+        "icon": "images/actions/startstream",
+        "controllers": [
+          "Keypad",
+          "Encoder"
+        ]
+      },
+      {
+        "name": "Stop Stream",
+        "uuid": "com.dndstreaming.streamdeck.stopstream",
+        "tooltip": "Stop streaming on all platforms",
+        "icon": "images/actions/stopstream",
+        "controllers": [
+          "Keypad",
+          "Encoder"
+        ]
+      },
+      {
+        "name": "Scene Switcher",
+        "uuid": "com.dndstreaming.streamdeck.sceneswitcher",
+        "tooltip": "Switch between OBS scenes",
+        "icon": "images/actions/scenes",
+        "propertyInspector": "property-inspector/scene-switcher.html",
+        "controllers": [
+          "Keypad"
+        ]
+      },
+      {
+        "name": "Dice Roller",
+        "uuid": "com.dndstreaming.streamdeck.diceroller",
+        "tooltip": "Roll dice and show animated overlay",
+        "icon": "images/actions/dice",
+        "propertyInspector": "property-inspector/dice-roller.html",
+        "controllers": [
+          "Keypad"
+        ]
+      },
+      {
+        "name": "Character Display",
+        "uuid": "com.dndstreaming.streamdeck.characterdisplay",
+        "tooltip": "Show/hide character sheet overlay",
+        "icon": "images/actions/character",
+        "propertyInspector": "property-inspector/character-display.html",
+        "controllers": [
+          "Keypad"
+        ]
+      },
+      {
+        "name": "Quick Poll",
+        "uuid": "com.dndstreaming.streamdeck.quickpoll",
+        "tooltip": "Create quick polls for audience",
+        "icon": "images/actions/poll",
+        "propertyInspector": "property-inspector/quick-poll.html",
+        "controllers": [
+          "Keypad"
+        ]
+      },
+      {
+        "name": "Donation Alert",
+        "uuid": "com.dndstreaming.streamdeck.donationalert",
+        "tooltip": "Trigger donation celebration",
+        "icon": "images/actions/donation",
+        "controllers": [
+          "Keypad"
+        ]
+      },
+      {
+        "name": "Highlight Marker",
+        "uuid": "com.dndstreaming.streamdeck.highlightmarker",
+        "tooltip": "Mark current moment as highlight",
+        "icon": "images/actions/highlight",
+        "controllers": [
+          "Keypad"
+        ]
+      },
+      {
+        "name": "Chat Command",
+        "uuid": "com.dndstreaming.streamdeck.chatcommand",
+        "tooltip": "Send pre-configured chat messages",
+        "icon": "images/actions/chat",
+        "propertyInspector": "property-inspector/chat-command.html",
+        "controllers": [
+          "Keypad"
+        ]
+      },
+      {
+        "name": "Sound Board",
+        "uuid": "com.dndstreaming.streamdeck.soundboard",
+        "tooltip": "Trigger sound effects",
+        "icon": "images/actions/sound",
+        "propertyInspector": "property-inspector/sound-board.html",
+        "controllers": [
+          "Keypad"
+        ]
+      },
+      {
+        "name": "Lower Third",
+        "uuid": "com.dndstreaming.streamdeck.lowerthird",
+        "tooltip": "Show animated lower third",
+        "icon": "images/actions/lowerthird",
+        "propertyInspector": "property-inspector/lower-third.html",
+        "controllers": [
+          "Keypad"
+        ]
+      },
+      {
+        "name": "Stream Status",
+        "uuid": "com.dndstreaming.streamdeck.streamstatus",
+        "tooltip": "Display current stream information",
+        "icon": "images/actions/status",
+        "controllers": [
+          "Keypad",
+          "Encoder"
+        ]
+      }
+    ]
+  }
+}

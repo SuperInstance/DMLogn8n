@@ -1,0 +1,784 @@
+Comprehensive Developer Guide: Building a Z.ai GLM-4.6 Coding Agent in n8n
+Table of Contents
+Overview & Architecture
+
+Prerequisites & Setup
+
+Building the Core Coding Agent
+
+Integration Patterns for Existing Agents
+
+Advanced Configuration & Optimization
+
+Production Deployment
+
+Troubleshooting & Monitoring
+
+Overview & Architecture
+System Design
+Your coding agent system enables non-technical agents to delegate complex coding tasks to a specialized Z.ai GLM-4.6 powered specialist. This follows a "master-apprentice" pattern where generalist agents act as project managers and the coding agent executes technical implementation.
+
+Key Components
+Z.ai Coding Agent: Dedicated workflow handling all code generation
+
+Manager Agents: Your existing workflows that need coding capabilities
+
+Communication Layer: Webhooks and HTTP requests for inter-agent communication
+
+Validation & Safety: Code review and execution safeguards
+
+Prerequisites & Setup
+1. Z.ai API Configuration
+bash
+# Get your API credentials from:
+# https://open.bigmodel.cn/usercenter/apikeys
+
+# Expected API format:
+API Endpoint: https://api.z.ai/v1/chat/completions
+Model: glm-4-6
+Pricing: ~$0.6/M input tokens, $2.2/M output tokens
+2. n8n Preparation
+Ensure n8n version 1.0+ (for improved webhook handling)
+
+Verify you have HTTP Request node access
+
+Set up credential storage for API keys
+
+3. Required Nodes
+HTTP Request (core)
+
+Webhook (trigger)
+
+Code (JavaScript, processing)
+
+IF (error handling)
+
+Switch (routing)
+
+Building the Core Coding Agent
+Step 1: Create the Base Workflow
+Workflow Name: Z.ai Coding Specialist
+
+Description: "Specialized agent for generating, explaining, and debugging code across multiple languages."
+
+Step 2: Webhook Configuration
+text
+Webhook Node: "Coding Request Ingress"
+- Method: POST
+- Path: /coding-specialist
+- Response Mode: Last Node
+Purpose: Creates an API endpoint that other agents can call:
+
+javascript
+// Example request from manager agent
+{
+  "task_type": "generate_script",
+  "language": "python",
+  "requirements": "File organizer with timestamp",
+  "complexity": "intermediate",
+  "context": "For automating project cleanup"
+}
+Step 3: Request Validation & Enrichment
+Add a Code Node after the webhook:
+
+javascript
+// Node: "Validate & Enrich Request"
+const input = $input.all()[0].json;
+
+// Validate required fields
+if (!input.requirements) {
+  throw new Error("Missing required field: 'requirements'");
+}
+
+// Set defaults and enrich request
+const enrichedRequest = {
+  // User provided
+  ...input,
+  
+  // System enriched
+  timestamp: new Date().toISOString(),
+  request_id: Math.random().toString(36).substring(7),
+  priority: input.priority || 'medium',
+  
+  // Coding-specific defaults
+  language: input.language || 'python',
+  include_comments: input.include_comments !== false,
+  include_tests: input.include_tests || false,
+  style_guide: input.style_guide || 'standard'
+};
+
+// Add system context based on task type
+const taskContexts = {
+  'generate_script': 'Generate a production-ready script that is well-documented and efficient.',
+  'debug_code': 'Analyze and fix the provided code. Explain the issue and solution.',
+  'explain_code': 'Provide a comprehensive explanation suitable for intermediate developers.',
+  'optimize_code': 'Improve performance and readability while maintaining functionality.'
+};
+
+enrichedRequest.system_context = taskContexts[input.task_type] || 'Provide helpful coding assistance.';
+
+return enrichedRequest;
+Step 4: Z.ai API Integration
+HTTP Request Node Configuration:
+
+json
+{
+  "method": "POST",
+  "url": "https://api.z.ai/v1/chat/completions",
+  "headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer {{ $vars.Z_AI_API_KEY }}"
+  },
+  "body": {
+    "model": "glm-4-6",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are an expert coding assistant. Follow these rules:\n\n1. Always respond with clean, production-quality code\n2. Include brief comments for complex sections\n3. Provide usage examples when relevant\n4. Consider error handling and edge cases\n5. Output in the requested programming language\n6. If requirements are unclear, make reasonable assumptions and note them\n\nContext: {{ $json.system_context }}"
+      },
+      {
+        "role": "user",
+        "content": "Language: {{ $json.language }}\nTask Type: {{ $json.task_type }}\nRequirements: {{ $json.requirements }}\n\nAdditional Context: {{ $json.context }}\n\nPlease provide the code with {{ $json.include_comments ? 'comments' : 'no comments' }} and {{ $json.include_tests ? 'include tests' : 'no tests needed' }}."
+      }
+    ],
+    "max_tokens": 4000,
+    "temperature": 0.2,
+    "top_p": 0.9
+  }
+}
+Step 5: Response Processing
+Code Node: "Extract & Structure Code"
+
+javascript
+const apiResponse = $input.all()[0].json;
+
+if (!apiResponse.choices || apiResponse.choices.length === 0) {
+  throw new Error("No response received from coding agent");
+}
+
+const messageContent = apiResponse.choices[0].message.content;
+
+// Enhanced code extraction with multiple patterns
+function extractCodeBlocks(content) {
+  const patterns = [
+    /```(?:\w+)?\n([\s\S]*?)```/,  // ```code``` blocks
+    /`{3,}([\s\S]*?)`{3,}/,        // Any ``` block
+    /"([^"\n]*(?:\n[^"\n]*)*)"?$/,  // String content
+  ];
+
+  for (const pattern of patterns) {
+    const match = content.match(pattern);
+    if (match && match[1]?.trim()) {
+      return match[1].trim();
+    }
+  }
+  
+  // If no code blocks found, return the entire content
+  return content.trim();
+}
+
+const extractedCode = extractCodeBlocks(messageContent);
+
+// Analyze code characteristics
+function analyzeCode(code) {
+  const lines = code.split('\n');
+  const commentLines = lines.filter(line => 
+    line.trim().startsWith('//') || 
+    line.trim().startsWith('#') || 
+    line.trim().startsWith('/*')
+  ).length;
+
+  return {
+    line_count: lines.length,
+    comment_lines: commentLines,
+    comment_ratio: commentLines / lines.length,
+    has_function: /(function|def|fn|func)\s+\w+/.test(code),
+    has_class: /class\s+\w+/.test(code),
+    has_error_handling: /(try|catch|except|if\s+err)/i.test(code)
+  };
+}
+
+const codeAnalysis = analyzeCode(extractedCode);
+
+return {
+  // Request context
+  original_request: $input.all()[0].json,
+  
+  // Raw API response
+  raw_response: messageContent,
+  
+  // Processed code
+  extracted_code: extractedCode,
+  code_analysis: codeAnalysis,
+  
+  // Metadata
+  usage: apiResponse.usage,
+  model: apiResponse.model,
+  response_id: apiResponse.id,
+  processed_at: new Date().toISOString(),
+  
+  // Quality indicators
+  confidence_score: Math.min(0.9, codeAnalysis.comment_ratio * 2 + 0.5), // Simple heuristic
+  estimated_complexity: codeAnalysis.line_count > 50 ? 'high' : 
+                       codeAnalysis.line_count > 20 ? 'medium' : 'low'
+};
+Step 6: Quality Validation
+Code Node: "Validate Code Quality"
+
+javascript
+const response = $input.all()[0].json;
+
+function validateCode(code, analysis) {
+  const issues = [];
+  const warnings = [];
+  
+  // Critical validations
+  if (code.length < 10) {
+    issues.push('Code output too short - likely incomplete');
+  }
+  
+  if (analysis.line_count > 200) {
+    warnings.push('Generated code is quite long - consider breaking into modules');
+  }
+  
+  if (analysis.comment_ratio < 0.05 && analysis.line_count > 15) {
+    warnings.push('Low comment density - consider adding more documentation');
+  }
+  
+  // Security checks (basic)
+  const dangerousPatterns = [
+    /eval\s*\(/,
+    /exec\s*\(/,
+    /subprocess\.call/,
+    /os\.system/,
+    /__import__/
+  ];
+  
+  dangerousPatterns.forEach(pattern => {
+    if (pattern.test(code)) {
+      warnings.push('Code contains potentially dangerous operations');
+    }
+  });
+
+  return { issues, warnings };
+}
+
+const validation = validateCode(response.extracted_code, response.code_analysis);
+
+return {
+  ...response,
+  validation: {
+    ...validation,
+    passed: validation.issues.length === 0,
+    has_warnings: validation.warnings.length > 0
+  }
+};
+Step 7: Final Response Formatting
+Code Node: "Format Final Response"
+
+javascript
+const processedData = $input.all()[0].json;
+
+// Structure the response for manager agents
+const finalResponse = {
+  // Success indicator
+  success: processedData.validation.passed,
+  
+  // The actual deliverable
+  generated_code: processedData.extracted_code,
+  
+  // Metadata for decision making
+  metadata: {
+    request_id: processedData.original_request.request_id,
+    language: processedData.original_request.language,
+    complexity: processedData.estimated_complexity,
+    quality_score: processedData.confidence_score,
+    processing_time: new Date().toISOString()
+  },
+  
+  // Analysis for manager agents
+  analysis: {
+    code_characteristics: processedData.code_analysis,
+    validation_result: processedData.validation,
+    usage_metrics: processedData.usage
+  },
+  
+  // Raw data for debugging
+  raw_data: {
+    full_response: processedData.raw_response,
+    original_request: processedData.original_request
+  }
+};
+
+// If validation failed, include error information
+if (!processedData.validation.passed) {
+  finalResponse.error = {
+    type: 'VALIDATION_FAILED',
+    issues: processedData.validation.issues,
+    warnings: processedData.validation.warnings
+  };
+}
+
+return finalResponse;
+Integration Patterns for Existing Agents
+Pattern 1: Direct HTTP Request (Synchronous)
+Use Case: When your agent needs immediate code generation and will wait for the result.
+
+Implementation in your existing agent:
+
+javascript
+// Code Node: "Request Code Generation"
+const codingRequest = {
+  task_type: "generate_script",
+  language: "python", 
+  requirements: "Create a script to analyze log files and extract error patterns",
+  context: "Part of our automated monitoring system",
+  priority: "high",
+  include_tests: true
+};
+
+// Make synchronous request to coding agent
+const response = await $http.post(
+  "https://your-n8n-domain.com/webhook/coding-specialist",
+  codingRequest
+);
+
+if (response.data.success) {
+  // Use the generated code
+  return {
+    status: "code_generated",
+    code: response.data.generated_code,
+    quality_score: response.data.metadata.quality_score,
+    next_step: "execute_or_save_code"
+  };
+} else {
+  return {
+    status: "code_generation_failed",
+    error: response.data.error,
+    next_step: "notify_operator"
+  };
+}
+Pattern 2: Asynchronous Task Queue
+Use Case: For long-running code generation that shouldn't block your main agent.
+
+Implementation:
+
+javascript
+// In your manager agent - trigger and forget
+const task = {
+  task_id: generateTaskId(),
+  requirements: "Build complex data processing pipeline",
+  callback_url: "https://your-n8n-domain.com/webhook/code-completion-callback"
+};
+
+// Queue the task (save to database or external queue)
+await queueCodeGenerationTask(task);
+
+return {
+  status: "task_queued",
+  task_id: task.task_id,
+  estimated_completion: "2-3 minutes"
+};
+
+// Separate webhook to handle completion
+Webhook: /code-completion-callback
+Pattern 3: Specialized Coding Functions
+Create multiple endpoints for different coding tasks:
+
+javascript
+// Different webhook paths for different specialties
+/webhook/coding-specialist/script-generation
+/webhook/coding-specialist/debugging  
+/webhook/coding-specialist/code-explanation
+/webhook/coding-specialist/optimization
+Pattern 4: Integration with Your Character Agents
+Example: A "Project Manager" character agent delegating technical work:
+
+javascript
+// In your character agent workflow
+class CharacterAgent {
+  async handleTechnicalRequest(projectBrief) {
+    // Analyze if this requires coding specialist
+    if (this.requiresCodingAssistance(projectBrief)) {
+      
+      // Delegate to coding specialist
+      const codingTask = this.prepareCodingTask(projectBrief);
+      const codeResult = await this.delegateToCoder(codingTask);
+      
+      if (codeResult.success) {
+        return this.integrateCodeIntoProject(codeResult, projectBrief);
+      } else {
+        return this.handleCodingFailure(codeResult, projectBrief);
+      }
+    }
+  }
+  
+  requiresCodingAssistance(brief) {
+    const codingKeywords = ['script', 'automate', 'parse', 'process', 'generate'];
+    return codingKeywords.some(keyword => 
+      brief.toLowerCase().includes(keyword)
+    );
+  }
+}
+Advanced Configuration & Optimization
+1. Prompt Engineering for Better Results
+Specialized System Prompts by task type:
+
+javascript
+const systemPrompts = {
+  script_generation: `You are a senior software engineer. Generate production-ready code that is:
+- Well-documented with clear comments
+- Includes error handling
+- Follows best practices for the language
+- Efficient and readable
+- Includes usage examples when relevant`,
+
+  debugging: `You are a debugging specialist. Analyze the provided code and:
+1. Identify the root cause of issues
+2. Provide the fixed code
+3. Explain what was wrong and why your solution works
+4. Suggest prevention for future`,
+
+  optimization: `You are a performance optimization expert. Improve the provided code by:
+- Enhancing performance while maintaining readability
+- Reducing complexity where possible
+- Adding benchmarks if applicable
+- Explaining the optimizations made`,
+
+  explanation: `You are a technical educator. Explain the provided code by:
+- Breaking down complex concepts
+- Providing real-world analogies
+- Highlighting key algorithms or patterns
+- Suggesting learning resources`
+};
+2. Language-Specific Configurations
+Code Node: "Language-Specific Optimization"
+
+javascript
+const request = $input.all()[0].json;
+
+const languageConfigs = {
+  python: {
+    style_guide: "PEP8",
+    preferred_libraries: ["pathlib", "os", "sys", "json"],
+    testing_frameworks: ["pytest", "unittest"]
+  },
+  javascript: {
+    style_guide: "Airbnb",
+    preferred_libraries: ["fs/promises", "path", "util"],
+    testing_frameworks: ["jest", "mocha"]
+  },
+  bash: {
+    style_guide: "Google Shell Style",
+    preferred_libraries: [],
+    testing_frameworks: ["bats"]
+  }
+};
+
+const config = languageConfigs[request.language] || {};
+
+return {
+  ...request,
+  language_config: config,
+  enhanced_prompt: `${request.system_context}\n\nPlease follow ${config.style_guide} style guide and prefer ${config.preferred_libraries.join(', ')} libraries when appropriate.`
+};
+3. Cost Optimization
+Code Node: "Cost-Aware Processing"
+
+javascript
+const request = $input.all()[0].json;
+
+// Estimate token usage and cost
+function estimateCost(requirements, language) {
+  const avgTokensPerChar = 0.25;
+  const estimatedInputTokens = requirements.length * avgTokensPerChar;
+  
+  // Different languages have different output lengths
+  const outputMultipliers = {
+    python: 1.2,
+    javascript: 1.1,
+    bash: 0.8,
+    sql: 0.6
+  };
+  
+  const estimatedOutputTokens = estimatedInputTokens * 
+    (outputMultipliers[language] || 1.0);
+  
+  const estimatedCost = (
+    (estimatedInputTokens / 1000000) * 0.6 + 
+    (estimatedOutputTokens / 1000000) * 2.2
+  ).toFixed(4);
+  
+  return {
+    estimated_input_tokens: Math.round(estimatedInputTokens),
+    estimated_output_tokens: Math.round(estimatedOutputTokens),
+    estimated_cost: parseFloat(estimatedCost)
+  };
+}
+
+const costEstimate = estimateCost(request.requirements, request.language);
+
+// Apply cost-saving measures for expensive requests
+let temperature = 0.2;
+let maxTokens = 4000;
+
+if (costEstimate.estimated_cost > 0.01) { // More than 1 cent
+  temperature = 0.1; // More deterministic
+  maxTokens = Math.min(2000, maxTokens); // Limit output
+}
+
+return {
+  ...request,
+  cost_estimate: costEstimate,
+  api_parameters: {
+    temperature,
+    max_tokens: maxTokens,
+    top_p: 0.9
+  }
+};
+Production Deployment
+1. Environment Configuration
+Set up n8n environment variables:
+
+bash
+# In n8n settings or .env file
+Z_AI_API_KEY=your_actual_api_key_here
+N8N_BASE_URL=https://your-n8n-domain.com
+CODING_AGENT_RATE_LIMIT=10
+ENVIRONMENT=production
+2. Error Handling & Retry Logic
+Code Node: "Robust Error Handling"
+
+javascript
+const input = $input.all()[0].json;
+
+class CodingAgentError extends Error {
+  constructor(message, type, recoverable = false) {
+    super(message);
+    this.type = type;
+    this.recoverable = recoverable;
+    this.timestamp = new Date().toISOString();
+  }
+}
+
+async function makeAPICallWithRetry(requestData, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await $http.post(
+        'https://api.z.ai/v1/chat/completions',
+        requestData
+      );
+      
+      if (response.status === 429) { // Rate limited
+        throw new CodingAgentError(
+          `Rate limited on attempt ${attempt}`,
+          'RATE_LIMITED',
+          true
+        );
+      }
+      
+      if (response.status >= 500) { // Server error
+        throw new CodingAgentError(
+          `API server error: ${response.status}`,
+          'API_ERROR', 
+          true
+        );
+      }
+      
+      return response.data;
+      
+    } catch (error) {
+      if (attempt === maxRetries || !error.recoverable) {
+        throw error;
+      }
+      
+      // Exponential backoff
+      await new Promise(resolve => 
+        setTimeout(resolve, Math.pow(2, attempt) * 1000)
+      );
+    }
+  }
+}
+
+try {
+  const result = await makeAPICallWithRetry(input.api_request);
+  return { success: true, data: result };
+} catch (error) {
+  return {
+    success: false,
+    error: {
+      message: error.message,
+      type: error.type,
+      attempt: error.attempt,
+      timestamp: error.timestamp
+    },
+    fallback_action: "notify_administrator"
+  };
+}
+3. Monitoring & Analytics
+Code Node: "Usage Analytics"
+
+javascript
+const request = $input.all()[0].json;
+const response = $input.all()[1].json;
+
+// Log to external service or database
+const analyticsEvent = {
+  event_type: response.success ? 'code_generated' : 'code_generation_failed',
+  timestamp: new Date().toISOString(),
+  request_id: request.request_id,
+  language: request.language,
+  task_type: request.task_type,
+  processing_time: Date.now() - new Date(request.timestamp).getTime(),
+  
+  // Cost and usage
+  input_tokens: response.usage?.prompt_tokens,
+  output_tokens: response.usage?.completion_tokens,
+  estimated_cost: request.cost_estimate?.estimated_cost,
+  
+  // Quality metrics
+  code_quality: response.metadata?.quality_score,
+  complexity: response.metadata?.complexity,
+  validation_passed: response.validation?.passed
+};
+
+// Send to analytics service (simplified)
+console.log('CODING_AGENT_ANALYTICS:', JSON.stringify(analyticsEvent));
+
+// Also store in n8n internal database if needed
+await storeAnalytics(analyticsEvent);
+
+return response;
+4. Security Hardening
+Code Node: "Security Validation"
+
+javascript
+const request = $input.all()[0].json;
+
+// Validate input to prevent injection attacks
+function validateInput(request) {
+  const issues = [];
+  
+  // Check for excessive length (potential abuse)
+  if (request.requirements.length > 10000) {
+    issues.push('Requirements too long - potential abuse');
+  }
+  
+  // Validate language input
+  const allowedLanguages = ['python', 'javascript', 'bash', 'sql', 'html', 'css'];
+  if (!allowedLanguages.includes(request.language)) {
+    issues.push(`Invalid language: ${request.language}`);
+  }
+  
+  // Check for suspicious patterns
+  const suspiciousPatterns = [
+    /api[_-]?key/i,
+    /password|secret|token/i,
+    /eval|exec|system/i
+  ];
+  
+  suspiciousPatterns.forEach(pattern => {
+    if (pattern.test(request.requirements)) {
+      issues.push('Suspicious content detected in requirements');
+    }
+  });
+  
+  return issues;
+}
+
+const securityIssues = validateInput(request);
+
+if (securityIssues.length > 0) {
+  return {
+    success: false,
+    error: {
+      type: 'SECURITY_VALIDATION_FAILED',
+      issues: securityIssues,
+      action: 'request_rejected'
+    },
+    timestamp: new Date().toISOString()
+  };
+}
+
+return request;
+Troubleshooting & Monitoring
+Common Issues & Solutions
+1. API Timeouts
+
+javascript
+// Increase timeout in HTTP Request node
+// Set timeout to 30000ms (30 seconds)
+2. Rate Limiting
+
+javascript
+// Implement in your manager agents
+async function callWithBackoff(attempt = 1) {
+  try {
+    return await callCodingAgent();
+  } catch (error) {
+    if (error.status === 429 && attempt < 5) {
+      await sleep(Math.pow(2, attempt) * 1000);
+      return callWithBackoff(attempt + 1);
+    }
+    throw error;
+  }
+}
+3. Code Quality Issues
+
+Adjust temperature to 0.1 for more deterministic output
+
+Provide more specific requirements
+
+Use the specialized task types for better prompting
+
+Monitoring Dashboard
+Create a simple monitoring workflow:
+
+Webhook: /monitoring/coding-agent
+
+javascript
+// Track key metrics
+const metrics = {
+  total_requests: await getTotalRequests(),
+  success_rate: await calculateSuccessRate(),
+  average_response_time: await getAverageResponseTime(),
+  cost_today: await getTodayCost(),
+  common_errors: await getCommonErrors()
+};
+
+return {
+  status: 'healthy',
+  metrics,
+  recommendations: generateRecommendations(metrics)
+};
+Performance Optimization
+Cache common requests - Store frequently generated code patterns
+
+Batch similar requests - Process related coding tasks together
+
+Pre-warm common patterns - Generate templates for common use cases
+
+Implement request deduplication - Avoid generating the same code multiple times
+
+Next Steps & Expansion
+Potential Enhancements
+Multi-Model Fallback: Add OpenAI or other models as fallback
+
+Code Execution Sandbox: Safely test generated code
+
+Version Control Integration: Automatically commit to git
+
+Code Review Agent: Secondary agent to review generated code
+
+Template Library: Store and reuse successful code patterns
+
+Scaling Considerations
+Use n8n queues for high-volume environments
+
+Implement request prioritization
+
+Add regional API endpoints for global teams
+
+Set up automated cost alerts
+
+This comprehensive guide provides everything needed to build, deploy, and maintain your Z.ai coding agent within n8n. The system is designed to be robust, cost-effective, and easily integrated with your existing agent ecosystem

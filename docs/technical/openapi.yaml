@@ -1,0 +1,1805 @@
+openapi: 3.0.3
+info:
+  title: DMLog API
+  description: |
+    A comprehensive Dungeons & Dragons campaign management system with AI-powered character automation.
+
+    ## Overview
+    DMLog provides a complete solution for Dungeon Masters and players to manage campaigns, characters, sessions, and more. Built with modern async Python patterns, it offers real-time features through WebSockets and comprehensive monitoring capabilities.
+
+    ## Key Features
+    - **Character Management**: Create, manage, and evolve D&D characters with full 5e support
+    - **Campaign Organization**: Track multiple campaigns with session scheduling and world-building tools
+    - **Real-Time Sessions**: WebSocket-based live gaming with dice rolling, combat tracking, and more
+    - **AI Integration**: Powered character automation and decision making (planned)
+    - **Analytics & Monitoring**: Comprehensive metrics and performance tracking
+
+    ## Authentication
+    Currently uses simple API key authentication. Production deployment will implement OAuth 2.0.
+
+    ## Rate Limiting
+    API endpoints are rate-limited to 60 requests per minute per client.
+
+    ## WebSocket Support
+    Real-time features are available through WebSocket connections at `/ws/connect`.
+
+    ## Versioning
+    Current version: v1. All endpoints are prefixed with `/api/v1/`.
+
+    ## Support
+    - Documentation: https://docs.dmlog.com
+    - GitHub Issues: https://github.com/dmlog/dmlog/issues
+    - Community Discord: https://discord.gg/dmlog
+  version: 1.0.0
+  contact:
+    name: DMLog Team
+    email: support@dmlog.com
+    url: https://dmlog.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8000
+    description: Development server
+  - url: https://api.dmlog.com
+    description: Production server
+  - url: https://staging-api.dmlog.com
+    description: Staging server
+
+tags:
+  - name: Characters
+    description: Character management operations
+  - name: Campaigns
+    description: Campaign management operations
+  - name: Sessions
+    description: Session management and real-time features
+  - name: Dice
+    description: Dice rolling and randomization
+  - name: Combat
+    description: Combat tracking and initiative
+  - name: Skills
+    description: Skill checks and challenges
+  - name: Character Sheets
+    description: Character sheet management
+  - name: DM Tools
+    description: Dungeon Master utilities
+  - name: Health
+    description: Health checks and system status
+  - name: WebSocket
+    description: Real-time communication
+
+paths:
+  /api/v1/health:
+    get:
+      tags:
+        - Health
+      summary: Comprehensive health check
+      description: Returns the overall health status of the API and all its dependencies
+      operationId: health_check
+      responses:
+        '200':
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: healthy
+                timestamp: "2024-01-22T10:30:00Z"
+                version: "1.0.0"
+                uptime: 86400
+                components:
+                  database: healthy
+                  redis: healthy
+                  cache: healthy
+
+  /api/v1/health/simple:
+    get:
+      tags:
+        - Health
+      summary: Simple health check
+      description: Quick health check for load balancers
+      operationId: health_check_simple
+      responses:
+        '200':
+          description: Service is running
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "OK"
+
+  /api/v1/characters/:
+    get:
+      tags:
+        - Characters
+      summary: List characters
+      description: Retrieve a paginated list of characters with optional filtering
+      operationId: list_characters
+      parameters:
+        - name: skip
+          in: query
+          description: Number of characters to skip
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          description: Maximum number of characters to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: search
+          in: query
+          description: Search term for character names
+          required: false
+          schema:
+            type: string
+        - name: race
+          in: query
+          description: Filter by character race
+          required: false
+          schema:
+            type: string
+            enum: [Human, Elf, Dwarf, Halfling, Gnome, Dragonborn, Half-Orc, Tiefling]
+        - name: character_class
+          in: query
+          description: Filter by character class
+          required: false
+          schema:
+            type: string
+            enum: [Fighter, Wizard, Cleric, Rogue, Ranger, Paladin, Bard, Druid, Monk, Sorcerer, Warlock, Barbarian]
+        - name: is_active
+          in: query
+          description: Filter by active status
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: List of characters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Characters
+      summary: Create character
+      description: Create a new D&D character with full stats and background
+      operationId: create_character
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharacterCreate'
+      responses:
+        '201':
+          description: Character created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Character name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                detail: "Character name already exists"
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/characters/{character_id}:
+    get:
+      tags:
+        - Characters
+      summary: Get character
+      description: Retrieve detailed information about a specific character
+      operationId: get_character
+      parameters:
+        - name: character_id
+          in: path
+          required: true
+          description: UUID of the character
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Character details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - Characters
+      summary: Update character
+      description: Update character information and stats
+      operationId: update_character
+      parameters:
+        - name: character_id
+          in: path
+          required: true
+          description: UUID of the character
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharacterUpdate'
+      responses:
+        '200':
+          description: Character updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Characters
+      summary: Delete character
+      description: Delete a character (this action cannot be undone)
+      operationId: delete_character
+      parameters:
+        - name: character_id
+          in: path
+          required: true
+          description: UUID of the character
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Character deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/characters/{character_id}/memories:
+    get:
+      tags:
+        - Characters
+      summary: Get character memories
+      description: Retrieve all memories associated with a character
+      operationId: get_character_memories
+      parameters:
+        - name: character_id
+          in: path
+          required: true
+          description: UUID of the character
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          description: Maximum number of memories to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: List of character memories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CharacterMemory'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/characters/{character_id}/decisions:
+    get:
+      tags:
+        - Characters
+      summary: Get character decisions
+      description: Retrieve all decisions made by a character
+      operationId: get_character_decisions
+      parameters:
+        - name: character_id
+          in: path
+          required: true
+          description: UUID of the character
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          description: Maximum number of decisions to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: List of character decisions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CharacterDecision'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/campaigns/:
+    get:
+      tags:
+        - Campaigns
+      summary: List campaigns
+      description: Retrieve a list of all campaigns
+      operationId: list_campaigns
+      parameters:
+        - name: skip
+          in: query
+          description: Number of campaigns to skip
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          description: Maximum number of campaigns to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: is_active
+          in: query
+          description: Filter by active status
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: List of campaigns
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CampaignResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Campaigns
+      summary: Create campaign
+      description: Create a new campaign
+      operationId: create_campaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignCreate'
+      responses:
+        '201':
+          description: Campaign created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/campaigns/{campaign_id}:
+    get:
+      tags:
+        - Campaigns
+      summary: Get campaign
+      description: Retrieve detailed information about a specific campaign
+      operationId: get_campaign
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          description: UUID of the campaign
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Campaign details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - Campaigns
+      summary: Update campaign
+      description: Update campaign information
+      operationId: update_campaign
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          description: UUID of the campaign
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignUpdate'
+      responses:
+        '200':
+          description: Campaign updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Campaigns
+      summary: Delete campaign
+      description: Delete a campaign (this action cannot be undone)
+      operationId: delete_campaign
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          description: UUID of the campaign
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Campaign deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/campaigns/{campaign_id}/characters:
+    post:
+      tags:
+        - Campaigns
+      summary: Add character to campaign
+      description: Add an existing character to a campaign
+      operationId: add_character_to_campaign
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          description: UUID of the campaign
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - character_id
+              properties:
+                character_id:
+                  type: string
+                  format: uuid
+                  description: UUID of the character to add
+                role:
+                  type: string
+                  enum: [player, dm, npc]
+                  default: player
+                  description: Role of the character in the campaign
+      responses:
+        '200':
+          description: Character added to campaign successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Character already in campaign
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                detail: "Character already in campaign"
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/campaigns/{campaign_id}/stats:
+    get:
+      tags:
+        - Campaigns
+      summary: Get campaign statistics
+      description: Retrieve statistics and analytics for a campaign
+      operationId: get_campaign_stats
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          description: UUID of the campaign
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Campaign statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignStats'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/sessions/:
+    get:
+      tags:
+        - Sessions
+      summary: List sessions
+      description: Retrieve a list of game sessions
+      operationId: list_sessions
+      parameters:
+        - name: campaign_id
+          in: query
+          description: Filter by campaign UUID
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: skip
+          in: query
+          description: Number of sessions to skip
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          description: Maximum number of sessions to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Sessions
+      summary: Create session
+      description: Create a new game session
+      operationId: create_session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionCreate'
+      responses:
+        '201':
+          description: Session created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/sessions/{session_id}:
+    get:
+      tags:
+        - Sessions
+      summary: Get session
+      description: Retrieve detailed information about a specific session
+      operationId: get_session
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          description: UUID of the session
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/sessions/{session_id}/start:
+    post:
+      tags:
+        - Sessions
+      summary: Start session
+      description: Start a game session and enable real-time features
+      operationId: start_session
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          description: UUID of the session
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session started successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Session already started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                detail: "Session already started"
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/sessions/{session_id}/end:
+    post:
+      tags:
+        - Sessions
+      summary: End session
+      description: End a game session and generate summary
+      operationId: end_session
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          description: UUID of the session
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes:
+                  type: string
+                  description: DM notes about the session
+                summary:
+                  type: string
+                  description: Session summary
+      responses:
+        '200':
+          description: Session ended successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Session not started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                detail: "Session not started"
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/sessions/{session_id}/transcript:
+    get:
+      tags:
+        - Sessions
+      summary: Get session transcript
+      description: Retrieve the full transcript of a session
+      operationId: get_session_transcript
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          description: UUID of the session
+          schema:
+            type: string
+            format: uuid
+        - name: format
+          in: query
+          description: Output format
+          required: false
+          schema:
+            type: string
+            enum: [json, text, markdown]
+            default: json
+      responses:
+        '200':
+          description: Session transcript
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionTranscript'
+            text/plain:
+              schema:
+                type: string
+            text/markdown:
+              schema:
+                type: string
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/dice/roll:
+    post:
+      tags:
+        - Dice
+      summary: Roll dice
+      description: Roll dice with various configurations
+      operationId: roll_dice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiceRollRequest'
+      responses:
+        '200':
+          description: Dice roll result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiceRollResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /ws/connect:
+    get:
+      tags:
+        - WebSocket
+      summary: WebSocket connection
+      description: Establish a WebSocket connection for real-time updates
+      operationId: websocket_connect
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          description: User identifier
+          schema:
+            type: string
+        - name: session_id
+          in: query
+          required: false
+          description: Session to join (optional)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '101':
+          description: WebSocket connection established
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+        - version
+        - uptime
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+          description: Overall system status
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp of the health check
+        version:
+          type: string
+          description: API version
+        uptime:
+          type: integer
+          description: System uptime in seconds
+        components:
+          type: object
+          description: Status of individual components
+          properties:
+            database:
+              type: string
+              enum: [healthy, unhealthy, degraded]
+            redis:
+              type: string
+              enum: [healthy, unhealthy, degraded]
+            cache:
+              type: string
+              enum: [healthy, unhealthy, degraded]
+
+    CharacterCreate:
+      type: object
+      required:
+        - name
+        - race
+        - character_class
+        - level
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Character name
+          example: "Aragorn"
+        race:
+          type: string
+          enum: [Human, Elf, Dwarf, Halfling, Gnome, Dragonborn, Half-Orc, Tiefling]
+          description: Character race
+          example: "Human"
+        character_class:
+          type: string
+          enum: [Fighter, Wizard, Cleric, Rogue, Ranger, Paladin, Bard, Druid, Monk, Sorcerer, Warlock, Barbarian]
+          description: Character class
+          example: "Ranger"
+        level:
+          type: integer
+          minimum: 1
+          maximum: 20
+          description: Character level
+          example: 5
+        background:
+          type: string
+          maxLength: 1000
+          description: Character background story
+          example: "Raised in the wilds, skilled tracker and hunter"
+        alignment:
+          type: string
+          description: Character alignment
+          example: "Chaotic Good"
+        ability_scores:
+          $ref: '#/components/schemas/AbilityScores'
+        hit_points:
+          type: integer
+          minimum: 1
+          description: Current hit points
+          example: 42
+        max_hit_points:
+          type: integer
+          minimum: 1
+          description: Maximum hit points
+          example: 45
+        armor_class:
+          type: integer
+          minimum: 10
+          description: Armor class
+          example: 16
+        speed:
+          type: integer
+          minimum: 1
+          description: Movement speed in feet
+          example: 30
+        proficiency_bonus:
+          type: integer
+          minimum: 0
+          description: Proficiency bonus
+          example: 3
+        skills:
+          type: object
+          description: Character skills and proficiencies
+          example:
+            stealth: 7
+            perception: 5
+            survival: 6
+        equipment:
+          type: array
+          items:
+            type: string
+          description: Character equipment
+          example: ["Longbow", "Leather armor", "Dagger"]
+        spells:
+          type: array
+          items:
+            type: string
+          description: Known spells
+          example: ["Hunter's Mark", "Cure Wounds"]
+        is_active:
+          type: boolean
+          default: true
+          description: Whether the character is currently active
+
+    AbilityScores:
+      type: object
+      required:
+        - strength
+        - dexterity
+        - constitution
+        - intelligence
+        - wisdom
+        - charisma
+      properties:
+        strength:
+          type: integer
+          minimum: 1
+          maximum: 20
+          description: Strength score
+          example: 16
+        dexterity:
+          type: integer
+          minimum: 1
+          maximum: 20
+          description: Dexterity score
+          example: 14
+        constitution:
+          type: integer
+          minimum: 1
+          maximum: 20
+          description: Constitution score
+          example: 15
+        intelligence:
+          type: integer
+          minimum: 1
+          maximum: 20
+          description: Intelligence score
+          example: 12
+        wisdom:
+          type: integer
+          minimum: 1
+          maximum: 20
+          description: Wisdom score
+          example: 14
+        charisma:
+          type: integer
+          minimum: 1
+          maximum: 20
+          description: Charisma score
+          example: 13
+
+    CharacterUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Character name
+        background:
+          type: string
+          maxLength: 1000
+          description: Character background story
+        alignment:
+          type: string
+          description: Character alignment
+        ability_scores:
+          $ref: '#/components/schemas/AbilityScores'
+        hit_points:
+          type: integer
+          minimum: 0
+          description: Current hit points
+        max_hit_points:
+          type: integer
+          minimum: 1
+          description: Maximum hit points
+        armor_class:
+          type: integer
+          minimum: 10
+          description: Armor class
+        speed:
+          type: integer
+          minimum: 1
+          description: Movement speed in feet
+        proficiency_bonus:
+          type: integer
+          minimum: 0
+          description: Proficiency bonus
+        skills:
+          type: object
+          description: Character skills and proficiencies
+        equipment:
+          type: array
+          items:
+            type: string
+          description: Character equipment
+        spells:
+          type: array
+          items:
+            type: string
+          description: Known spells
+        is_active:
+          type: boolean
+          description: Whether the character is currently active
+
+    CharacterResponse:
+      type: object
+      required:
+        - id
+        - name
+        - race
+        - character_class
+        - level
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Character UUID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        name:
+          type: string
+          description: Character name
+          example: "Aragorn"
+        race:
+          type: string
+          description: Character race
+          example: "Human"
+        character_class:
+          type: string
+          description: Character class
+          example: "Ranger"
+        level:
+          type: integer
+          description: Character level
+          example: 5
+        background:
+          type: string
+          description: Character background story
+          example: "Raised in the wilds, skilled tracker and hunter"
+        alignment:
+          type: string
+          description: Character alignment
+          example: "Chaotic Good"
+        ability_scores:
+          $ref: '#/components/schemas/AbilityScores'
+        hit_points:
+          type: integer
+          description: Current hit points
+          example: 42
+        max_hit_points:
+          type: integer
+          description: Maximum hit points
+          example: 45
+        armor_class:
+          type: integer
+          description: Armor class
+          example: 16
+        speed:
+          type: integer
+          description: Movement speed in feet
+          example: 30
+        proficiency_bonus:
+          type: integer
+          description: Proficiency bonus
+          example: 3
+        skills:
+          type: object
+          description: Character skills and proficiencies
+          example:
+            stealth: 7
+            perception: 5
+            survival: 6
+        equipment:
+          type: array
+          items:
+            type: string
+          description: Character equipment
+          example: ["Longbow", "Leather armor", "Dagger"]
+        spells:
+          type: array
+          items:
+            type: string
+          description: Known spells
+          example: ["Hunter's Mark", "Cure Wounds"]
+        is_active:
+          type: boolean
+          description: Whether the character is currently active
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+
+    CharacterListResponse:
+      type: object
+      required:
+        - characters
+        - total
+        - skip
+        - limit
+      properties:
+        characters:
+          type: array
+          items:
+            $ref: '#/components/schemas/CharacterResponse'
+          description: List of characters
+        total:
+          type: integer
+          minimum: 0
+          description: Total number of characters matching the criteria
+        skip:
+          type: integer
+          minimum: 0
+          description: Number of characters skipped
+        limit:
+          type: integer
+          minimum: 1
+          description: Maximum number of characters returned
+
+    CharacterMemory:
+      type: object
+      required:
+        - id
+        - character_id
+        - content
+        - importance_score
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Memory UUID
+        character_id:
+          type: string
+          format: uuid
+          description: Character UUID
+        content:
+          type: string
+          description: Memory content
+          example: "Fought a dragon in the mountains"
+        importance_score:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Importance score (0-1)
+          example: 0.85
+        tags:
+          type: array
+          items:
+            type: string
+          description: Memory tags
+          example: ["combat", "dragon", "mountains"]
+        created_at:
+          type: string
+          format: date-time
+          description: Memory creation timestamp
+        consolidated_at:
+          type: string
+          format: date-time
+          description: Memory consolidation timestamp
+
+    CharacterDecision:
+      type: object
+      required:
+        - id
+        - character_id
+        - decision
+        - confidence_score
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Decision UUID
+        character_id:
+          type: string
+          format: uuid
+          description: Character UUID
+        context:
+          type: string
+          description: Decision context
+          example: "Party encountered a fork in the road"
+        decision:
+          type: string
+          description: Decision made
+          example: "Chose the path leading into the forest"
+        confidence_score:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Confidence in the decision (0-1)
+          example: 0.75
+        reasoning:
+          type: string
+          description: Reasoning behind the decision
+          example: "Forest path seems safer based on previous encounters"
+        outcome:
+          type: string
+          description: Outcome of the decision
+          example: "Found a hidden elven village"
+        created_at:
+          type: string
+          format: date-time
+          description: Decision timestamp
+
+    CampaignCreate:
+      type: object
+      required:
+        - name
+        - description
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Campaign name
+          example: "The Lost Mines of Phandelver"
+        description:
+          type: string
+          maxLength: 2000
+          description: Campaign description
+          example: "A classic D&D adventure for beginner players"
+        setting:
+          type: string
+          maxLength: 500
+          description: Campaign setting
+          example: "Forgotten Realms"
+        difficulty:
+          type: string
+          enum: [beginner, intermediate, advanced, expert]
+          default: intermediate
+          description: Campaign difficulty
+        max_players:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+          description: Maximum number of players
+        start_level:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 1
+          description: Starting character level
+        end_level:
+          type: integer
+          minimum: 1
+          maximum: 20
+          description: Target ending level
+        is_active:
+          type: boolean
+          default: true
+          description: Whether the campaign is currently active
+
+    CampaignUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Campaign name
+        description:
+          type: string
+          maxLength: 2000
+          description: Campaign description
+        setting:
+          type: string
+          maxLength: 500
+          description: Campaign setting
+        difficulty:
+          type: string
+          enum: [beginner, intermediate, advanced, expert]
+          description: Campaign difficulty
+        max_players:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: Maximum number of players
+        start_level:
+          type: integer
+          minimum: 1
+          maximum: 20
+          description: Starting character level
+        end_level:
+          type: integer
+          minimum: 1
+          maximum: 20
+          description: Target ending level
+        is_active:
+          type: boolean
+          description: Whether the campaign is currently active
+
+    CampaignResponse:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Campaign UUID
+        name:
+          type: string
+          description: Campaign name
+          example: "The Lost Mines of Phandelver"
+        description:
+          type: string
+          description: Campaign description
+          example: "A classic D&D adventure for beginner players"
+        setting:
+          type: string
+          description: Campaign setting
+          example: "Forgotten Realms"
+        difficulty:
+          type: string
+          description: Campaign difficulty
+          example: "beginner"
+        max_players:
+          type: integer
+          description: Maximum number of players
+          example: 5
+        start_level:
+          type: integer
+          description: Starting character level
+          example: 1
+        end_level:
+          type: integer
+          description: Target ending level
+          example: 5
+        is_active:
+          type: boolean
+          description: Whether the campaign is currently active
+        character_count:
+          type: integer
+          description: Number of characters in the campaign
+          example: 4
+        session_count:
+          type: integer
+          description: Number of sessions completed
+          example: 8
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+
+    CampaignStats:
+      type: object
+      required:
+        - campaign_id
+        - total_sessions
+        - total_hours
+        - character_stats
+      properties:
+        campaign_id:
+          type: string
+          format: uuid
+          description: Campaign UUID
+        total_sessions:
+          type: integer
+          minimum: 0
+          description: Total number of sessions
+          example: 12
+        total_hours:
+          type: number
+          minimum: 0
+          description: Total hours played
+          example: 48.5
+        average_session_length:
+          type: number
+          minimum: 0
+          description: Average session length in hours
+          example: 4.0
+        character_stats:
+          type: array
+          items:
+            type: object
+            properties:
+              character_id:
+                type: string
+                format: uuid
+              character_name:
+                type: string
+              sessions_attended:
+                type: integer
+              attendance_percentage:
+                type: number
+              level_progress:
+                type: integer
+          description: Statistics for each character
+        most_recent_session:
+          type: string
+          format: date-time
+          description: Most recent session timestamp
+        next_scheduled_session:
+          type: string
+          format: date-time
+          description: Next scheduled session timestamp
+
+    SessionCreate:
+      type: object
+      required:
+        - campaign_id
+        - name
+        - scheduled_start
+      properties:
+        campaign_id:
+          type: string
+          format: uuid
+          description: Campaign UUID
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Session name
+          example: "Entering the Cragmaw Hideout"
+        description:
+          type: string
+          maxLength: 2000
+          description: Session description
+          example: "The party prepares to assault the goblin hideout"
+        scheduled_start:
+          type: string
+          format: date-time
+          description: Scheduled start time
+          example: "2024-01-25T19:00:00Z"
+        scheduled_duration:
+          type: integer
+          minimum: 30
+          maximum: 480
+          default: 240
+          description: Scheduled duration in minutes
+          example: 240
+        location:
+          type: string
+          maxLength: 200
+          description: Session location
+          example: "Virtual - Roll20"
+
+    SessionResponse:
+      type: object
+      required:
+        - id
+        - campaign_id
+        - name
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Session UUID
+        campaign_id:
+          type: string
+          format: uuid
+          description: Campaign UUID
+        name:
+          type: string
+          description: Session name
+          example: "Entering the Cragmaw Hideout"
+        description:
+          type: string
+          description: Session description
+          example: "The party prepares to assault the goblin hideout"
+        status:
+          type: string
+          enum: [scheduled, in_progress, completed, cancelled]
+          description: Session status
+          example: "completed"
+        scheduled_start:
+          type: string
+          format: date-time
+          description: Scheduled start time
+        actual_start:
+          type: string
+          format: date-time
+          description: Actual start time
+        actual_end:
+          type: string
+          format: date-time
+          description: Actual end time
+        duration_minutes:
+          type: integer
+          description: Actual duration in minutes
+          example: 265
+        location:
+          type: string
+          description: Session location
+          example: "Virtual - Roll20"
+        participant_count:
+          type: integer
+          description: Number of participants
+          example: 5
+        notes:
+          type: string
+          description: DM notes
+        summary:
+          type: string
+          description: Session summary
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+
+    SessionTranscript:
+      type: object
+      required:
+        - session_id
+        - entries
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          description: Session UUID
+        entries:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+                description: Entry timestamp
+              type:
+                type: string
+                enum: [message, action, dice_roll, combat_event, system]
+                description: Entry type
+              character_id:
+                type: string
+                format: uuid
+                description: Character UUID (if applicable)
+              character_name:
+                type: string
+                description: Character name (if applicable)
+              content:
+                type: string
+                description: Entry content
+              metadata:
+                type: object
+                description: Additional metadata
+          description: Transcript entries
+        summary:
+          type: string
+          description: AI-generated summary of the session
+
+    DiceRollRequest:
+      type: object
+      required:
+        - dice
+      properties:
+        dice:
+          type: string
+          pattern: '^\d+d\d+(?:\s*[+-]\s*\d+)?$'
+          description: Dice notation (e.g., "2d6+3", "1d20", "4d8-2")
+          example: "2d6+3"
+        character_id:
+          type: string
+          format: uuid
+          description: Character UUID (optional)
+        reason:
+          type: string
+          maxLength: 200
+          description: Reason for the roll
+          example: "Attack roll with longsword"
+        advantage:
+          type: boolean
+          default: false
+          description: Roll with advantage
+        disadvantage:
+          type: boolean
+          default: false
+          description: Roll with disadvantage
+        critical_threshold:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 20
+          description: Critical hit threshold
+
+    DiceRollResponse:
+      type: object
+      required:
+        - roll
+        - result
+        - individual_rolls
+      properties:
+        roll:
+          type: string
+          description: Dice notation that was rolled
+          example: "2d6+3"
+        result:
+          type: integer
+          description: Final result
+          example: 15
+        individual_rolls:
+          type: array
+          items:
+            type: integer
+          description: Individual die results
+          example: [6, 4]
+        modifier:
+          type: integer
+          description: Applied modifier
+          example: 3
+        is_critical:
+          type: boolean
+          description: Whether the roll was a critical hit
+        is_critical_fail:
+          type: boolean
+          description: Whether the roll was a critical fail
+        character_id:
+          type: string
+          format: uuid
+          description: Character UUID
+        reason:
+          type: string
+          description: Reason for the roll
+        timestamp:
+          type: string
+          format: date-time
+          description: Roll timestamp
+
+    Error:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          description: Error description
+          example: "Character not found"
+        error_code:
+          type: string
+          description: Application-specific error code
+          example: "CHARACTER_NOT_FOUND"
+        timestamp:
+          type: string
+          format: date-time
+          description: Error timestamp
+        request_id:
+          type: string
+          description: Request identifier for debugging
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            detail: "Invalid request parameters"
+            error_code: "INVALID_PARAMETERS"
+            timestamp: "2024-01-22T10:30:00Z"
+            request_id: "req_123456789"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            detail: "Character not found"
+            error_code: "CHARACTER_NOT_FOUND"
+            timestamp: "2024-01-22T10:30:00Z"
+            request_id: "req_123456789"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            detail: "Internal server error"
+            error_code: "INTERNAL_ERROR"
+            timestamp: "2024-01-22T10:30:00Z"
+            request_id: "req_123456789"
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication
+
+security:
+  - ApiKeyAuth: []

@@ -1,0 +1,283 @@
+{
+  "name": "Shared Context Manager - Common Knowledge State Management",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "shared-context",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Context Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "shared-context-manager"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse context management request\nconst request = $input.first().json;\n\n// Required fields validation\nif (!request.action || !request.agent_id) {\n  return [{\n    json: {\n      error: 'Missing required fields: action, agent_id',\n      status: 'invalid'\n    }\n  }];\n}\n\n// Process context request\nconst contextId = request.context_id || 'default_party_context';\nconst timestamp = new Date().toISOString();\n\nconst contextRequest = {\n  ...request,\n  context_id: contextId,\n  timestamp,\n  processed_by: 'shared_context_manager'\n};\n\nreturn [{\n  json: contextRequest\n}];"
+      },
+      "id": "code-1",
+      "name": "Process Context Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {\n          "options": {\n            "caseSensitive": true,\n            "leftValue": "",\n            "typeValidation": "strict"\n          },\n          "conditions": [\n            {\n              "leftValue": "={{ $json.action }}",\n              "rightValue": "update",\n              "operator": {\n                "type": "string",\n                "operation": "equals"\n              }\n            }\n          ],\n          "combinator": "and"\n        }
+      },
+      "id": "if-1",
+      "name": "Route Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle context update\nconst request = $input.first().json;\n\nif (!request.context_data) {\n  return [{\n    json: {\n      error: 'Context updates require context_data field',\n      status: 'invalid'\n    }\n  }];\n}\n\nconst updateData = {\n  action: 'context_update',\n  context_id: request.context_id,\n  agent_id: request.agent_id,\n  update_type: request.update_type || 'incremental',\n  context_data: request.context_data,\n  update_metadata: {\n    timestamp: request.timestamp,\n    priority: request.priority || 'normal',\n    affects_agents: request.affects_agents || 'all',\n    tags: request.tags || [],\n    version: request.version || null\n  }\n};\n\nreturn [{\n  json: updateData\n}];"
+      },
+      "id": "code-2",
+      "name": "Process Context Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle context retrieval\nconst request = $input.first().json;\n\nconst retrievalData = {\n  action: 'context_retrieval',\n  context_id: request.context_id,\n  agent_id: request.agent_id,\n  retrieval_params: {\n    scope: request.scope || 'full',\n    filters: request.filters || {},\n    include_history: request.include_history || false,\n    include_metadata: request.include_metadata !== false,\n    version: request.version || 'latest'\n  }\n};\n\nreturn [{\n  json: retrievalData\n}];"
+      },
+      "id": "code-3",
+      "name": "Process Context Retrieval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge and validate context updates\nconst update = $input.first().json;\n\n// Get current context state (simulated)\nconst currentContext = {\n  context_id: update.context_id,\n  version: 'v1.0.0',\n  last_updated: new Date().toISOString(),\n  data: {\n    party_state: {\n      current_location: 'town_square',\n      active_quest: 'the_missing_artifact',\n      party_mood: 'adventurous',\n      time_of_day: 'morning',\n      weather: 'clear'\n    },\n    shared_knowledge: {\n      npcs_met: ['elder_thomas', 'merchant_martha'],\n      locations_discovered: ['town_square', 'tavern', 'market'],\n      items_obtained: ['map', 'torch'],\n      clues_found: ['mysterious_symbol']\n    },\n    agent_states: {\n      dungeon_master: { status: 'active', focus: 'plot_development' },\n      narrator: { status: 'active', focus: 'storytelling' },\n      combat_manager: { status: 'idle', focus: 'monitoring' }\n    }\n  },\n  metadata: {\n    update_count: 0,\n    last_updated_by: 'system'\n  }\n};\n\n// Apply update\nconst updatedContext = applyContextUpdate(currentContext, update);\n\nfunction applyContextUpdate(current, update) {\n  const updated = JSON.parse(JSON.stringify(current));\n  \n  // Increment version\n  const versionParts = updated.version.split('.');\n  versionParts[2] = (parseInt(versionParts[2]) + 1).toString();\n  updated.version = versionParts.join('.');\n  \n  // Apply data updates\n  if (update.context_data) {\n    if (update.update_type === 'merge') {\n      deepMerge(updated.data, update.context_data);\n    } else if (update.update_type === 'replace') {\n      updated.data = update.context_data;\n    } else {\n      // incremental update\n      Object.keys(update.context_data).forEach(key => {\n        updated.data[key] = update.context_data[key];\n      });\n    }\n  }\n  \n  // Update metadata\n  updated.last_updated = update.update_metadata.timestamp;\n  updated.metadata.last_updated_by = update.agent_id;\n  updated.metadata.update_count += 1;\n  \n  return updated;\n}\n\nfunction deepMerge(target, source) {\n  for (const key in source) {\n    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {\n      target[key] = target[key] || {};\n      deepMerge(target[key], source[key]);\n    } else {\n      target[key] = source[key];\n    }\n  }\n}\n\nreturn [{\n  json: {\n    action: 'context_updated',\n    context_id: update.context_id,\n    updated_context: updatedContext,\n    update_applied: update\n  }\n}];"
+      },
+      "id": "code-4",
+      "name": "Merge Context Updates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Retrieve context data\nconst retrieval = $input.first().json;\n\n// Mock context retrieval (in real system, would query database)\nconst contextData = {\n  context_id: retrieval.context_id,\n  version: 'v1.0.0',\n  retrieved_at: new Date().toISOString(),\n  data: {\n    party_state: {\n      current_location: 'town_square',\n      active_quest: 'the_missing_artifact',\n      party_mood: 'adventurous',\n      time_of_day: 'morning',\n      weather: 'clear'\n    },\n    shared_knowledge: {\n      npcs_met: ['elder_thomas', 'merchant_martha'],\n      locations_discovered: ['town_square', 'tavern', 'market'],\n      items_obtained: ['map', 'torch'],\n      clues_found: ['mysterious_symbol']\n    },\n    agent_states: {\n      dungeon_master: { status: 'active', focus: 'plot_development' },\n      narrator: { status: 'active', focus: 'storytelling' },\n      combat_manager: { status: 'idle', focus: 'monitoring' }\n    }\n  },\n  metadata: {\n    update_count: 15,\n    last_updated: new Date().toISOString(),\n    last_updated_by: 'narrator',\n    tags: ['active_session', 'party_coordination']\n  }\n};\n\n// Apply filters if specified\nlet filteredData = contextData.data;\nif (retrieval.retrieval_params.filters && Object.keys(retrieval.retrieval_params.filters).length > 0) {\n  filteredData = applyFilters(contextData.data, retrieval.retrieval_params.filters);\n}\n\nfunction applyFilters(data, filters) {\n  const result = {};\n  \n  if (filters.sections) {\n    filters.sections.forEach(section => {\n      if (data[section]) {\n        result[section] = data[section];\n      }\n    });\n  } else {\n    return data;\n  }\n  \n  return result;\n}\n\nreturn [{\n  json: {\n    action: 'context_retrieved',\n    context_id: retrieval.context_id,\n    requested_by: retrieval.agent_id,\n    context_data: filteredData,\n    metadata: {\n      version: contextData.version,\n      retrieved_at: contextData.retrieved_at,\n      filters_applied: retrieval.retrieval_params.filters\n    }\n  }\n}];"
+      },
+      "id": "code-5",
+      "name": "Retrieve Context Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/api/v1/context",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "context_operation",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-1",
+      "name": "Persist Context Update",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create context change notifications\nconst update = $input.first().json;\n\nif (!update.updated_context) {\n  return [{\n    json: { error: 'No updated context available' }\n  }];\n}\n\n// Determine which agents need to be notified\nconst affectedAgents = ['dungeon_master', 'narrator', 'combat_manager', 'scene_coordinator'];\nconst requestingAgent = update.update_applied.agent_id;\n\nconst notifications = affectedAgents\n  .filter(agent => agent !== requestingAgent)\n  .map(agent => ({\n    type: 'context_change_notification',\n    to_agent: agent,\n    from_agent: 'shared_context_manager',\n    data: {\n      context_id: update.context_id,\n      change_summary: summarizeContextChange(update),\n      updated_by: requestingAgent,\n      timestamp: update.update_applied.update_metadata.timestamp,\n      version: update.updated_context.version\n    },\n    message: `Shared context updated by ${requestingAgent}\\n\\nChange: ${summarizeContextChange(update)}\\nVersion: ${update.updated_context.version}`\n  }));\n\nreturn notifications.map(notification => ({\n  json: notification\n}));\n\nfunction summarizeContextChange(update) {\n  const data = update.context_data;\n  const changes = [];\n  \n  if (data.party_state) {\n    changes.push('Party state updated');\n  }\n  if (data.shared_knowledge) {\n    changes.push('Shared knowledge updated');\n  }\n  if (data.agent_states) {\n    changes.push('Agent states updated');\n  }\n  \n  return changes.length > 0 ? changes.join(', ') : 'Context data updated';\n}"
+      },
+      "id": "code-6",
+      "name": "Create Notifications",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/webhook/agent-message",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-2",
+      "name": "Send Notifications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1780, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"context_operation_completed\",\n  \"context_id\": \"{{ $json.context_id }}\",\n  \"action\": \"{{ $json.action }}\",\n  \"message\": \"Context operation completed successfully\"\n}"
+      },
+      "id": "respond-1",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2000, 300]
+    }
+  ],
+  "connections": {
+    "Context Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Context Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Context Request": {
+      "main": [
+        [
+          {
+            "node": "Route Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Action": {
+      "main": [
+        [
+          {
+            "node": "Process Context Update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Context Retrieval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Context Update": {
+      "main": [
+        [
+          {
+            "node": "Merge Context Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Context Retrieval": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Context Updates": {
+      "main": [
+        [
+          {
+            "node": "Persist Context Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Context Update": {
+      "main": [
+        [
+          {
+            "node": "Create Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Notifications": {
+      "main": [
+        [
+          {
+            "node": "Send Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Notifications": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T21:00:00.000Z",
+      "updatedAt": "2024-10-23T21:00:00.000Z",
+      "id": "tag-shared-context",
+      "name": "Shared Context"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T21:00:00.000Z",
+  "versionId": "1"
+}

@@ -1,0 +1,23 @@
+# Core dependencies for code quality analysis
+ast>=3.8.0
+networkx>=2.6.0
+radon>=5.1.0
+pylint>=2.12.0
+bandit>=1.7.0
+black>=21.0.0
+isort>=5.9.0
+autopep8>=1.5.0
+
+# Optional dependencies for enhanced features
+libcst>=0.3.0
+matplotlib>=3.4.0
+pstats>=0.0.1
+
+# Documentation generation
+Jinja2>=3.0.0
+MarkupSafe>=2.0.0
+
+# Development dependencies (optional)
+pytest>=6.0.0
+pytest-cov>=2.12.0
+mypy>=0.910

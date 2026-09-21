@@ -1,0 +1,228 @@
+{
+  "name": "Pet Care Routine Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "b1a2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Hourly Care Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/pets/active",
+        "options": {}
+      },
+      "id": "c2d3e4f5-a1b2-3456-bcde-f12345678901",
+      "name": "Get Active Pets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process pets and check care requirements\nconst pets = $input.first().json.data || [];\nconst careActions = [];\n\nfor (const pet of pets) {\n  const needs = calculateCareNeeds(pet);\n  \n  // Check each care need\n  if (needs.hunger.urgent) {\n    careActions.push({\n      petId: pet.id,\n      action: 'feed',\n      priority: 'high',\n      reason: 'Hunger critical: ' + pet.hunger,\n      suggestedFood: pet.favoriteFood\n    });\n  }\n  \n  if (needs.energy.critical) {\n    careActions.push({\n      petId: pet.id,\n      action: 'rest',\n      priority: 'high',\n      reason: 'Energy exhausted: ' + pet.energy\n    });\n  }\n  \n  if (needs.happiness.low) {\n    careActions.push({\n      petId: pet.id,\n      action: 'play',\n      priority: 'medium',\n      reason: 'Happiness low: ' + pet.happiness\n    });\n  }\n  \n  if (needs.cleanliness.poor) {\n    careActions.push({\n      petId: pet.id,\n      action: 'groom',\n      priority: 'medium',\n      reason: 'Cleanliness poor: ' + pet.cleanliness\n    });\n  }\n  \n  // Check training opportunities\n  if (needs.training.ready && pet.energy > 40) {\n    careActions.push({\n      petId: pet.id,\n      action: 'train',\n      priority: 'low',\n      reason: 'Training opportunity'\n    });\n  }\n}\n\n// Sort by priority\nconst priorityOrder = { high: 0, medium: 1, low: 2 };\ncareActions.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);\n\n// Group by pet for batch processing\nconst groupedActions = {};\nfor (const action of careActions) {\n  if (!groupedActions[action.petId]) {\n    groupedActions[action.petId] = [];\n  }\n  groupedActions[action.petId].push(action);\n}\n\nreturn { careActions, groupedActions, totalPets: pets.length, actionsGenerated: careActions.length };\n\nfunction calculateCareNeeds(pet) {\n  return {\n    hunger: {\n      level: pet.hunger || 50,\n      urgent: (pet.hunger || 50) < 20,\n      low: (pet.hunger || 50) < 50\n    },\n    energy: {\n      level: pet.energy || 100,\n      critical: (pet.energy || 100) < 10,\n      low: (pet.energy || 100) < 30\n    },\n    happiness: {\n      level: pet.happiness || 75,\n      low: (pet.happiness || 75) < 40\n    },\n    cleanliness: {\n      level: pet.cleanliness || 80,\n      poor: (pet.cleanliness || 80) < 40\n    },\n    training: {\n      ready: shouldTrain(pet)\n    }\n  };\n}\n\nfunction shouldTrain(pet) {\n  // Check if pet is ready for training\n  const timeSinceLastTraining = Date.now() - (pet.lastTrained || 0);\n  const hoursSinceTraining = timeSinceLastTraining / (1000 * 60 * 60);\n  \n  return hoursSinceTraining >= 4 && // At least 4 hours since last training\n         pet.energy > 40 && // Has enough energy\n         pet.happiness > 30; // Is in decent mood\n}"
+      },
+      "id": "d3e4f5g6-b2c3-4567-cdef-234567890123",
+      "name": "Analyze Pet Needs",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.careActions.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e4f5g6h7-c3d4-5678-def0-345678901234",
+      "name": "Actions Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process grouped care actions\nconst groupedActions = $input.first().json.groupedActions || {};\nconst results = [];\n\nfor (const [petId, actions] of Object.entries(groupedActions)) {\n  // Get pet details\n  const petResponse = await $helpers.httpRequest({\n    method: 'GET',\n    url: `http://localhost:3000/api/pets/${petId}`,\n    headers: { 'Content-Type': 'application/json' }\n  });\n  \n  const pet = petResponse.data;\n  \n  // Process actions for this pet\n  for (const action of actions) {\n    try {\n      const result = await executeCareAction(pet, action);\n      results.push({\n        petId: pet.id,\n        petName: pet.name,\n        action: action.action,\n        success: result.success,\n        result: result,\n        timestamp: new Date().toISOString()\n      });\n      \n      // Add delay between actions for same pet\n      if (actions.length > 1) {\n        await new Promise(resolve => setTimeout(resolve, 1000));\n      }\n    } catch (error) {\n      results.push({\n        petId: pet.id,\n        petName: pet.name,\n        action: action.action,\n        success: false,\n        error: error.message,\n        timestamp: new Date().toISOString()\n      });\n    }\n  }\n}\n\nreturn { processedPets: Object.keys(groupedActions).length, results };\n\nasync function executeCareAction(pet, action) {\n  const endpoint = `http://localhost:3000/api/pets/${pet.id}/care`;\n  const payload = {\n    actionType: action.action,\n    performer: 'auto_care_system',\n    location: pet.currentLocation || 'home',\n    timestamp: new Date().toISOString()\n  };\n  \n  // Add action-specific parameters\n  switch (action.action) {\n    case 'feed':\n      payload.food = action.suggestedFood || 'auto_select';\n      payload.amount = 'auto';\n      break;\n    case 'play':\n      payload.activity = 'auto_select';\n      payload.duration = 15; // 15 minutes for auto-play\n      break;\n    case 'train':\n      payload.skill = 'auto_select';\n      payload.intensity = 'light';\n      break;\n    case 'rest':\n      payload.location = 'auto';\n      payload.duration = 30; // 30 minutes for auto-rest\n      break;\n    case 'groom':\n      payload.method = 'auto';\n      payload.tools = 'auto';\n      break;\n  }\n  \n  const response = await $helpers.httpRequest({\n    method: 'POST',\n    url: endpoint,\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify(payload)\n  });\n  \n  return response.data;\n}"
+      },
+      "id": "f5g6h7i8-d4e5-6789-ef01-456789012345",
+      "name": "Execute Care Actions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/care/log",
+        "sendBody": true,
+        "jsonParameters": true,
+        "bodyParametersJson": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "g6h7i8j9-e5f6-7890-f012-567890123456",
+      "name": "Log Care Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1340,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// No care actions needed - just log the check\nconst data = $input.first().json;\n\nreturn {\n  message: 'Routine care check completed',\n  timestamp: new Date().toISOString(),\n  petsChecked: data.totalPets || 0,\n  actionsRequired: 0,\n  status: 'all_pets_well_cared_for'\n};"
+      },
+      "id": "h7i8j9k0-f6g7-8901-0123-678901234567",
+      "name": "No Action Needed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/care/log",
+        "sendBody": true,
+        "jsonParameters": true,
+        "bodyParametersJson": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "i8j9k0l1-g7h8-9012-1234-789012345678",
+      "name": "Log No Action",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1340,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Hourly Care Check": {
+      "main": [
+        [
+          {
+            "node": "Get Active Pets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Pets": {
+      "main": [
+        [
+          {
+            "node": "Analyze Pet Needs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Pet Needs": {
+      "main": [
+        [
+          {
+            "node": "Actions Needed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actions Needed?": {
+      "main": [
+        [
+          {
+            "node": "Execute Care Actions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Action Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Care Actions": {
+      "main": [
+        [
+          {
+            "node": "Log Care Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Action Needed": {
+      "main": [
+        [
+          {
+            "node": "Log No Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T10:30:00.000Z",
+  "versionId": "1.0.0"
+}

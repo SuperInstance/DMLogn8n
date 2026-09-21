@@ -1,0 +1,242 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dmlog-deny-all
+  namespace: dmlog
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dmlog-allow-ingress
+  namespace: dmlog
+spec:
+  podSelector:
+    matchLabels:
+      app: dmlog
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow traffic from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 80
+  # Allow traffic from monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+    - protocol: TCP
+      port: 9113
+    - protocol: TCP
+      port: 9187
+    - protocol: TCP
+      port: 9121
+  # Allow traffic within namespace
+  - from:
+    - podSelector:
+        matchLabels:
+          app: dmlog
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dmlog-allow-egress
+  namespace: dmlog
+spec:
+  podSelector:
+    matchLabels:
+      app: dmlog
+  policyTypes:
+  - Egress
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow external API calls
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443   # HTTPS
+    - protocol: TCP
+      port: 80    # HTTP
+  # Allow communication with database
+  - to:
+    - podSelector:
+        matchLabels:
+          app: dmlog
+          component: database
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow communication with cache
+  - to:
+    - podSelector:
+        matchLabels:
+          app: dmlog
+          component: cache
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow communication within namespace
+  - to:
+    - podSelector:
+        matchLabels:
+          app: dmlog
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: monitoring-allow-ingress
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app: prometheus
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow from dmlog namespace for metrics scraping
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: dmlog
+    ports:
+    - protocol: TCP
+      port: 9090
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: logging-allow-ingress
+  namespace: logging
+spec:
+  podSelector:
+    matchLabels:
+      app: fluent-bit
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow from all namespaces for log collection
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 2020
+---
+# WAF Configuration for AWS WAF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: waf-rules
+  namespace: dmlog
+data:
+  waf-rules.json: |
+    {
+      "Name": "DMLogWebACL",
+      "Scope": "CLOUDFRONT",
+      "DefaultAction": {
+        "Allow": {}
+      },
+      "Description": "Web ACL for DMLog application",
+      "Rules": [
+        {
+          "Name": "BlockCommonWebAttacks",
+          "Priority": 1,
+          "Statement": {
+            "ManagedRuleGroupStatement": {
+              "VendorName": "AWS",
+              "Name": "AWSManagedRulesCommonRuleSet",
+              "ExcludedRules": [
+                {
+                  "Name": "SizeRestrictions_QUERYSTRING"
+                },
+                {
+                  "Name": "SizeRestrictions_BODY"
+                }
+              ]
+            },
+            "VisibilityConfig": {
+              "SampledRequestsEnabled": true,
+              "CloudWatchMetricsEnabled": true,
+              "MetricName": "BlockCommonWebAttacks"
+            },
+            "Action": {
+              "Block": {}
+            }
+          }
+        },
+        {
+          "Name": "BlockSQLInjection",
+          "Priority": 2,
+          "Statement": {
+            "ManagedRuleGroupStatement": {
+              "VendorName": "AWS",
+              "Name": "AWSManagedRulesSQLiRuleSet"
+            },
+            "VisibilityConfig": {
+              "SampledRequestsEnabled": true,
+              "CloudWatchMetricsEnabled": true,
+              "MetricName": "BlockSQLInjection"
+            },
+            "Action": {
+              "Block": {}
+            }
+          }
+        },
+        {
+          "Name": "RateLimitAPI",
+          "Priority": 3,
+          "Statement": {
+            "RateBasedStatement": {
+              "Limit": 2000,
+              "AggregateKeyType": "IP"
+            },
+            "VisibilityConfig": {
+              "SampledRequestsEnabled": true,
+              "CloudWatchMetricsEnabled": true,
+              "MetricName": "RateLimitAPI"
+            },
+            "Action": {
+              "Block": {}
+            }
+          }
+        },
+        {
+          "Name": "AllowKnownGoodBots",
+          "Priority": 4,
+          "Statement": {
+            "ManagedRuleGroupStatement": {
+              "VendorName": "AWS",
+              "Name": "AWSManagedRulesKnownBadInputsRuleSet"
+            },
+            "VisibilityConfig": {
+              "SampledRequestsEnabled": true,
+              "CloudWatchMetricsEnabled": true,
+              "MetricName": "AllowKnownGoodBots"
+            },
+            "Action": {
+              "Allow": {}
+            }
+          }
+        }
+      ],
+      "VisibilityConfig": {
+        "SampledRequestsEnabled": true,
+        "CloudWatchMetricsEnabled": true,
+        "MetricName": "DMLogWebACL"
+      }
+    }

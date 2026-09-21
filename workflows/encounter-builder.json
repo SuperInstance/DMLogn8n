@@ -1,0 +1,383 @@
+{
+  "name": "Encounter Builder - Dynamic Combat Creation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "encounter-builder",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "encounter-builder"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.action }}",
+              "operation": "equal",
+              "value2": "create"
+            }
+          ]
+        }
+      },
+      "id": "create-router",
+      "name": "Route to Create Encounter",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.action }}",
+              "operation": "equal",
+              "value2": "manage-creatures"
+            }
+          ]
+        }
+      },
+      "id": "creatures-router",
+      "name": "Route to Creature Management",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.action }}",
+              "operation": "equal",
+              "value2": "balance-difficulty"
+            }
+          ]
+        }
+      },
+      "id": "balance-router",
+      "name": "Route to Difficulty Balancing",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 700]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.action }}",
+              "operation": "equal",
+              "value2": "environment-hazards"
+            }
+          ]
+        }
+      },
+      "id": "hazards-router",
+      "name": "Route to Environmental Hazards",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 900]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.action }}",
+              "operation": "equal",
+              "value2": "multi-wave"
+            }
+          ]
+        }
+      },
+      "id": "wave-router",
+      "name": "Route to Multi-Wave Orchestration",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 1100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Dynamic Encounter Creation System\nconst { partySize, partyLevel, difficulty, environment, encounterType, customConstraints } = $input.first().json.body;\n\n// Creature Database\nconst creatureDatabase = {\n  lowLevel: [\n    {\n      id: 'goblin',\n      name: 'Goblin',\n      cr: 0.25,\n      type: 'humanoid',\n      size: 'Small',\n      alignment: 'Neutral Evil',\n      hp: 7,\n      ac: 15,\n      stats: { str: 8, dex: 14, con: 10, int: 10, wis: 8, cha: 6 },\n      abilities: ['Nimble Escape', 'Stealth +6'],\n      attacks: ['Scimitar +4 (1d6+2 slashing)', 'Shortbow +4 (1d6+2 piercing)'],\n      tactics: 'Prefers ambushes and numerical superiority',\n      environment: ['forest', 'cave', 'ruins'],\n      role: 'minion'\n    },\n    {\n      id: 'wolf',\n      name: 'Wolf',\n      cr: 0.25,\n      type: 'beast',\n      size: 'Medium',\n      alignment: 'Unaligned',\n      hp: 11,\n      ac: 13,\n      stats: { str: 12, dex: 15, con: 12, int: 3, wis: 12, cha: 6 },\n      abilities: ['Keen Hearing and Smell', 'Pack Tactics'],\n      attacks: ['Bite +4 (1d6+2 piercing)'],\n      tactics: 'Hunts in packs, flanks prey',\n      environment: ['forest', 'arctic', 'hills'],\n      role: 'skirmisher'\n    }\n  ],\n  midLevel: [\n    {\n      id: 'ogre',\n      name: 'Ogre',\n      cr: 2,\n      type: 'giant',\n      size: 'Large',\n      alignment: 'Chaotic Evil',\n      hp: 59,\n      ac: 16,\n      stats: { str: 19, dex: 8, con: 16, int: 5, wis: 7, cha: 7 },\n      abilities: ['Darkvision 60ft', 'Scent'],\n      attacks: ['Greatclub +6 (2d8+4 bludgeoning)', 'Javelin +6 (1d8+4 piercing)'],\n      tactics: 'Brute force, charges recklessly',\n      environment: ['hills', 'mountains', 'ruins'],\n      role: 'brute'\n    },\n    {\n      id: 'shadow-demon',\n      name: 'Shadow Demon',\n      cr: 3,\n      type: 'fiend',\n      size: 'Medium',\n      alignment: 'Chaotic Evil',\n      hp: 22,\n      ac: 13,\n      stats: { str: 7, dex: 18, con: 13, int: 12, wis: 13, cha: 16 },\n      abilities: ['Invisibility in darkness', 'Resistance to non-magical damage'],\n      attacks: ['Shadow Claw +6 (2d6+4 necrotic + 1d6 psychic)'],\n      tactics: 'Stealthy attacks, prefers darkness',\n      environment: ['underground', 'dark places', 'shadow plane'],\n      role: 'stealth'\n    },\n    {\n      id: 'veteran',\n      name: 'Veteran',\n      cr: 3,\n      type: 'humanoid',\n      size: 'Medium',\n      alignment: 'Any',\n      hp: 58,\n      ac: 17,\n      stats: { str: 16, dex: 13, con: 14, int: 10, wis: 12, cha: 10 },\n      abilities: ['Parry', 'Tactical Coordination'],\n      attacks: ['Longsword +6 (1d8+3 slashing)', 'Longbow +5 (1d8+3 piercing)'],\n      tactics: 'Strategic, protects allies',\n      environment: ['military', 'urban', 'battlefield'],\n      role: 'leader'\n    }\n  ],\n  highLevel: [\n    {\n      id: 'adult-black-dragon',\n      name: 'Adult Black Dragon',\n      cr: 14,\n      type: 'dragon',\n      size: 'Huge',\n      alignment: 'Chaotic Evil',\n      hp: 195,\n      ac: 19,\n      stats: { str: 23, dex: 14, con: 21, int: 14, wis: 13, cha: 17 },\n      abilities: ['Amphibious', 'Legendary Resistance (3/day)', 'Legendary Actions (3)'],\n      attacks: ['Bite +11 (2d10+6 piercing + 7 acid)', 'Claw +11 (2d6+6 slashing)', 'Tail +11 (2d8+6 bludgeoning)'],\n      breathWeapon: 'Acid Breath (60ft cone, 12d8 acid)',\n      tactics: 'Uses environment, acid attacks, fear tactics',\n      environment: ['swamp', 'underwater', 'cave'],\n      role: 'boss'\n    },\n    {\n      id: 'lich',\n      name: 'Lich',\n      cr: 21,\n      type: 'undead',\n      size: 'Medium',\n      alignment: 'Any Evil',\n      hp: 135,\n      ac: 17,\n      stats: { str: 11, dex: 16, con: 16, int: 20, wis: 14, cha: 16 },\n      abilities: ['Immortal', 'Magic Resistance', 'Legendary Resistance (3/day)', 'Legendary Actions (3)'],\n      spells: ['Can cast 9th level spells', 'Paralyzing Touch', 'Life Drain'],\n      tactics: 'Powerful spellcaster, uses minions',\n      environment: ['lair', 'tower', 'dungeon'],\n      role: 'mastermind'\n    }\n  ]\n};\n\n// Difficulty thresholds based on party level\nconst difficultyThresholds = {\n  1: { easy: 25, medium: 50, hard: 75, deadly: 100 },\n  2: { easy: 50, medium: 100, hard: 150, deadly: 200 },\n  3: { easy: 75, medium: 150, hard: 225, deadly: 300 },\n  4: { easy: 100, medium: 200, hard: 300, deadly: 400 },\n  5: { easy: 125, medium: 250, hard: 375, deadly: 500 },\n  6: { easy: 150, medium: 300, hard: 450, deadly: 600 },\n  7: { easy: 175, medium: 350, hard: 525, deadly: 700 },\n  8: { easy: 200, medium: 400, hard: 600, deadly: 800 },\n  9: { easy: 225, medium: 450, hard: 675, deadly: 900 },\n  10: { easy: 250, medium: 500, hard: 750, deadly: 1000 },\n  11: { easy: 275, medium: 550, hard: 825, deadly: 1100 },\n  12: { easy: 300, medium: 600, hard: 900, deadly: 1200 },\n  13: { easy: 350, medium: 700, hard: 1050, deadly: 1400 },\n  14: { easy: 400, medium: 800, hard: 1200, deadly: 1600 },\n  15: { easy: 450, medium: 900, hard: 1350, deadly: 1800 },\n  16: { easy: 500, medium: 1000, hard: 1500, deadly: 2000 },\n  17: { easy: 550, medium: 1100, hard: 1650, deadly: 2200 },\n  18: { easy: 600, medium: 1200, hard: 1800, deadly: 2400 },\n  19: { easy: 650, medium: 1300, hard: 1950, deadly: 2600 },\n  20: { easy: 700, medium: 1400, hard: 2100, deadly: 2800 }\n};\n\n// Calculate encounter budget\nconst threshold = difficultyThresholds[partyLevel] || difficultyThresholds[1];\nlet encounterBudget = threshold[difficulty] || threshold.medium;\n\n// Adjust for party size\nif (partySize > 4) {\n  encounterBudget *= (partySize / 4);\n} else if (partySize < 4) {\n  encounterBudget *= (partySize / 4);\n}\n\n// Select appropriate creatures\nconst availableCreatures = [];\nif (partyLevel <= 5) {\n  availableCreatures.push(...creatureDatabase.lowLevel, ...creatureDatabase.midLevel);\n} else if (partyLevel <= 10) {\n  availableCreatures.push(...creatureDatabase.midLevel);\n} else {\n  availableCreatures.push(...creatureDatabase.midLevel, ...creatureDatabase.highLevel);\n}\n\n// Filter by environment\nconst environmentCompatibleCreatures = availableCreatures.filter(creature => \n  creature.environment.includes(environment) || creature.environment.includes('any')\n);\n\n// Build encounter\nconst encounter = {\n  id: `encounter-${Date.now()}`,\n  name: `${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)} ${encounterType || 'Combat'} Encounter`,\n  difficulty,\n  partyLevel,\n  partySize,\n  environment,\n  budget: encounterBudget,\n  creatures: [],\n  tactics: '',\n  terrainFeatures: [],\n  complications: [],\n  rewards: {}\n};\n\n// Select creatures based on encounter type\nlet remainingBudget = encounterBudget;\nconst selectedCreatures = [];\n\nswitch (encounterType) {\n  case 'single-monster':\n    // Find one strong creature\n    const soloCreature = environmentCompatibleCreatures.find(c => c.cr * 2 <= remainingBudget) ||\n                        environmentCompatibleCreatures.reduce((prev, curr) => \n                          curr.cr > prev.cr ? curr : prev, environmentCompatibleCreatures[0]);\n    selectedCreatures.push({ ...soloCreature, count: 1, role: 'boss' });\n    break;\n    \n  case 'mixed-group':\n    // Mix of different creature types\n    const leader = environmentCompatibleCreatures.find(c => c.cr <= remainingBudget * 0.4) ||\n                   environmentCompatibleCreatures[Math.floor(environmentCompatibleCreatures.length / 2)];\n    selectedCreatures.push({ ...leader, count: 1, role: 'leader' });\n    remainingBudget -= leader.cr * 2;\n    \n    // Add minions\n    const minionType = environmentCompatibleCreatures.find(c => c.cr <= remainingBudget * 0.3) ||\n                      environmentCompatibleCreatures[0];\n    const minionCount = Math.floor(remainingBudget / (minionType.cr * 2));\n    if (minionCount > 0) {\n      selectedCreatures.push({ ...minionType, count: minionCount, role: 'minion' });\n    }\n    break;\n    \n  case 'horde':\n    // Many weak creatures\n    const hordeType = environmentCompatibleCreatures.find(c => c.cr <= 2) ||\n                     environmentCompatibleCreatures.reduce((prev, curr) => \n                       curr.cr < prev.cr ? curr : prev, environmentCompatibleCreatures[0]);\n    const hordeCount = Math.floor(remainingBudget / (hordeType.cr * 2));\n    selectedCreatures.push({ ...hordeType, count: hordeCount, role: 'horde' });\n    break;\n    \n  default:\n    // Balanced encounter\n    const balancedCreatures = environmentCompatibleCreatures.slice(0, 3);\n    balancedCreatures.forEach((creature, index) => {\n      const maxCount = Math.floor(remainingBudget / (creature.cr * 2));\n      const count = Math.min(maxCount, Math.max(1, Math.floor((4 - index) / 2)));\n      if (count > 0) {\n        selectedCreatures.push({ ...creature, count, role: index === 0 ? 'primary' : 'secondary' });\n        remainingBudget -= creature.cr * count * 2;\n      }\n    });\n}\n\nencounter.creatures = selectedCreatures;\n\n// Generate tactics\nconst tactics = [];\nselectedCreatures.forEach(creature => {\n  if (creature.role === 'boss' || creature.role === 'leader') {\n    tactics.push(`${creature.name} leads the attack, focusing on spellcasters first`);\n  } else if (creature.role === 'minion') {\n    tactics.push(`${creature.name}s surround the party, using flanking tactics`);\n  } else if (creature.role === 'skirmisher') {\n    tactics.push(`${creature.name}s use hit-and-run tactics`);\n  }\n});\nencounter.tactics = tactics.join('. ');\n\n// Generate terrain features based on environment\nconst terrainFeatures = {\n  forest: ['Dense trees (half cover)', 'Difficult terrain (undergrowth)', 'Elevated positions'],\n  cave: ['Narrow passages', 'Darkness', 'Uneven ground', 'Stalagmites (cover)'],\n  swamp: ['Difficult terrain (water)', 'Fog (limited visibility)', 'Unstable ground'],\n  ruins: ['Broken walls (cover)', 'Collapsing floors', 'Debris (difficult terrain)'],\n  urban: ['Buildings (cover)', 'Crowds (obstacles)', 'Narrow alleys'],\n  hills: ['Elevated positions', 'Rocky terrain', 'Limited cover'],\n  underground: ['Total darkness', 'Echoes', 'Tight spaces', 'Unusual formations']\n};\n\nencounter.terrainFeatures = terrainFeatures[environment] || ['Open terrain', 'Limited cover'];\n\n// Generate complications\nconst complications = [\n  'Reinforcements arrive after 2 rounds',\n  'Environmental hazard activates',\n  'Innocent bystanders need protection',\n  'Time limit - objective must be completed quickly',\n  'Magical effects interfere with abilities',\n  'Terrain changes mid-combat',\n  'Enemy has hidden advantages'\n];\n\nif (Math.random() > 0.6) {\n  encounter.complications = [complications[Math.floor(Math.random() * complications.length)]];\n}\n\n// Generate rewards\nencounter.rewards = {\n  experience: Math.round(encounterBudget * 10),\n  treasure: {\n    coins: Math.round(encounterBudget * 2),\n    items: difficulty === 'deadly' ? 1 : (difficulty === 'hard' ? 0.5 : 0.1)\n  },\n  story: 'Information about the main plot or important characters'\n};\n\nreturn [{ json: encounter }];"
+      },
+      "id": "create-encounter",
+      "name": "Create Dynamic Encounter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "create-response",
+      "name": "Create Encounter Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Creature/NPC Stat Block Management\nconst { action, creatureId, creatureData, searchCriteria } = $input.first().json.body;\n\nconst creatureLibrary = [\n  {\n    id: 'goblin-warrior',\n    name: 'Goblin Warrior',\n    cr: 0.5,\n    type: 'humanoid',\n    size: 'Small',\n    alignment: 'Neutral Evil',\n    armorClass: 16,\n    hitPoints: 11,\n    speed: '30 ft.',\n    abilityScores: {\n      strength: 13,\n      dexterity: 15,\n      constitution: 12,\n      intelligence: 8,\n      wisdom: 8,\n      charisma: 6\n    },\n    savingThrows: {},\n    skills: {\n      stealth: 6\n    },\n    damageVulnerabilities: [],\n    damageResistances: [],\n    damageImmunities: [],\n    conditionImmunities: [],\n    senses: 'Darkvision 60 ft., Passive Perception 9',\n    languages: 'Common, Goblin',\n    challenge: '0.5 (100 XP)',\n    specialAbilities: [\n      {\n        name: 'Nimble Escape',\n        description: 'The goblin can take the Disengage or Hide action as a bonus action on each of its turns.'\n      }\n    ],\n    actions: [\n      {\n        name: 'Scimitar',\n        description: 'Melee Weapon Attack: +3 to hit, reach 5 ft., one target. Hit: 4 (1d6 + 1) slashing damage.',\n        attackBonus: 3,\n        damage: '1d6+1 slashing',\n        reach: 5\n      },\n      {\n        name: 'Shortbow',\n        description: 'Ranged Weapon Attack: +3 to hit, range 80/320 ft., one target. Hit: 4 (1d6 + 1) piercing damage.',\n        attackBonus: 3,\n        damage: '1d6+1 piercing',\n        range: '80/320'\n      }\n    ],\n    reactions: [],\n    legendaryActions: [],\n    tactics: 'Uses hit-and-run tactics, prefers ambushes',\n    environment: ['forest', 'cave', 'ruins', 'dungeon'],\n    role: 'minion',\n    description: 'A well-equipped goblin warrior, more disciplined than typical goblins.',\n    lore: 'These goblins serve as soldiers for larger goblin tribes or work as mercenaries for other evil creatures.',\n    treasure: 'Scimitar, shortbow, 20 arrows, leather armor, shield',\n    variants: [\n      {\n        name: 'Goblin Archer',\n        modifications: { abilityScores: { dexterity: 16 }, skills: { stealth: 7 } }\n      },\n      {\n        name: 'Goblin Boss',\n        modifications: { cr: 1, hitPoints: 17, armorClass: 17 }\n      }\n    ]\n  },\n  {\n    id: 'shadow-assassin',\n    name: 'Shadow Assassin',\n    cr: 5,\n    type: 'humanoid',\n    size: 'Medium',\n    alignment: 'Neutral Evil',\n    armorClass: 17,\n    hitPoints: 66,\n    speed: '30 ft.',\n    abilityScores: {\n      strength: 10,\n      dexterity: 18,\n      constitution: 14,\n      intelligence: 12,\n      wisdom: 14,\n      charisma: 12\n    },\n    savingThrows: {\n      dexterity: 7,\n      intelligence: 4,\n      wisdom: 5\n    },\n    skills: {\n      acrobatics: 7,\n      athletics: 3,\n      deception: 4,\n      intimidation: 4,\n      investigation: 4,\n      perception: 5,\n      stealth: 11\n    },\n    damageVulnerabilities: [],\n    damageResistances: ['necrotic'],\n    damageImmunities: [],\n    conditionImmunities: [],\n    senses: 'Darkvision 120 ft., Passive Perception 15',\n    languages: 'Common, Thieves\\' Cant, Shadow Telepathy 100 ft.',\n    challenge: '5 (1,800 XP)',\n    specialAbilities: [\n      {\n        name: 'Assassinate',\n        description: 'During its first turn, the assassin has advantage on attack rolls against any creature that hasn\\'t taken a turn. Any hit the assassin scores against a creature that is surprised is a critical hit.'\n      },\n      {\n        name: 'Evasion',\n        description: 'If the assassin is subjected to an effect that allows it to make a Dexterity saving throw to take only half damage, it instead takes no damage if it succeeds on the saving throw, and only half damage if it fails.'\n      },\n      {\n        name: 'Sneak Attack',\n        description: 'Once per turn, the assassin deals an extra 14 (4d6) damage to one creature it hits with an attack if it has advantage on the attack roll. The attack must use a finesse or a ranged weapon.'\n      },\n      {\n        name: 'Shadow Step',\n        description: 'As a bonus action, the assassin can teleport up to 60 feet to an unoccupied space it can see that is in dim light or darkness. It then has advantage on the first melee attack it makes before the end of the turn.'\n      }\n    ],\n    actions: [\n      {\n        name: 'Multiattack',\n        description: 'The assassin makes two shortsword attacks.'\n      },\n      {\n        name: 'Shortsword',\n        description: 'Melee Weapon Attack: +7 to hit, reach 5 ft., one target. Hit: 7 (1d6 + 4) piercing damage plus 10 (3d6) poison damage.',\n        attackBonus: 7,\n        damage: '1d6+4 piercing + 3d6 poison',\n        reach: 5\n      },\n      {\n        name: 'Hand Crossbow',\n        description: 'Ranged Weapon Attack: +7 to hit, range 30/120 ft., one target. Hit: 7 (1d6 + 4) piercing damage plus 10 (3d6) poison damage.',\n        attackBonus: 7,\n        damage: '1d6+4 piercing + 3d6 poison',\n        range: '30/120'\n      }\n    ],\n    reactions: [\n      {\n        name: 'Uncanny Dodge',\n        description: 'The assassin halves the damage that it takes from an attack that hits it.'\n      }\n    ],\n    legendaryActions: [],\n    tactics: 'Uses stealth and surprise, targets weak enemies first, uses shadow step for tactical positioning',\n    environment: ['urban', 'dungeon', 'underground', 'ruins'],\n    role: 'stealth',\n    description: 'A deadly assassin trained in shadow magic and infiltration.',\n    lore: 'Shadow assassins are trained in secret academies where they learn to blend magic with stealth. They often work for shadowy organizations or as hired killers.',\n    treasure: '2 shortswords, hand crossbow, 20 bolts, leather armor, shadow essence, poison vial',\n    variants: [\n      {\n        name: 'Shadow Master',\n        modifications: { cr: 8, hitPoints: 85, legendaryActions: ['Shadow Teleport', 'Shadow Attack', 'Shadow Vanish'] }\n      }\n    ]\n  },\n  {\n    id: 'adult-red-dragon',\n    name: 'Adult Red Dragon',\n    cr: 17,\n    type: 'dragon',\n    size: 'Huge',\n    alignment: 'Chaotic Evil',\n    armorClass: 19,\n    hitPoints: 256,\n    speed: '40 ft., climb 40 ft., fly 80 ft.',\n    abilityScores: {\n      strength: 27,\n      dexterity: 10,\n      constitution: 25,\n      intelligence: 16,\n      wisdom: 13,\n      charisma: 21\n    },\n    savingThrows: {\n      dexterity: 7,\n      constitution: 14,\n      wisdom: 7,\n      charisma: 12\n    },\n    skills: {\n      perception: 16,\n      stealth: 6\n    },\n    damageVulnerabilities: [],\n    damageResistances: [],\n    damageImmunities: ['fire', 'poison'],\n    conditionImmunities: [],\n    senses: 'Blindsight 60 ft., Darkvision 120 ft., Passive Perception 26',\n    languages: 'Common, Draconic',\n    challenge: '17 (18,000 XP)',\n    specialAbilities: [\n      {\n        name: 'Legendary Resistance (3/Day)',\n        description: 'If the dragon fails a saving throw, it can choose to succeed instead.'\n      },\n      {\n        name: 'Magic Resistance',\n        description: 'The dragon has advantage on saving throws against spells and other magical effects.'\n      }\n    ],\n    actions: [\n      {\n        name: 'Multiattack',\n        description: 'The dragon can use its Frightful Presence. It then makes three attacks: one with its bite and two with its claws.'\n      },\n      {\n        name: 'Bite',\n        description: 'Melee Weapon Attack: +14 to hit, reach 10 ft., one target. Hit: 19 (2d10 + 8) piercing damage plus 7 (2d6) fire damage.',\n        attackBonus: 14,\n        damage: '2d10+8 piercing + 2d6 fire',\n        reach: 10\n      },\n      {\n        name: 'Claw',\n        description: 'Melee Weapon Attack: +14 to hit, reach 5 ft., one target. Hit: 15 (2d6 + 8) slashing damage.',\n        attackBonus: 14,\n        damage: '2d6+8 slashing',\n        reach: 5\n      },\n      {\n        name: 'Tail',\n        description: 'Melee Weapon Attack: +14 to hit, reach 15 ft., one target. Hit: 17 (2d8 + 8) bludgeoning damage.',\n        attackBonus: 14,\n        damage: '2d8+8 bludgeoning',\n        reach: 15\n      },\n      {\n        name: 'Frightful Presence',\n        description: 'Each creature of the dragon\\'s choice that is within 120 feet of the dragon and aware of it must succeed on a DC 19 Wisdom saving throw or become frightened for 1 minute. A frightened creature can repeat the saving throw at the end of each of its turns, ending the effect on itself on a success.'\n      },\n      {\n        name: 'Fire Breath (Recharge 5-6)',\n        description: 'The dragon exhales fire in a 60-foot cone. Each creature in that area must make a DC 21 Dexterity saving throw, taking 63 (18d6) fire damage on a failed save, or half as much damage on a successful one.'\n      }\n    ],\n    reactions: [],\n    legendaryActions: [\n      {\n        name: 'Detect',\n        description: 'The dragon makes a Wisdom (Perception) check.',\n        cost: 1\n      },\n      {\n        name: 'Tail Attack',\n        description: 'The dragon makes a tail attack.',\n        cost: 2\n      },\n      {\n        name: 'Wing Attack (Costs 2 Actions)',\n        description: 'The dragon beats its wings. Each creature within 10 feet of the dragon must succeed on a DC 20 Dexterity saving throw or take 14 (2d6 + 7) bludgeoning damage and be knocked prone. The dragon can then fly up to half its flying speed.'\n      }\n    ],\n    tactics: 'Starts with breath weapon, uses fear to scatter enemies, focuses on biggest threats, uses flight advantage',\n    environment: ['mountains', 'volcanic', 'cave', 'lair'],\n    role: 'boss',\n    description: 'An ancient and powerful red dragon, master of fire and fear.',\n    lore: 'Red dragons are the most covetous and greedy of all dragons, forever seeking to increase their treasure hoards. They are obsessed with wealth and will go to great lengths to acquire it.',\n    treasure: 'Massive treasure hoard with gold, jewels, magic items, and artifacts',\n    lairActions: [\n      'Magma erupts from a point on the ground',\n      'Tremors shake the lair, causing creatures to make saving throws',\n      'Volcanic gases fill the area, causing poison damage'\n    ]\n  }\n];\n\nlet response;\n\nswitch (action) {\n  case 'list':\n    response = { creatures: creatureLibrary, total: creatureLibrary.length };\n    break;\n  case 'get':\n    const creature = creatureLibrary.find(c => c.id === creatureId);\n    response = creature || { error: 'Creature not found' };\n    break;\n  case 'search':\n    const results = creatureLibrary.filter(c => {\n      if (searchCriteria.name && !c.name.toLowerCase().includes(searchCriteria.name.toLowerCase())) {\n        return false;\n      }\n      if (searchCriteria.cr && c.cr !== searchCriteria.cr) {\n        return false;\n      }\n      if (searchCriteria.type && c.type !== searchCriteria.type) {\n        return false;\n      }\n      if (searchCriteria.environment && !c.environment.includes(searchCriteria.environment)) {\n        return false;\n      }\n      return true;\n    });\n    response = { creatures: results, total: results.length };\n    break;\n  case 'create':\n    // Create new creature logic\n    const newCreature = {\n      id: `creature-${Date.now()}`,\n      ...creatureData,\n      createdAt: new Date().toISOString()\n    };\n    response = { success: true, creature: newCreature };\n    break;\n  case 'update':\n    // Update creature logic\n    response = { success: true, message: 'Creature updated successfully' };\n    break;\n  case 'delete':\n    // Delete creature logic\n    response = { success: true, message: 'Creature deleted successfully' };\n    break;\n  default:\n    response = { error: 'Invalid action' };\n}\n\nreturn [{ json: response }];"
+      },
+      "id": "creature-management",
+      "name": "Creature Management Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "creature-response",
+      "name": "Creature Management Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Encounter Difficulty Balancing System\nconst { encounterData, partyData, difficultyTarget, adjustments } = $input.first().json.body;\n\n// Calculate adjusted XP based on party size\nconst calculateAdjustedXP = (cr, partySize) => {\n  const baseXP = {\n    0.125: 25,\n    0.25: 50,\n    0.5: 100,\n    1: 200,\n    2: 450,\n    3: 700,\n    4: 1100,\n    5: 1800,\n    6: 2300,\n    7: 2900,\n    8: 3900,\n    9: 5000,\n    10: 5900,\n    11: 7200,\n    12: 8400,\n    13: 10000,\n    14: 11500,\n    15: 13000,\n    16: 15000,\n    17: 18000,\n    18: 20000,\n    19: 22000,\n    20: 25000,\n    21: 33000,\n    22: 41000,\n    23: 50000,\n    24: 62000,\n    30: 155000\n  };\n\n  const xp = baseXP[cr] || 0;\n  const multipliers = {\n    1: 1,\n    2: 1.5,\n    3: 2,\n    4: 2.5,\n    5: 3,\n    6: 3.5,\n    7: 4,\n    8: 4.5,\n    9: 5,\n    10: 5.5,\n    11: 6,\n    12: 6.5,\n    13: 7,\n    14: 7.5\n  };\n\n  return Math.round(xp * (multipliers[partySize] || 8));\n};\n\n// Calculate encounter difficulty\nconst calculateDifficulty = (encounterCreatures, partySize, partyLevel) => {\n  let totalAdjustedXP = 0;\n  \n  encounterCreatures.forEach(creature => {\n    const adjustedXP = calculateAdjustedXP(creature.cr, partySize);\n    totalAdjustedXP += adjustedXP * creature.count;\n  });\n\n  // Calculate XP thresholds\n  const thresholds = {\n    1: { easy: 25, medium: 50, hard: 75, deadly: 100 },\n    2: { easy: 50, medium: 100, hard: 150, deadly: 200 },\n    3: { easy: 75, medium: 150, hard: 225, deadly: 300 },\n    4: { easy: 100, medium: 200, hard: 300, deadly: 400 },\n    5: { easy: 125, medium: 250, hard: 375, deadly: 500 },\n    6: { easy: 150, medium: 300, hard: 450, deadly: 600 },\n    7: { easy: 175, medium: 350, hard: 525, deadly: 700 },\n    8: { easy: 200, medium: 400, hard: 600, deadly: 800 },\n    9: { easy: 225, medium: 450, hard: 675, deadly: 900 },\n    10: { easy: 250, medium: 500, hard: 750, deadly: 1000 },\n    11: { easy: 275, medium: 550, hard: 825, deadly: 1100 },\n    12: { easy: 300, medium: 600, hard: 900, deadly: 1200 },\n    13: { easy: 350, medium: 700, hard: 1050, deadly: 1400 },\n    14: { easy: 400, medium: 800, hard: 1200, deadly: 1600 },\n    15: { easy: 450, medium: 900, hard: 1350, deadly: 1800 },\n    16: { easy: 500, medium: 1000, hard: 1500, deadly: 2000 },\n    17: { easy: 550, medium: 1100, hard: 1650, deadly: 2200 },\n    18: { easy: 600, medium: 1200, hard: 1800, deadly: 2400 },\n    19: { easy: 650, medium: 1300, hard: 1950, deadly: 2600 },\n    20: { easy: 700, medium: 1400, hard: 2100, deadly: 2800 }\n  };\n\n  const threshold = thresholds[partyLevel] || thresholds[1];\n  \n  let difficulty = 'trivial';\n  if (totalAdjustedXP >= threshold.deadly) difficulty = 'deadly';\n  else if (totalAdjustedXP >= threshold.hard) difficulty = 'hard';\n  else if (totalAdjustedXP >= threshold.medium) difficulty = 'medium';\n  else if (totalAdjustedXP >= threshold.easy) difficulty = 'easy';\n\n  return {\n    difficulty,\n    totalAdjustedXP,\n    thresholds: threshold,\n    percentageOfDeadly: Math.round((totalAdjustedXP / threshold.deadly) * 100)\n  };\n};\n\n// Analyze encounter balance\nconst analyzeEncounter = (encounterCreatures, partyData) => {\n  const analysis = {\n    actionEconomy: { party: partyData.length, enemies: 0 },\n    averageDamage: { party: 0, enemies: 0 },\n    survivability: { party: 0, enemies: 0 },\n    crowdControl: { party: 0, enemies: 0 },\n    recommendations: []\n  };\n\n  // Calculate enemy metrics\n  encounterCreatures.forEach(creature => {\n    analysis.actionEconomy.enemies += creature.count;\n    \n    // Estimate average damage per round\n    const avgDamage = estimateCreatureDamage(creature);\n    analysis.averageDamage.enemies += avgDamage * creature.count;\n    \n    // Estimate survivability\n    const survivability = creature.hp * creature.count;\n    analysis.survivability.enemies += survivability;\n  });\n\n  // Calculate party metrics (simplified)\n  analysis.averageDamage.party = partyData.length * 15; // Assume 15 damage per character\n  analysis.survivability.party = partyData.reduce((sum, pc) => sum + pc.maxHp, 0);\n\n  // Generate recommendations\n  if (analysis.actionEconomy.enemies > analysis.actionEconomy.party * 1.5) {\n    analysis.recommendations.push('Enemies outnumber the party significantly - consider reducing enemy count or increasing party resources');\n  }\n  \n  if (analysis.averageDamage.enemies > analysis.averageDamage.party * 1.2) {\n    analysis.recommendations.push('Enemy damage output is high - ensure party has adequate healing and defenses');\n  }\n  \n  if (analysis.survivability.enemies > analysis.survivability.party * 2) {\n    analysis.recommendations.push('Encounter may be too lengthy - consider reducing enemy HP or adding ways to bypass defenses');\n  }\n\n  return analysis;\n};\n\n// Estimate creature damage per round\nconst estimateCreatureDamage = (creature) => {\n  // Simplified damage estimation based on CR\n  const damageByCR = {\n    0.125: 5,\n    0.25: 8,\n    0.5: 12,\n    1: 15,\n    2: 25,\n    3: 35,\n    4: 45,\n    5: 55,\n    6: 65,\n    7: 75,\n    8: 85,\n    9: 95,\n    10: 110,\n    11: 125,\n    12: 140,\n    13: 160,\n    14: 180,\n    15: 200,\n    16: 220,\n    17: 250,\n    18: 280,\n    19: 310,\n    20: 350\n  };\n  \n  return damageByCR[creature.cr] || 10;\n};\n\n// Generate balancing suggestions\nconst generateBalancingSuggestions = (currentDifficulty, targetDifficulty, encounterCreatures) => {\n  const suggestions = {\n    increase: [],\n    decrease: [],\n    maintain: []\n  };\n\n  if (currentDifficulty === targetDifficulty) {\n    suggestions.maintain.push('Encounter is well-balanced for the target difficulty');\n    return suggestions;\n  }\n\n  const difficultyOrder = ['trivial', 'easy', 'medium', 'hard', 'deadly'];\n  const currentIndex = difficultyOrder.indexOf(currentDifficulty);\n  const targetIndex = difficultyOrder.indexOf(targetDifficulty);\n\n  if (targetIndex > currentIndex) {\n    // Need to increase difficulty\n    suggestions.increase.push('Add more creatures of existing types');\n    suggestions.increase.push('Upgrade creatures to higher CR versions');\n    suggestions.increase.push('Add environmental hazards or complications');\n    suggestions.increase.push('Give creatures advantageous terrain or positioning');\n    suggestions.increase.push('Add legendary actions or special abilities to enemies');\n  } else {\n    // Need to decrease difficulty\n    suggestions.decrease.push('Reduce the number of creatures');\n    suggestions.decrease.push('Downgrade creatures to lower CR versions');\n    suggestions.decrease.push('Remove environmental hazards');\n    suggestions.decrease.push('Give players advantageous terrain');\n    suggestions.decrease.push('Add ways for players to gain advantages or surprise');\n  }\n\n  return suggestions;\n};\n\n// Main balance analysis\nconst difficultyAnalysis = calculateDifficulty(\n  encounterData.creatures,\n  partyData.length,\n  partyData[0].level\n);\n\nconst encounterAnalysis = analyzeEncounter(encounterData.creatures, partyData);\n\nconst balancingSuggestions = generateBalancingSuggestions(\n  difficultyAnalysis.difficulty,\n  difficultyTarget,\n  encounterData.creatures\n);\n\nconst response = {\n  currentDifficulty: difficultyAnalysis,\n  analysis: encounterAnalysis,\n  suggestions: balancingSuggestions,\n  adjustments: {\n    recommended: [],\n    quickFixes: [\n      `Current difficulty: ${difficultyAnalysis.difficulty}`,\n      `Target difficulty: ${difficultyTarget}`,\n      `Adjustment needed: ${difficultyAnalysis.difficulty === difficultyTarget ? 'None' : difficultyAnalysis.difficulty < difficultyTarget ? 'Increase' : 'Decrease'}`\n    ]\n  },\n  partyBalance: {\n    optimalRange: {\n      easy: difficultyAnalysis.thresholds.easy,\n      medium: difficultyAnalysis.thresholds.medium,\n      hard: difficultyAnalysis.thresholds.hard,\n      deadly: difficultyAnalysis.thresholds.deadly\n    },\n    currentTotal: difficultyAnalysis.totalAdjustedXP,\n    balanceRatio: difficultyAnalysis.percentageOfDeadly / 100\n  }\n};\n\nreturn [{ json: response }];"
+      },
+      "id": "difficulty-balancing",
+      "name": "Difficulty Balancing Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "balance-response",
+      "name": "Difficulty Balancing Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 700]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Environmental Hazards and Terrain Effects System\nconst { action, environment, hazardType, customHazard } = $input.first().json.body;\n\nconst environmentalHazards = {\n  natural: [\n    {\n      id: 'wildfire',\n      name: 'Wildfire',\n      type: 'environmental',\n      severity: 'deadly',\n      description: 'Raging wildfire spreads through the area',\n      effect: 'Each round, characters must make DC 15 Dexterity saving throws or take 7 (2d6) fire damage',\n      spread: 'Fire spreads 10 feet in random direction each round',\n      duration: 'Until extinguished or fuel exhausted',\n      interaction: {\n        extinguish: 'DC 15 Strength (Athletics) check to create fire break',\n        avoid: 'DC 15 Dexterity saving throw to take half damage',\n        use: 'Can be used against enemies with fire vulnerability'\n      },\n      terrain: 'forest, grassland',\n      weather: 'hot, dry, windy'\n    },\n    {\n      id: 'flash-flood',\n      name: 'Flash Flood',\n      type: 'environmental',\n      severity: 'deadly',\n      description: 'Sudden torrent of water floods the area',\n      effect: 'Area becomes difficult terrain. Each round, characters must make DC 15 Strength saving throws or be swept 20 feet away and take 10 (3d6) bludgeoning damage',\n      spread: 'Water level rises 1 foot per round',\n      duration: '1 hour',\n      interaction: {\n        avoid: 'DC 15 Strength (Athletics) check to anchor oneself',\n        rescue: 'DC 13 Strength (Athletics) check to rescue swept character',\n        use: 'Can sweep away enemies or create obstacles'\n      },\n      terrain: 'canyon, river valley, urban street',\n      weather: 'heavy rain, storm'\n    },\n    {\n      id: 'avalanche',\n      name: 'Avalanche',\n      type: 'environmental',\n      severity: 'deadly',\n      description: 'Mass of snow and ice cascades down mountain',\n      effect: 'All in area must make DC 18 Dexterity saving throw. On failure, take 22 (4d10) bludgeoning damage and be buried',\n      spread: 'Affects 100-foot cone',\n      duration: 'Buried characters remain trapped until dug out',\n      interaction: {\n        avoid: 'DC 15 Dexterity saving throw for half damage',\n        rescue: 'DC 15 Strength (Athletics) check to dig out buried creature (1 minute per creature)',\n        use: 'Can block paths or trap enemies'\n      },\n      terrain: 'mountain, steep slope',\n      weather: 'heavy snow, earthquake, loud noise'\n    }\n  ],\n  magical: [\n    {\n      id: 'wild-magic-surge',\n      name: 'Wild Magic Surge',\n      type: 'magical',\n      severity: 'unpredictable',\n      description: 'Area experiences wild magical fluctuations',\n      effect: 'When a character casts a spell, roll on Wild Magic Surge table. On 1-50, normal effect. On 51-100, surge occurs',\n      spread: '100-foot radius',\n      duration: '1 hour',\n      interaction: {\n        control: 'DC 18 Intelligence (Arcana) check to temporarily stabilize area',\n        harness: 'Spellcasters can potentially harness surges for greater effect',\n        avoid: 'Dispel magic or antimagic field can suppress effects'\n      },\n      terrain: 'any',\n      triggers: 'powerful magic, planar rift, magical artifact'\n    },\n    {\n      id: 'time-distortion',\n      name: 'Time Distortion Field',\n      type: 'magical',\n      severity: 'disruptive',\n      description: 'Temporal anomalies affect the area',\n      effect: 'Roll d6 each round: 1-2: time slows (actions take bonus action), 3-4: normal, 5-6: time speeds up (characters gain additional action)',\n      spread: '50-foot radius',\n      duration: '10 minutes',\n      interaction: {\n        control: 'DC 20 Intelligence (Arcana) check to stabilize time flow',\n        use: 'Can be used to gain tactical advantages',\n        escape: 'Moving out of area ends effects'\n      },\n      terrain: 'any',\n      triggers: 'temporal magic, time travel artifacts, planar intersection'\n    }\n  ],\n  trap: [\n    {\n      id: 'pressure-plate',\n      name: 'Pressure Plate Trap',\n      type: 'trap',\n      severity: 'moderate',\n      description: 'Concealed pressure plate triggers trap when stepped on',\n      effect: 'DC 15 Perception check to notice. On trigger, character must make DC 15 Dexterity save or take 10 (3d6) piercing damage from spikes',\n      spread: '5-foot square',\n      duration: 'One-time use',\n      interaction: {\n        detect: 'DC 15 Wisdom (Perception) or Intelligence (Investigation) check',\n        disarm: 'DC 15 Thieves\\' Tools check to disarm safely',\n        bypass: 'Can jump over or trigger from distance'\n      },\n      terrain: 'dungeon, ruins, temple',\n      placement: 'doorways, corridors, treasure rooms'\n    },\n    {\n      id: 'pit-trap',\n      name: 'Concealed Pit',\n      type: 'trap',\n      severity: 'moderate',\n      description: 'Hidden pit covered with false floor',\n      effect: 'DC 13 Perception check to notice. On fall, character takes 7 (2d6) bludgeoning damage and falls into 20-foot deep pit',\n      spread: '10-foot square',\n      duration: 'Permanent until disarmed',\n      interaction: {\n        detect: 'DC 13 Wisdom (Perception) check',\n        escape: 'DC 15 Strength (Athletics) check to climb out',\n        bypass: 'Can use rope or flight to cross safely'\n      },\n      terrain: 'dungeon, cave, ruins',\n      placement: 'corridors, treasure areas, choke points'\n    }\n  ],\n  weather: [\n    {\n      id: 'thunderstorm',\n      name: 'Severe Thunderstorm',\n      type: 'weather',\n      severity: 'moderate',\n      description: 'Intense thunderstorm with lightning and high winds',\n      effect: 'Heavy rain reduces visibility to 30 feet. Each round, 20% chance of lightning strike in area (DC 15 Dexterity save for 22 (4d10) lightning damage)',\n      spread: '1-mile radius',\n      duration: '2d6 hours',\n      interaction: {\n        shelter: 'Seeking shelter negates effects',\n        avoid: 'DC 15 Dexterity saving throw to avoid lightning',\n        use: 'Can provide cover or obscure vision'\n      },\n      terrain: 'open areas',\n      conditions: 'hot, humid weather'\n    },\n    {\n      id: 'blizzard',\n      name: 'Magical Blizzard',\n      type: 'weather',\n      severity: 'extreme',\n      description: 'Supernatural blizzard with magical cold',\n      effect: 'Visibility reduced to 10 feet. Movement speed halved. Each round, characters must make DC 14 Constitution save or take 9 (2d8) cold damage',\n      spread: '1-mile radius',\n      duration: '6 hours',\n      interaction: {\n        shelter: 'Magical shelter or extreme cold protection negates damage',\n        navigate: 'DC 18 Wisdom (Survival) check to avoid getting lost',\n        avoid: 'Cold resistance or immunity provides protection'\n      },\n      terrain: 'arctic, mountain',\n      conditions: 'cold weather, magical influence'\n    }\n  ],\n  terrain: [\n    {\n      id: 'difficult-terrain',\n      name: 'Difficult Terrain',\n      type: 'terrain',\n      severity: 'minor',\n      description: 'Area is difficult to move through',\n      effect: 'Movement costs 1 extra foot for each foot moved',\n      spread: 'Variable',\n      duration: 'Permanent',\n      interaction: {\n        navigate: 'Flight or teleport bypasses effect',\n        clear: 'Can be cleared with sufficient effort',\n        use: 'Can be used tactically to control battlefield'\n      },\n      terrain: 'any',\n      types: 'undergrowth, rubble, mud, ice, steep slope'\n    },\n    {\n      id: 'obstructed-terrain',\n      name: 'Obstructed Terrain',\n      type: 'terrain',\n      severity: 'moderate',\n      description: 'Area contains obstacles that block movement and provide cover',\n      effect: 'Obstacles block movement and provide cover. Creatures can use them for protection',\n      spread: 'Variable',\n      duration: 'Permanent',\n      interaction: {\n        destroy: 'Obstacles can be destroyed (usually 10-15 HP each)',\n        climb: 'DC 13 Strength (Athletics) check to climb over',\n        use: 'Provides tactical advantages and defensive positions'\n      },\n      terrain: 'urban, ruins, dungeon',\n      types: 'walls, barriers, furniture, boulders'\n    }\n  ]\n};\n\nconst terrainEffects = {\n  elevation: [\n    {\n      name: 'High Ground',\n      effect: '+1 to attack rolls against enemies on lower ground',\n      disadvantage: 'More exposed to ranged attacks',\n      interaction: 'Can be reached by climbing or flying'\n    },\n    {\n      name: 'Low Ground',\n      effect: 'Disadvantage on attack rolls against enemies on higher ground',\n      advantage: 'Better cover from ranged attacks',\n      interaction: 'Can provide defensive advantages'\n    }\n  ],\n  lighting: [\n    {\n      name: 'Bright Light',\n      effect: 'Normal visibility',\n      disadvantage: 'Disadvantage on Dexterity (Stealth) checks',\n      interaction: 'No penalties on perception checks'\n    },\n    {\n      name: 'Dim Light',\n      effect: 'Disadvantage on Wisdom (Perception) checks relying on sight',\n      advantage: 'Advantage on Dexterity (Stealth) checks',\n      interaction: 'Darkvision or light sources negate penalties'\n    },\n    {\n      name: 'Darkness',\n      effect: 'Blinded for creatures without darkvision',\n      disadvantage: 'Disadvantage on attack rolls',\n      interaction: 'Darkvision or light sources required to see'\n    }\n  ],\n  cover: [\n    {\n      name: 'Half Cover',\n      effect: '+2 to AC and Dexterity saving throws',\n      description: 'Partial obstruction like a tree or fence'\n    },\n    {\n      name: 'Three-Quarters Cover',\n      effect: '+5 to AC and Dexterity saving throws',\n      description: 'Most of body is covered like a portcullis or arrow slit'\n    },\n    {\n      name: 'Full Cover',\n      effect: 'Can\\'t be targeted directly',\n      description: 'Complete obstruction like a wall or pillar'\n    }\n  ]\n};\n\nlet response;\n\nswitch (action) {\n  case 'list':\n    const allHazards = Object.values(environmentalHazards).flat();\n    response = { hazards: allHazards, total: allHazards.length };\n    break;\n  case 'getByType':\n    const typeHazards = environmentalHazards[hazardType] || [];\n    response = { hazards: typeHazards, type: hazardType, total: typeHazards.length };\n    break;\n  case 'getByEnvironment':\n    const envHazards = Object.values(environmentalHazards).flat().filter(hazard => \n      hazard.terrain === environment || hazard.terrain.includes('any')\n    );\n    response = { hazards: envHazards, environment, total: envHazards.length };\n    break;\n  case 'getTerrainEffects':\n    response = { effects: terrainEffects };\n    break;\n  case 'generateCustom':\n    const customHazardGenerated = {\n      id: `custom-${Date.now()}`,\n      name: customHazard.name,\n      type: customHazard.type,\n      severity: customHazard.severity,\n      description: customHazard.description,\n      effect: customHazard.effect,\n      spread: customHazard.spread,\n      duration: customHazard.duration,\n      interaction: customHazard.interaction || {},\n      terrain: customHazard.terrain,\n      custom: true\n    };\n    response = { hazard: customHazardGenerated, success: true };\n    break;\n  case 'random':\n    const allHazardTypes = Object.keys(environmentalHazards);\n    const randomType = allHazardTypes[Math.floor(Math.random() * allHazardTypes.length)];\n    const hazardsOfType = environmentalHazards[randomType];\n    const randomHazard = hazardsOfType[Math.floor(Math.random() * hazardsOfType.length)];\n    response = { hazard: randomHazard, type: randomType };\n    break;\n  default:\n    response = { error: 'Invalid action' };\n}\n\nreturn [{ json: response }];"
+      },
+      "id": "environmental-hazards",
+      "name": "Environmental Hazards Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 900]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "hazards-response",
+      "name": "Environmental Hazards Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 900]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Multi-Wave Encounter Orchestration System\nconst { action, encounterData, waveConfiguration, triggerConditions } = $input.first().json.body;\n\n// Wave management system\nconst multiWaveSystem = {\n  encounter: {\n    id: `multiwave-${Date.now()}`,\n    name: 'Multi-Wave Assault',\n    totalWaves: 3,\n    currentWave: 0,\n    status: 'preparing',\n    victoryConditions: ['Defeat all waves', 'Survive for specified time', 'Complete objective'],\n    defeatConditions: ['All party members fall unconscious', 'Time limit exceeded', 'Critical objective failed'],\n    timeLimit: null, // Can be set for timed encounters\n    rewards: {\n      baseExperience: 0,\n      waveBonus: 0,\n      survivalBonus: 0,\n      completionBonus: 0\n    }\n  },\n  waves: [\n    {\n      id: 'wave-1',\n      name: 'First Assault',\n      description: 'Initial wave of basic enemies to test party strength',\n      trigger: {\n        type: 'immediate',\n        condition: 'Encounter start',\n        delay: 0\n      },\n      creatures: [\n        {\n          id: 'goblin-scout',\n          name: 'Goblin Scout',\n          count: 4,\n          cr: 0.25,\n          role: 'skirmisher',\n          tactics: 'Probe defenses, test party capabilities',\n          positioning: 'Spread out, use cover',\n          morale: 'Flee if reduced to 25% strength'\n        }\n      ],\n      terrainChanges: [],\n      specialEvents: [],\n      completionReward: { experience: 100, treasure: 'minor' }\n    },\n    {\n      id: 'wave-2',\n      name: 'Reinforcement Wave',\n      description: 'Second wave with mixed enemy types and support units',\n      trigger: {\n        type: 'condition',\n        condition: 'First wave defeated OR 3 rounds elapsed',\n        delay: 1,\n        delayType: 'rounds'\n      },\n      creatures: [\n        {\n          id: 'goblin-warrior',\n          name: 'Goblin Warrior',\n          count: 2,\n          cr: 0.5,\n          role: 'frontline',\n          tactics: 'Direct assault, protect weaker units',\n          positioning: 'Front line, shield wall formation',\n          morale: 'Fight to the death'\n        },\n        {\n          id: 'goblin-shaman',\n          name: 'Goblin Shaman',\n          count: 1,\n          cr: 1,\n          role: 'support',\n          tactics: 'Buff allies, debuff party, heal wounded',\n          positioning: 'Back line, behind warriors',\n          morale: 'Flee if seriously wounded',\n          spells: ['Bless', 'Bane', 'Cure Wounds', 'Guidance']\n        }\n      ],\n      terrainChanges: [\n        {\n          type: 'cover',\n          description: 'Reinforcements bring barricades and shields',\n          effect: 'Provides half cover for goblin warriors',\n          duration: 'Permanent'\n        }\n      ],\n      specialEvents: [\n        {\n          type: 'reinforcement',\n          description: 'Bugbear enforcer arrives if goblins are struggling',\n          trigger: '2 or more goblins defeated in first round',\n          delay: 2\n        }\n      ],\n      completionReward: { experience: 200, treasure: 'moderate' }\n    },\n    {\n      id: 'wave-3',\n      name: 'Final Assault',\n      description: 'Boss wave with elite enemies and special mechanics',\n      trigger: {\n        type: 'condition',\n        condition: 'Second wave defeated OR 5 rounds since wave 2 start',\n        delay: 2,\n        delayType: 'rounds'\n      },\n      creatures: [\n        {\n          id: 'hobgoblin-captain',\n          name: 'Hobgoblin Captain',\n          count: 1,\n          cr: 3,\n          role: 'leader',\n          tactics: 'Coordinate attacks, tactical positioning, use special abilities',\n          positioning: 'Center of formation, commanding troops',\n          morale: 'Never surrenders, fights to death',\n          abilities: ['Commanding Presence', 'Tactical Coordination'],\n          equipment: ['Masterwork longsword', 'Shield with insignia', 'Captains banner']\n        },\n        {\n          id: 'bugbear-brute',\n          name: 'Bugbear Brute',\n          count: 2,\n          cr: 1,\n          role: 'heavy',\n          tactics: 'Brute force, intimidation, fear tactics',\n          positioning: 'Flanks, intimidating presence',\n          morale: 'May flee if leader defeated',\n          abilities: ['Brute Force', 'Surprise Attack'],\n          equipment: ['Large morningstar', 'Spiked armor']\n        }\n      ],\n      terrainChanges: [\n        {\n          type: 'environmental',\n          description: 'Captain uses signal flares to create smoke screen',\n          effect: 'Area becomes lightly obscured, disadvantage on ranged attacks',\n          duration: '3 rounds'\n        },\n        {\n          type: 'strategic',\n          description: 'Reinforcements set up fallback positions',\n          effect: 'Enemies can use tactical retreat and regroup',\n          duration: 'Permanent'\n        }\n      ],\n      specialEvents: [\n        {\n          type: 'desperation',\n          description: 'When captain reaches 25% HP, calls for desperate reinforcements',\n          trigger: 'Captain HP < 25%',\n          delay: 'immediate',\n          effect: '2 additional goblins arrive next round'\n        },\n        {\n          type: 'villain',\n          description: 'If party is overwhelming, captain may attempt escape',\n          trigger: '2 or more enemies defeated, captain HP < 50%',\n          delay: 'start of captain\\'s turn',\n          effect: 'Captain attempts to flee and warn larger force'\n        }\n      ],\n      completionReward: { experience: 400, treasure: 'significant', story: 'Intelligence about larger goblin organization' }\n    }\n  ],\n  orchestration: {\n    pacing: {\n      initialIntensity: 'medium',\n      escalationRate: 'gradual',\n      peakIntensity: 'wave-3',\n      recoveryPeriod: 'between waves (1 round)'\n    },\n    dynamicElements: {\n      difficultyScaling: true,\n      environmentalChanges: true,\n      narrativeProgression: true,\n      playerChoiceImpact: true\n    },\n    failureConditions: {\n      totalPartyKnockout: 'Encounter ends in failure',\n      timeLimitExceeded: 'Enemies complete their objective',\n      criticalNPCDeath: 'Special consequences for story',\n      earlyWithdrawal: 'Partial success with story implications'\n    },\n    successMetrics: {\n      wavesCompleted: 0,\n      totalEnemiesDefeated: 0,\n      partyDamageTaken: 0,\n      resourcesUsed: 0,\n      completionTime: 0,\n      bonusObjectivesCompleted: []\n    }\n  }\n};\n\n// Wave progression logic\nconst progressWave = (currentWave, encounterState) => {\n  const nextWave = currentWave + 1;\n  \n  if (nextWave > multiWaveSystem.waves.length) {\n    return { status: 'completed', nextWave: null };\n  }\n  \n  const wave = multiWaveSystem.waves[nextWave - 1];\n  \n  // Check trigger conditions\n  const triggerMet = evaluateTrigger(wave.trigger, encounterState);\n  \n  if (triggerMet) {\n    return { status: 'triggered', nextWave, wave, message: `Wave ${nextWave}: ${wave.name} begins!` };\n  } else {\n    return { status: 'waiting', nextWave, message: `Waiting for trigger condition: ${wave.trigger.condition}` };\n  }\n};\n\n// Evaluate wave trigger conditions\nconst evaluateTrigger = (trigger, encounterState) => {\n  switch (trigger.type) {\n    case 'immediate':\n      return true;\n    case 'condition':\n      // Evaluate specific conditions\n      if (trigger.condition.includes('wave defeated')) {\n        const waveNumber = parseInt(trigger.condition.match(/\\d+/)?.[0] || '1');\n        return encounterState.wavesCompleted >= waveNumber;\n      }\n      if (trigger.condition.includes('rounds elapsed')) {\n        const rounds = parseInt(trigger.condition.match(/\\d+/)?.[0] || '3');\n        return encounterState.currentRound >= rounds;\n      }\n      return false;\n    case 'time':\n      return encounterState.elapsedTime >= trigger.value;\n    case 'custom':\n      // Custom trigger logic would go here\n      return false;\n    default:\n      return false;\n  }\n};\n\n// Generate dynamic wave adjustments\nconst generateWaveAdjustments = (wave, partyPerformance, environmentalFactors) => {\n  const adjustments = {\n    creatures: [],\n    difficulty: 'normal',\n    specialEvents: [],\n    terrainChanges: []\n  };\n  \n  // Adjust based on party performance\n  if (partyPerformance.damageTaken > partyPerformance.maxHP * 0.7) {\n    adjustments.difficulty = 'reduce';\n    // Remove one creature or downgrade them\n    if (wave.creatures.length > 1) {\n      const removedCreature = wave.creatures.pop();\n      adjustments.creatures.push({ action: 'removed', creature: removedCreature });\n    }\n  } else if (partyPerformance.damageTaken < partyPerformance.maxHP * 0.2) {\n    adjustments.difficulty = 'increase';\n    // Add extra creature or upgrade existing ones\n    const bonusCreature = { ...wave.creatures[0], id: `bonus-${Date.now()}` };\n    adjustments.creatures.push({ action: 'added', creature: bonusCreature });\n  }\n  \n  // Environmental adjustments\n  if (environmentalFactors.lighting === 'darkness') {\n    // Give creatures darkvision or add creatures with night vision\n    adjustments.specialEvents.push({\n      type: 'environmental',\n      description: 'Creatures have advantage in darkness',\n      effect: 'Enemy attacks have advantage while party has disadvantage'\n    });\n  }\n  \n  return adjustments;\n};\n\n// Calculate wave rewards\nconst calculateWaveRewards = (wave, performanceMetrics, totalWaves) => {\n  const baseXP = wave.creatures.reduce((total, creature) => {\n    return total + (creature.cr * 100 * creature.count);\n  }, 0);\n  \n  let bonusMultiplier = 1.0;\n  \n  // Performance bonuses\n  if (performanceMetrics.damageTaken < performanceMetrics.maxHP * 0.3) {\n    bonusMultiplier += 0.2; // 20% bonus for minimal damage\n  }\n  \n  if (performanceMetrics.roundsCompleted < performanceMetrics.expectedRounds * 0.7) {\n    bonusMultiplier += 0.15; // 15% bonus for speed\n  }\n  \n  if (performanceMetrics.noCasualties) {\n    bonusMultiplier += 0.25; // 25% bonus for no casualties\n  }\n  \n  // Wave completion bonus\n  const waveBonus = (wave.id / totalWaves) * 0.1; // Up to 10% extra for later waves\n  bonusMultiplier += waveBonus;\n  \n  const totalXP = Math.round(baseXP * bonusMultiplier);\n  \n  return {\n    base: baseXP,\n    performance: Math.round(baseXP * (bonusMultiplier - 1)),\n    total: totalXP,\n    breakdown: {\n      baseXP,\n      speedBonus: performanceMetrics.roundsCompleted < performanceMetrics.expectedRounds * 0.7 ? Math.round(baseXP * 0.15) : 0,\n      survivalBonus: performanceMetrics.damageTaken < performanceMetrics.maxHP * 0.3 ? Math.round(baseXP * 0.2) : 0,\n      noCasualtyBonus: performanceMetrics.noCasualties ? Math.round(baseXP * 0.25) : 0,\n      waveProgressBonus: Math.round(baseXP * waveBonus)\n    }\n  };\n};\n\nlet response;\n\nswitch (action) {\n  case 'initialize':\n    response = { success: true, encounter: multiWaveSystem, message: 'Multi-wave encounter initialized' };\n    break;\n  case 'startWave':\n    const waveResult = progressWave(waveConfiguration.currentWave, encounterData);\n    response = { success: true, ...waveResult };\n    break;\n  case 'adjustWave':\n    const adjustments = generateWaveAdjustments(waveConfiguration, triggerConditions.partyPerformance, triggerConditions.environment);\n    response = { success: true, adjustments, message: 'Wave adjustments applied' };\n    break;\n  case 'completeWave':\n    const rewards = calculateWaveRewards(waveConfiguration, triggerConditions.performance, encounterData.totalWaves);\n    response = { success: true, rewards, message: 'Wave completed, rewards calculated' };\n    break;\n  case 'getProgress':\n    response = { progress: multiWaveSystem.orchestration.successMetrics, currentWave: encounterData.currentWave };\n    break;\n  default:\n    response = { error: 'Invalid action' };\n}\n\nreturn [{ json: response }];"
+      },
+      "id": "multi-wave-orchestration",
+      "name": "Multi-Wave Orchestration Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 1100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "wave-response",
+      "name": "Multi-Wave Orchestration Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 1100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\": \"Invalid action specified\"}"
+      },
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 1300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Route to Create Encounter",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route to Creature Management",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route to Difficulty Balancing",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route to Environmental Hazards",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route to Multi-Wave Orchestration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to Create Encounter": {
+      "main": [
+        [
+          {
+            "node": "Create Dynamic Encounter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Dynamic Encounter": {
+      "main": [
+        [
+          {
+            "node": "Create Encounter Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to Creature Management": {
+      "main": [
+        [
+          {
+            "node": "Creature Management Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Creature Management Handler": {
+      "main": [
+        [
+          {
+            "node": "Creature Management Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to Difficulty Balancing": {
+      "main": [
+        [
+          {
+            "node": "Difficulty Balancing Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Difficulty Balancing Handler": {
+      "main": [
+        [
+          {
+            "node": "Difficulty Balancing Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to Environmental Hazards": {
+      "main": [
+        [
+          {
+            "node": "Environmental Hazards Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Environmental Hazards Handler": {
+      "main": [
+        [
+          {
+            "node": "Environmental Hazards Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to Multi-Wave Orchestration": {
+      "main": [
+        [
+          {
+            "node": "Multi-Wave Orchestration Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Multi-Wave Orchestration Handler": {
+      "main": [
+        [
+          {
+            "node": "Multi-Wave Orchestration Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "tag-encounter-builder",
+      "name": "Encounter Builder"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

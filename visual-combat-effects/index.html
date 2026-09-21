@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D&D Visual Combat Effects System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            overflow: hidden;
+        }
+
+        #canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            min-width: 300px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .controls h2 {
+            margin-bottom: 15px;
+            color: #ffd700;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .control-section {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .control-section:last-child {
+            border-bottom: none;
+        }
+
+        .control-section h3 {
+            margin-bottom: 10px;
+            color: #87ceeb;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.spell-fire {
+            background: linear-gradient(135deg, #ff6b35 0%, #ff9558 100%);
+        }
+
+        button.spell-ice {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+
+        button.spell-lightning {
+            background: linear-gradient(135deg, #00c9ff 0%, #92fe9d 100%);
+        }
+
+        button.spell-healing {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .performance-monitor {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .performance-monitor h4 {
+            margin-bottom: 10px;
+            color: #ffd700;
+        }
+
+        .performance-monitor div {
+            margin: 5px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .performance-monitor .label {
+            color: #87ceeb;
+        }
+
+        .performance-monitor .value {
+            color: #ffffff;
+            font-weight: bold;
+        }
+
+        .combat-log {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            width: 350px;
+            max-height: 200px;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .combat-log h4 {
+            margin-bottom: 10px;
+            color: #ffd700;
+        }
+
+        .combat-log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            font-size: 12px;
+            border-left: 3px solid #666;
+            padding-left: 10px;
+            animation: slideIn 0.3s ease;
+        }
+
+        .combat-log-entry.damage {
+            border-left-color: #ff6b35;
+        }
+
+        .combat-log-entry.healing {
+            border-left-color: #4caf50;
+        }
+
+        .combat-log-entry.spell {
+            border-left-color: #9c27b0;
+        }
+
+        .combat-log-entry.critical {
+            border-left-color: #ff9800;
+            font-weight: bold;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid #ffd700;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        select {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 5px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        select option {
+            background: #333;
+        }
+
+        .slider-container {
+            margin: 10px 0;
+        }
+
+        .slider-container label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #87ceeb;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            margin: 5px 0;
+        }
+
+        .weather-effects {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .weather-effects button {
+            flex: 1;
+            min-width: 60px;
+            font-size: 10px;
+            padding: 8px 5px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <div class="loading" id="loading">
+        <div class="loading-spinner"></div>
+        <div>Loading Visual Combat Effects System...</div>
+    </div>
+
+    <div class="controls" id="controls" style="display: none;">
+        <h2>⚔️ D&D Combat Effects</h2>
+
+        <div class="control-section">
+            <h3>Character Actions</h3>
+            <button onclick="game.moveCharacter()">Move Character</button>
+            <button onclick="game.characterAttack()">Attack</button>
+            <button onclick="game.showMiss()">Show Miss</button>
+            <button onclick="game.castRandomSpell()">Cast Random Spell</button>
+        </div>
+
+        <div class="control-section">
+            <h3>Spell Effects</h3>
+            <button class="spell-fire" onclick="game.castFireball()">🔥 Fireball</button>
+            <button class="spell-ice" onclick="game.castIceBolt()">❄️ Ice Bolt</button>
+            <button class="spell-lightning" onclick="game.castLightning()">⚡ Lightning</button>
+            <button class="spell-healing" onclick="game.castHeal()">💚 Healing</button>
+            <button onclick="game.castBuff()">✨ Buff</button>
+            <button onclick="game.castIllusion()">🌟 Illusion</button>
+            <button onclick="game.castSummoning()">🌀 Summoning</button>
+        </div>
+
+        <div class="control-section">
+            <h3>Environment</h3>
+            <button onclick="game.damageEnvironment()">Damage Barrel</button>
+            <button onclick="game.destroyTree()">Destroy Tree</button>
+            <button onclick="game.addExplosion()">Explosion Effect</button>
+        </div>
+
+        <div class="control-section">
+            <h3>Weather & Time</h3>
+            <div class="weather-effects">
+                <button onclick="game.setWeather('clear')">☀️ Clear</button>
+                <button onclick="game.setWeather('rain')">🌧️ Rain</button>
+                <button onclick="game.setWeather('snow')">❄️ Snow</button>
+                <button onclick="game.setWeather('storm')">⛈️ Storm</button>
+                <button onclick="game.setWeather('fog')">🌫️ Fog</button>
+            </div>
+
+            <div class="slider-container">
+                <label for="timeSlider">Time of Day: <span id="timeValue">12:00</span></label>
+                <input type="range" id="timeSlider" min="0" max="24" step="0.5" value="12"
+                       onchange="game.setTimeOfDay(this.value); document.getElementById('timeValue').textContent = game.formatTime(this.value);">
+            </div>
+
+            <div class="slider-container">
+                <label>
+                    <input type="checkbox" id="dayNightCycle" onchange="game.toggleDayNightCycle(this.checked)">
+                    Enable Day/Night Cycle
+                </label>
+            </div>
+        </div>
+
+        <div class="control-section">
+            <h3>Quality Settings</h3>
+            <button onclick="game.setQuality('low')">📱 Low Quality</button>
+            <button onclick="game.setQuality('medium')">💻 Medium Quality</button>
+            <button onclick="game.setQuality('high')">🖥️ High Quality</button>
+        </div>
+
+        <div class="control-section">
+            <h3>Camera</h3>
+            <button onclick="game.resetCamera()">Reset Camera</button>
+            <button onclick="game.setTopDownView()">Top Down</button>
+            <button onclick="game.setCinematicView()">Cinematic</button>
+        </div>
+    </div>
+
+    <div class="performance-monitor" id="performanceMonitor">
+        <h4>Performance</h4>
+        <div>
+            <span class="label">FPS:</span>
+            <span class="value" id="fps">60</span>
+        </div>
+        <div>
+            <span class="label">Draw Calls:</span>
+            <span class="value" id="drawCalls">0</span>
+        </div>
+        <div>
+            <span class="label">Triangles:</span>
+            <span class="value" id="triangles">0</span>
+        </div>
+        <div>
+            <span class="label">Particles:</span>
+            <span class="value" id="particles">0</span>
+        </div>
+        <div>
+            <span class="label">Quality:</span>
+            <span class="value" id="quality">High</span>
+        </div>
+    </div>
+
+    <div class="combat-log" id="combatLog">
+        <h4>Combat Log</h4>
+        <div id="combatLogEntries"></div>
+    </div>
+
+    <script type="module">
+        import { CombatEffectsEngine, CharacterClass, SpellType, WeatherType } from './src/index.js'
+
+        class CombatGame {
+            constructor() {
+                this.engine = null
+                this.characters = new Map()
+                this.dayNightCycleEnabled = false
+                this.combatLogEntries = []
+                this.maxLogEntries = 20
+
+                this.init()
+            }
+
+            async init() {
+                try {
+                    const canvas = document.getElementById('canvas')
+                    this.engine = new CombatEffectsEngine(canvas)
+
+                    // Create test characters
+                    this.createTestCharacters()
+
+                    // Start the engine
+                    this.engine.start()
+
+                    // Hide loading screen and show controls
+                    document.getElementById('loading').style.display = 'none'
+                    document.getElementById('controls').style.display = 'block'
+
+                    // Start performance monitoring
+                    this.startPerformanceMonitoring()
+
+                    // Setup combat log updates
+                    this.setupCombatLogUpdates()
+
+                    console.log('Combat Effects Engine initialized successfully!')
+                } catch (error) {
+                    console.error('Failed to initialize Combat Effects Engine:', error)
+                    document.getElementById('loading').innerHTML = `
+                        <div style="color: #ff6b35;">Failed to load: ${error.message}</div>
+                        <button onclick="location.reload()" style="margin-top: 20px;">Reload</button>
+                    `
+                }
+            }
+
+            createTestCharacters() {
+                // Create warrior
+                const warrior = {
+                    id: 'warrior_1',
+                    name: 'Aragorn',
+                    position: new THREE.Vector3(-5, 0, -5),
+                    rotation: 0,
+                    health: 100,
+                    maxHealth: 100,
+                    class: CharacterClass.Fighter,
+                    level: 5,
+                    animationState: 'idle',
+                    statusEffects: []
+                }
+
+                // Create wizard
+                const wizard = {
+                    id: 'wizard_1',
+                    name: 'Gandalf',
+                    position: new THREE.Vector3(5, 0, 5),
+                    rotation: Math.PI,
+                    health: 60,
+                    maxHealth: 60,
+                    class: CharacterClass.Wizard,
+                    level: 8,
+                    animationState: 'idle',
+                    statusEffects: []
+                }
+
+                // Create rogue
+                const rogue = {
+                    id: 'rogue_1',
+                    name: 'Legolas',
+                    position: new THREE.Vector3(-3, 0, 7),
+                    rotation: Math.PI / 2,
+                    health: 80,
+                    maxHealth: 80,
+                    class: CharacterClass.Rogue,
+                    level: 6,
+                    animationState: 'idle',
+                    statusEffects: []
+                }
+
+                // Add characters to engine
+                this.engine.addCharacter(warrior)
+                this.engine.addCharacter(wizard)
+                this.engine.addCharacter(rogue)
+
+                this.characters.set('warrior_1', warrior)
+                this.characters.set('wizard_1', wizard)
+                this.characters.set('rogue_1', rogue)
+
+                this.addCombatLogEntry('Characters spawned! The battle begins...', 'spell')
+            }
+
+            moveCharacter() {
+                const characterId = 'warrior_1'
+                const randomPosition = new THREE.Vector3(
+                    (Math.random() - 0.5) * 15,
+                    0,
+                    (Math.random() - 0.5) * 15
+                )
+
+                this.engine.moveCharacter(characterId, randomPosition, 3)
+                this.addCombatLogEntry(`${this.characters.get(characterId).name} moves to a new position!`, 'spell')
+            }
+
+            characterAttack() {
+                const attackerId = 'warrior_1'
+                const targetId = 'rogue_1'
+
+                this.engine.characterAttack(attackerId, targetId).then(() => {
+                    const damage = Math.floor(Math.random() * 15) + 10
+                    const critical = Math.random() > 0.8
+
+                    if (critical) {
+                        this.engine.showDamage(damage * 2, this.characters.get(targetId).position, true, false)
+                        this.addCombatLogEntry(`${this.characters.get(attackerId).name} lands a CRITICAL hit for ${damage * 2} damage!`, 'critical')
+                    } else {
+                        this.engine.showDamage(damage, this.characters.get(targetId).position, false, false)
+                        this.addCombatLogEntry(`${this.characters.get(attackerId).name} hits ${this.characters.get(targetId).name} for ${damage} damage!`, 'damage')
+                    }
+                })
+            }
+
+            showMiss() {
+                const targetId = 'rogue_1'
+                this.engine.showMiss(this.characters.get(targetId).position)
+                this.addCombatLogEntry(`${this.characters.get('warrior_1').name} attacks but misses!`, 'spell')
+            }
+
+            castRandomSpell() {
+                const spells = [
+                    () => this.castFireball(),
+                    () => this.castIceBolt(),
+                    () => this.castLightning(),
+                    () => this.castHeal(),
+                    () => this.castBuff(),
+                    () => this.castIllusion(),
+                    () => this.castSummoning()
+                ]
+
+                const randomSpell = spells[Math.floor(Math.random() * spells.length)]
+                randomSpell()
+            }
+
+            castFireball() {
+                const casterId = 'wizard_1'
+                const targetId = 'warrior_1'
+
+                const spell = {
+                    id: 'fireball',
+                    name: 'Fireball',
+                    type: SpellType.Damage,
+                    damage: Math.floor(Math.random() * 20) + 25,
+                    radius: 5,
+                    speed: 0.8,
+                    color: 0xff6600,
+                    castTime: 1.5,
+                    particleEffect: {
+                        type: 'fire',
+                        count: 50,
+                        lifespan: 2,
+                        speed: 3,
+                        size: 0.3,
+                        colors: [0xff6600, 0xff9900, 0xffcc00]
+                    }
+                }
+
+                this.engine.castSpell(casterId, spell, this.characters.get(targetId).position, targetId)
+            }
+
+            castIceBolt() {
+                const casterId = 'wizard_1'
+                const targetId = 'rogue_1'
+
+                const spell = {
+                    id: 'ice_bolt',
+                    name: 'Ice Bolt',
+                    type: SpellType.Damage,
+                    damage: Math.floor(Math.random() * 15) + 15,
+                    radius: 2,
+                    speed: 0.6,
+                    color: 0x00ffff,
+                    castTime: 1,
+                    particleEffect: {
+                        type: 'ice',
+                        count: 30,
+                        lifespan: 1.5,
+                        speed: 4,
+                        size: 0.2,
+                        colors: [0x00ffff, 0x0088ff, 0xffffff]
+                    }
+                }
+
+                this.engine.castSpell(casterId, spell, this.characters.get(targetId).position, targetId)
+            }
+
+            castLightning() {
+                const casterId = 'wizard_1'
+                const targetId = 'warrior_1'
+
+                const spell = {
+                    id: 'lightning_bolt',
+                    name: 'Lightning Bolt',
+                    type: SpellType.Damage,
+                    damage: Math.floor(Math.random() * 30) + 20,
+                    radius: 8,
+                    speed: 0.1,
+                    color: 0x00ffff,
+                    castTime: 0.8,
+                    particleEffect: {
+                        type: 'lightning',
+                        count: 40,
+                        lifespan: 0.5,
+                        speed: 20,
+                        size: 0.15,
+                        color: 0x00ffff
+                    }
+                }
+
+                this.engine.castSpell(casterId, spell, this.characters.get(targetId).position, targetId)
+            }
+
+            castHeal() {
+                const casterId = 'wizard_1'
+                const targetId = 'warrior_1'
+
+                const spell = {
+                    id: 'heal',
+                    name: 'Cure Wounds',
+                    type: SpellType.Healing,
+                    healing: Math.floor(Math.random() * 15) + 20,
+                    radius: 0,
+                    speed: 0,
+                    color: 0x00ff00,
+                    castTime: 1.2,
+                    particleEffect: {
+                        type: 'healing',
+                        count: 40,
+                        lifespan: 3,
+                        speed: 1,
+                        size: 0.4,
+                        colors: [0xffd700, 0xffed4e, 0xffffff]
+                    }
+                }
+
+                this.engine.castSpell(casterId, spell, this.characters.get(targetId).position, targetId)
+            }
+
+            castBuff() {
+                const casterId = 'wizard_1'
+                const targetId = 'rogue_1'
+
+                const spell = {
+                    id: 'haste',
+                    name: 'Haste',
+                    type: SpellType.Buff,
+                    duration: 10,
+                    radius: 0,
+                    speed: 0,
+                    color: 0x00ff00,
+                    castTime: 1,
+                    particleEffect: {
+                        type: 'magic',
+                        count: 30,
+                        lifespan: 2,
+                        speed: 1,
+                        size: 0.15,
+                        color: 0x00ff00
+                    }
+                }
+
+                this.engine.castSpell(casterId, spell, this.characters.get(targetId).position, targetId)
+            }
+
+            castIllusion() {
+                const casterId = 'wizard_1'
+
+                const spell = {
+                    id: 'mirror_image',
+                    name: 'Mirror Image',
+                    type: SpellType.Illusion,
+                    duration: 15,
+                    radius: 3,
+                    speed: 0,
+                    color: 0xff00ff,
+                    castTime: 1.5,
+                    particleEffect: {
+                        type: 'magic',
+                        count: 40,
+                        lifespan: 3,
+                        speed: 0.5,
+                        size: 0.1,
+                        colors: [0xff00ff, 0x00ffff, 0xffffff]
+                    }
+                }
+
+                const randomPosition = new THREE.Vector3(
+                    (Math.random() - 0.5) * 10,
+                    0,
+                    (Math.random() - 0.5) * 10
+                )
+
+                this.engine.castSpell(casterId, spell, randomPosition)
+            }
+
+            castSummoning() {
+                const casterId = 'wizard_1'
+
+                const spell = {
+                    id: 'summon_creature',
+                    name: 'Summon Creature',
+                    type: SpellType.Summoning,
+                    duration: 20,
+                    radius: 0,
+                    speed: 0,
+                    color: 0x800080,
+                    castTime: 2,
+                    particleEffect: {
+                        type: 'magic',
+                        count: 60,
+                        lifespan: 2,
+                        speed: 2,
+                        size: 0.2,
+                        colors: [0x800080, 0xff00ff, 0x0000ff]
+                    }
+                }
+
+                const summonPosition = this.characters.get(casterId).position.clone().add(new THREE.Vector3(2, 0, 2))
+                this.engine.castSpell(casterId, spell, summonPosition)
+            }
+
+            damageEnvironment() {
+                // Find and damage a barrel
+                const envObjects = this.engine.environmentalSystem.getAllEnvironmentObjects()
+                const barrel = envObjects.find(obj => obj.type === 'barrel')
+
+                if (barrel) {
+                    const destroyed = this.engine.damageEnvironment(barrel.id, 30)
+                    if (destroyed) {
+                        this.addCombatLogEntry('The barrel explodes into splinters!', 'damage')
+                    } else {
+                        this.addCombatLogEntry('The barrel takes damage but holds together!', 'damage')
+                    }
+                }
+            }
+
+            destroyTree() {
+                const envObjects = this.engine.environmentalSystem.getAllEnvironmentObjects()
+                const tree = envObjects.find(obj => obj.type === 'tree')
+
+                if (tree) {
+                    this.engine.damageEnvironment(tree.id, 100)
+                    this.addCombatLogEntry('The tree crashes to the ground!', 'damage')
+                }
+            }
+
+            addExplosion() {
+                const position = new THREE.Vector3(
+                    (Math.random() - 0.5) * 10,
+                    1,
+                    (Math.random() - 0.5) * 10
+                )
+
+                this.engine.showDamage(50, position, true, false)
+                this.addCombatLogEntry('A massive explosion rocks the battlefield!', 'critical')
+            }
+
+            setWeather(weatherType) {
+                const weatherConfigs = {
+                    clear: { type: WeatherType.Clear, intensity: 0 },
+                    rain: { type: WeatherType.Rain, intensity: 1 },
+                    snow: { type: WeatherType.Snow, intensity: 0.8 },
+                    storm: { type: WeatherType.Storm, intensity: 1.2 },
+                    fog: { type: WeatherType.Fog, intensity: 0.6 }
+                }
+
+                this.engine.setWeather(weatherConfigs[weatherType])
+                this.addCombatLogEntry(`Weather changes to ${weatherType}!`, 'spell')
+            }
+
+            setTimeOfDay(hour) {
+                this.engine.setTimeOfDay(parseFloat(hour))
+            }
+
+            toggleDayNightCycle(enabled) {
+                this.dayNightCycleEnabled = enabled
+                this.engine.setDayNightCycle(enabled, 0.1)
+                if (enabled) {
+                    this.addCombatLogEntry('Day/night cycle enabled!', 'spell')
+                } else {
+                    this.addCombatLogEntry('Day/night cycle disabled!', 'spell')
+                }
+            }
+
+            setQuality(level) {
+                this.engine.setQualityLevel(level)
+                document.getElementById('quality').textContent = level.charAt(0).toUpperCase() + level.slice(1)
+                this.addCombatLogEntry(`Quality set to ${level}!`, 'spell')
+            }
+
+            resetCamera() {
+                this.engine.setCameraPosition(
+                    new THREE.Vector3(15, 20, 15),
+                    new THREE.Vector3(0, 0, 0)
+                )
+            }
+
+            setTopDownView() {
+                this.engine.setCameraPosition(
+                    new THREE.Vector3(0, 30, 0.1),
+                    new THREE.Vector3(0, 0, 0)
+                )
+            }
+
+            setCinematicView() {
+                this.engine.setCameraPosition(
+                    new THREE.Vector3(25, 15, -25),
+                    new THREE.Vector3(0, 0, 0)
+                )
+            }
+
+            formatTime(hour) {
+                const h = Math.floor(hour)
+                const m = Math.round((hour - h) * 60)
+                return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+            }
+
+            addCombatLogEntry(message, type = 'normal') {
+                const entry = {
+                    message,
+                    type,
+                    timestamp: new Date()
+                }
+
+                this.combatLogEntries.unshift(entry)
+                if (this.combatLogEntries.length > this.maxLogEntries) {
+                    this.combatLogEntries = this.combatLogEntries.slice(0, this.maxLogEntries)
+                }
+
+                this.updateCombatLogDisplay()
+            }
+
+            updateCombatLogDisplay() {
+                const container = document.getElementById('combatLogEntries')
+                container.innerHTML = this.combatLogEntries.map(entry =>
+                    `<div class="combat-log-entry ${entry.type}">${entry.message}</div>`
+                ).join('')
+            }
+
+            setupCombatLogUpdates() {
+                // Hook into the combat feedback system to get log entries
+                setInterval(() => {
+                    // This would ideally be event-driven but we'll poll for demo
+                    if (this.engine && this.engine.combatFeedbackSystem) {
+                        const logs = this.engine.combatFeedbackSystem.getCombatLog()
+                        if (logs.length > 0 && logs[0].message !== this.combatLogEntries[0]?.message) {
+                            const entry = logs[0]
+                            this.combatLogEntries.unshift({
+                                message: entry.message,
+                                type: entry.type === 'damage' ? 'damage' :
+                                       entry.type === 'healing' ? 'healing' :
+                                       entry.type === 'spellCast' ? 'spell' : 'normal',
+                                timestamp: new Date(entry.timestamp)
+                            })
+
+                            if (this.combatLogEntries.length > this.maxLogEntries) {
+                                this.combatLogEntries = this.combatLogEntries.slice(0, this.maxLogEntries)
+                            }
+
+                            this.updateCombatLogDisplay()
+                        }
+                    }
+                }, 100)
+            }
+
+            startPerformanceMonitoring() {
+                setInterval(() => {
+                    if (this.engine) {
+                        const metrics = this.engine.getPerformanceMetrics()
+                        document.getElementById('fps').textContent = metrics.fps
+                        document.getElementById('drawCalls').textContent = metrics.drawCalls
+                        document.getElementById('triangles').textContent = metrics.triangles.toLocaleString()
+                        document.getElementById('particles').textContent = metrics.activeParticles
+                        document.getElementById('quality').textContent = metrics.qualityLevel.charAt(0).toUpperCase() + metrics.qualityLevel.slice(1)
+                    }
+                }, 500)
+            }
+        }
+
+        // Initialize the game
+        window.game = new CombatGame()
+
+        // Make THREE available globally for console debugging
+        window.THREE = THREE
+    </script>
+</body>
+</html>

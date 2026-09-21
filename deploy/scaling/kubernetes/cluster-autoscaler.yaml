@@ -1,0 +1,291 @@
+---
+# Cluster Autoscaler Configuration for EKS
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-autoscaler
+  namespace: kube-system
+  labels:
+    app: cluster-autoscaler
+    component: cluster-scaling
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cluster-autoscaler
+  template:
+    metadata:
+      labels:
+        app: cluster-autoscaler
+    spec:
+      serviceAccountName: cluster-autoscaler
+      containers:
+      - image: k8s.gcr.io/autoscaling/cluster-autoscaler:v1.21.0
+        name: cluster-autoscaler
+        resources:
+          limits:
+            cpu: 100m
+            memory: 300Mi
+          requests:
+            cpu: 100m
+            memory: 300Mi
+        command:
+        - ./cluster-autoscaler
+        - --v=4
+        - --stderrthreshold=info
+        - --cloud-provider=aws
+        - --skip-nodes-with-local-storage=false
+        - --expander=least-waste
+        - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/dmlog-prod
+        - --balance-similar-node-groups
+        - --skip-nodes-with-system-pods=false
+        - --max-nodes-total=100
+        - --max-empty-bulk-delete=10
+        - --max-graceful-termination-sec=600
+        - --ok-total-unready-count=50
+        - --scale-down-delay-after-add=10m
+        - --scale-down-unneeded-time=10m
+        - --scale-down-unready-time=10m
+        - --scale-down-utilization-threshold=0.5
+        - --horizontal-pod-autoscaler-use-rest-clients=true
+        - --aws-use-static-instance-list=true
+        - --leader-elect=true
+        - --leader-elect-lease-duration=15s
+        - --leader-elect-renew-deadline=10s
+        - --leader-elect-retry-period=2s
+
+---
+# Cluster Autoscaler Service Account and RBAC
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cluster-autoscaler
+  namespace: kube-system
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/cluster-autoscaler-role
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-autoscaler
+rules:
+- apiGroups: [""]
+  resources: ["events", "endpoints"]
+  verbs: ["create", "patch"]
+- apiGroups: [""]
+  resources: ["pods/eviction"]
+  verbs: ["create"]
+- apiGroups: [""]
+  resources: ["pods/status"]
+  verbs: ["update"]
+- apiGroups: [""]
+  resources: ["endpoints"]
+  resourceNames: ["cluster-autoscaler"]
+  verbs: ["get", "update"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["watch", "list", "get", "update"]
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["watch", "list", "get"]
+- apiGroups: [""]
+  resources: ["persistentvolumes", "persistentvolumeclaims"]
+  verbs: ["watch", "list", "get"]
+- apiGroups: ["apps"]
+  resources: ["replicasets", "daemonsets", "statefulsets", "replicationcontrollers"]
+  verbs: ["watch", "list", "get"]
+- apiGroups: ["policy"]
+  resources: ["poddisruptionbudgets"]
+  verbs: ["watch", "list"]
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses", "csinodes", "csidrivers", "csistoragecapacities"]
+  verbs: ["watch", "list", "get"]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["create", "get", "list", "update"]
+- apiGroups: ["batch"]
+  resources: ["cronjobs", "jobs"]
+  verbs: ["watch", "list", "get"]
+- apiGroups: ["extensions"]
+  resources: ["replicasets", "daemonsets", "replicationcontrollers", "statefulsets"]
+  verbs: ["watch", "list", "get"]
+- apiGroups: ["autoscaling"]
+  resources: ["horizontalpodautoscalers"]
+  verbs: ["watch", "list", "get"]
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-autoscaler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-autoscaler
+subjects:
+- kind: ServiceAccount
+  name: cluster-autoscaler
+  namespace: kube-system
+
+---
+# Node Groups Configuration for different instance types
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: node-groups-config
+  namespace: kube-system
+  labels:
+    component: cluster-scaling
+data:
+  config.yaml: |
+    nodeGroups:
+      # General purpose node group
+      general-purpose:
+        instanceTypes:
+          - "m5.large"
+          - "m5.xlarge"
+          - "m5.2xlarge"
+        minSize: 2
+        maxSize: 20
+        desiredSize: 3
+        labels:
+          node-type: general-purpose
+        taints: []
+        volumeType: "gp3"
+        volumeSize: 100
+        spotPrice: "0.7"
+        useSpotInstances: true
+
+      # Compute optimized node group
+      compute-optimized:
+        instanceTypes:
+          - "c5.large"
+          - "c5.xlarge"
+          - "c5.2xlarge"
+        minSize: 1
+        maxSize: 15
+        desiredSize: 2
+        labels:
+          node-type: compute-optimized
+        taints:
+          - key: "workload"
+            value: "compute-intensive"
+            effect: "NoSchedule"
+        volumeType: "gp3"
+        volumeSize: 50
+        spotPrice: "0.6"
+        useSpotInstances: true
+
+      # Memory optimized node group
+      memory-optimized:
+        instanceTypes:
+          - "r5.large"
+          - "r5.xlarge"
+          - "r5.2xlarge"
+        minSize: 1
+        maxSize: 10
+        desiredSize: 2
+        labels:
+          node-type: memory-optimized
+        taints:
+          - key: "workload"
+            value: "memory-intensive"
+            effect: "NoSchedule"
+        volumeType: "gp3"
+        volumeSize: 200
+        spotPrice: "0.8"
+        useSpotInstances: false
+
+      # GPU node group for ML workloads
+      gpu-enabled:
+        instanceTypes:
+          - "p3.2xlarge"
+          - "g4dn.xlarge"
+        minSize: 0
+        maxSize: 5
+        desiredSize: 0
+        labels:
+          node-type: gpu-enabled
+          accelerator: "nvidia-tesla-k80"
+        taints:
+          - key: "workload"
+            value: "gpu"
+            effect: "NoSchedule"
+        volumeType: "gp3"
+        volumeSize: 300
+        spotPrice: "1.5"
+        useSpotInstances: false
+
+    # Auto-scaling policies
+    scalingPolicies:
+      scaleUp:
+        policies:
+          - type: "changeInCapacity"
+            adjustment: "2"
+            cooldown: 300
+          - type: "percentChangeInCapacity"
+            adjustment: "50"
+            cooldown: 300
+
+      scaleDown:
+        policies:
+          - type: "changeInCapacity"
+            adjustment: "-1"
+            cooldown: 600
+          - type: "percentChangeInCapacity"
+            adjustment: "-20"
+            cooldown: 600
+
+    # Node template customization
+    nodeTemplate:
+      amiType: "AL2_x86_64"
+      capacityType: "ON_DEMAND"
+      diskSize: 100
+      instanceTypes:
+        - "m5.large"
+        - "m5.xlarge"
+      scalingConfig:
+        minSize: 2
+        maxSize: 10
+        desiredSize: 3
+      updateConfig:
+        maxUnavailablePercentage: 33
+      iam:
+        withAddonPolicies:
+          autoScaler: true
+          cloudWatch: true
+          ebs: true
+          efs: true
+          albIngress: true
+
+---
+# Priority Classes for Workload Scheduling
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: high-priority
+value: 1000
+globalDefault: false
+description: "High priority class for critical workloads"
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: medium-priority
+value: 500
+globalDefault: true
+description: "Medium priority class for regular workloads"
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: low-priority
+value: 100
+globalDefault: false
+description: "Low priority class for batch workloads"

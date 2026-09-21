@@ -1,0 +1,214 @@
+[
+  {
+    "userId": "user_001",
+    "contentId": "content_001",
+    "action": "view",
+    "timestamp": "2024-01-15T10:30:00Z",
+    "metadata": {
+      "category": "adventure",
+      "type": "campaign",
+      "sessionDuration": 1800
+    }
+  },
+  {
+    "userId": "user_001",
+    "contentId": "content_001",
+    "action": "like",
+    "timestamp": "2024-01-15T10:35:00Z",
+    "metadata": {
+      "category": "adventure",
+      "type": "campaign"
+    }
+  },
+  {
+    "userId": "user_001",
+    "contentId": "content_002",
+    "action": "view",
+    "timestamp": "2024-01-15T11:00:00Z",
+    "metadata": {
+      "category": "character",
+      "type": "build",
+      "class": "fighter",
+      "level": 5
+    }
+  },
+  {
+    "userId": "user_001",
+    "contentId": "content_002",
+    "action": "save",
+    "timestamp": "2024-01-15T11:15:00Z",
+    "metadata": {
+      "category": "character",
+      "type": "build"
+    }
+  },
+  {
+    "userId": "user_002",
+    "contentId": "content_003",
+    "action": "view",
+    "timestamp": "2024-01-15T12:00:00Z",
+    "metadata": {
+      "category": "spell",
+      "type": "magic",
+      "school": "evocation",
+      "level": 3
+    }
+  },
+  {
+    "userId": "user_002",
+    "contentId": "content_003",
+    "action": "rating_5",
+    "timestamp": "2024-01-15T12:10:00Z",
+    "metadata": {
+      "category": "spell",
+      "type": "magic"
+    }
+  },
+  {
+    "userId": "user_002",
+    "contentId": "content_004",
+    "action": "view",
+    "timestamp": "2024-01-15T14:00:00Z",
+    "metadata": {
+      "category": "monster",
+      "type": "creature",
+      "challenge": 5
+    }
+  },
+  {
+    "userId": "user_002",
+    "contentId": "content_004",
+    "action": "share",
+    "timestamp": "2024-01-15T14:15:00Z",
+    "metadata": {
+      "category": "monster",
+      "type": "creature"
+    }
+  },
+  {
+    "userId": "user_003",
+    "contentId": "content_005",
+    "action": "view",
+    "timestamp": "2024-01-15T15:00:00Z",
+    "metadata": {
+      "category": "item",
+      "type": "equipment",
+      "rarity": "rare"
+    }
+  },
+  {
+    "userId": "user_003",
+    "contentId": "content_005",
+    "action": "download",
+    "timestamp": "2024-01-15T15:20:00Z",
+    "metadata": {
+      "category": "item",
+      "type": "equipment"
+    }
+  },
+  {
+    "userId": "user_003",
+    "contentId": "content_001",
+    "action": "view",
+    "timestamp": "2024-01-15T16:00:00Z",
+    "metadata": {
+      "category": "adventure",
+      "type": "campaign"
+    }
+  },
+  {
+    "userId": "user_003",
+    "contentId": "content_001",
+    "action": "comment",
+    "timestamp": "2024-01-15T16:30:00Z",
+    "metadata": {
+      "category": "adventure",
+      "type": "campaign",
+      "commentText": "Great adventure! My players loved it."
+    }
+  },
+  {
+    "userId": "user_004",
+    "contentId": "content_006",
+    "action": "view",
+    "timestamp": "2024-01-15T17:00:00Z",
+    "metadata": {
+      "category": "npc",
+      "type": "character",
+      "role": "villain"
+    }
+  },
+  {
+    "userId": "user_004",
+    "contentId": "content_006",
+    "action": "save",
+    "timestamp": "2024-01-15T17:25:00Z",
+    "metadata": {
+      "category": "npc",
+      "type": "character"
+    }
+  },
+  {
+    "userId": "user_004",
+    "contentId": "content_007",
+    "action": "view",
+    "timestamp": "2024-01-15T18:00:00Z",
+    "metadata": {
+      "category": "homebrew",
+      "type": "rule",
+      "complexity": "medium"
+    }
+  },
+  {
+    "userId": "user_004",
+    "contentId": "content_007",
+    "action": "rating_4",
+    "timestamp": "2024-01-15T18:15:00Z",
+    "metadata": {
+      "category": "homebrew",
+      "type": "rule"
+    }
+  },
+  {
+    "userId": "user_005",
+    "contentId": "content_008",
+    "action": "view",
+    "timestamp": "2024-01-15T19:00:00Z",
+    "metadata": {
+      "category": "tools",
+      "type": "generator",
+      "function": "character"
+    }
+  },
+  {
+    "userId": "user_005",
+    "contentId": "content_008",
+    "action": "like",
+    "timestamp": "2024-01-15T19:20:00Z",
+    "metadata": {
+      "category": "tools",
+      "type": "generator"
+    }
+  },
+  {
+    "userId": "user_005",
+    "contentId": "content_002",
+    "action": "view",
+    "timestamp": "2024-01-15T20:00:00Z",
+    "metadata": {
+      "category": "character",
+      "type": "build",
+      "class": "fighter"
+    }
+  },
+  {
+    "userId": "user_005",
+    "contentId": "content_002",
+    "action": "rating_3",
+    "timestamp": "2024-01-15T20:30:00Z",
+    "metadata": {
+      "category": "character",
+      "type": "build"
+    }
+  }
+]

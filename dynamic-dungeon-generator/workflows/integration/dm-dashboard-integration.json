@@ -1,0 +1,554 @@
+{
+  "name": "DM Dashboard Integration Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dm-dashboard",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-dm-1",
+      "name": "DM Dashboard Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [260, 300],
+      "webhookId": "dm-dashboard-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{$node[\"DM Dashboard Webhook\"].json[\"body\"][\"action\"]}}",
+              "rightValue": "generate",
+              "operator": {
+                "type": "string",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "action-router-1",
+      "name": "Route Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3001/api/dungeons/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$node[\"DM Dashboard Webhook\"].json[\"body\"][\"parameters\"]}}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "generate-dungeon-dm-1",
+      "name": "Generate Dungeon",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [660, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{$node[\"DM Dashboard Webhook\"].json[\"body\"][\"action\"]}}",
+              "rightValue": "modify",
+              "operator": {
+                "type": "string",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "action-router-modify-1",
+      "name": "Route Modify Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [660, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{\"http://localhost:3001/api/dungeons/\" + $node[\"DM Dashboard Webhook\"].json[\"body\"][\"dungeonId\"] + \"/modify\"}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$node[\"DM Dashboard Webhook\"].json[\"body\"][\"modifications\"]}}",
+        "options": {}
+      },
+      "id": "modify-dungeon-1",
+      "name": "Modify Dungeon",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [860, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{$node[\"DM Dashboard Webhook\"].json[\"body\"][\"action\"]}}",
+              "rightValue": "export",
+              "operator": {
+                "type": "string",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "action-router-export-1",
+      "name": "Route Export Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [660, 600]
+    },
+    {
+      "parameters": {
+        "url": "={{\"http://localhost:3001/api/dungeons/\" + $node[\"DM Dashboard Webhook\"].json[\"body\"][\"dungeonId\"]}}",
+        "options": {}
+      },
+      "id": "get-dungeon-for-export-1",
+      "name": "Get Dungeon for Export",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [860, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process dungeon data for different export formats\nconst dungeon = $node[\"Get Dungeon for Export\"].json.dungeon;\nconst format = $node[\"DM Dashboard Webhook\"].json.body.format || 'json';\n\nlet exportData = {\n  id: dungeon.id,\n  exportedAt: new Date().toISOString(),\n  format: format,\n  metadata: dungeon.metadata,\n  dimensions: dungeon.dimensions,\n  statistics: dungeon.statistics\n};\n\nswitch (format) {\n  case 'json':\n    exportData.dungeon = {\n      floors: dungeon.floors.map(floor => ({\n        floor: floor.floor,\n        rooms: floor.rooms,\n        corridors: floor.corridors,\n        spawns: floor.spawns || [],\n        loot: floor.loot || [],\n        traps: floor.traps || [],\n        puzzles: floor.puzzles || [],\n        bosses: floor.bosses || []\n      }))\n    };\n    break;\n    \n  case 'dm-notes':\n    exportData.dmNotes = {\n      overview: `Dungeon Overview\\nTheme: ${dungeon.metadata.theme}\\nDifficulty: ${dungeon.metadata.difficulty}\\nFloors: ${dungeon.dimensions.floors}\\n\\nRoom Breakdown:`,\n      rooms: dungeon.floors.flatMap(floor => \n        floor.rooms.map(room => ({\n          floor: floor.floor,\n          type: room.type,\n          size: `${room.width}x${room.height}`,\n          contents: this.summarizeRoomContents(room, floor)\n        }))\n      ),\n      encounters: dungeon.floors.flatMap(floor => \n        (floor.spawns || []).map(spawn => ({\n          floor: floor.floor,\n          enemy: spawn.type,\n          count: spawn.count || 1,\n          location: `Room at (${spawn.x}, ${spawn.y})`\n        }))\n      ),\n      treasures: dungeon.floors.flatMap(floor => \n        (floor.loot || []).map(loot => ({\n          floor: floor.floor,\n          type: loot.type,\n          value: loot.value || 'unknown',\n          location: `Room at (${loot.x}, ${loot.y})`\n        }))\n      )\n    };\n    break;\n    \n  case 'player-map':\n    exportData.playerMap = {\n      theme: dungeon.metadata.theme,\n      difficulty: dungeon.metadata.difficulty,\n      floors: dungeon.floors.map(floor => ({\n        floor: floor.floor,\n        rooms: floor.rooms.map(room => ({\n          id: room.id,\n          type: room.type === 'secret' ? 'unknown' : room.type,\n          x: room.x,\n          y: room.y,\n          width: room.width,\n          height: room.height,\n          discovered: false,\n          notes: room.type === 'entrance' ? 'Entrance' : ''\n        })),\n        corridors: floor.corridors.map(corridor => ({\n          id: corridor.id,\n          path: corridor.path,\n          discovered: false\n        }))\n      }))\n    };\n    break;\n    \n  default:\n    exportData.error = `Unsupported format: ${format}`;\n}\n\nfunction summarizeRoomContents(room, floor) {\n  const contents = [];\n  \n  // Find enemies in this room\n  const enemies = (floor.spawns || []).filter(spawn => \n    spawn.x >= room.x && spawn.x < room.x + room.width &&\n    spawn.y >= room.y && spawn.y < room.y + room.height\n  );\n  \n  if (enemies.length > 0) {\n    contents.push(`${enemies.length} enemies`);\n  }\n  \n  // Find loot in this room\n  const loot = (floor.loot || []).filter(item => \n    item.x >= room.x && item.x < room.x + room.width &&\n    item.y >= room.y && item.y < room.y + room.height\n  );\n  \n  if (loot.length > 0) {\n    contents.push(`${loot.length} loot items`);\n  }\n  \n  // Find traps in this room\n  const traps = (floor.traps || []).filter(trap => \n    trap.x >= room.x && trap.x < room.x + room.width &&\n    trap.y >= room.y && trap.y < room.y + room.height\n  );\n  \n  if (traps.length > 0) {\n    contents.push(`${traps.length} traps`);\n  }\n  \n  return contents.length > 0 ? contents.join(', ') : 'Empty';\n}\n\nreturn { json: exportData };"
+      },
+      "id": "process-export-1",
+      "name": "Process Export Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1060, 600]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$node[\"Generate Dungeon\"].json}}"
+      },
+      "id": "respond-generation-1",
+      "name": "Return Generation Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [860, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$node[\"Modify Dungeon\"].json}}"
+      },
+      "id": "respond-modification-1",
+      "name": "Return Modification Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1060, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$node[\"Process Export Data\"].json}}"
+      },
+      "id": "respond-export-1",
+      "name": "Return Export Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1260, 600]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSupported": false
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{$node[\"DM Dashboard Webhook\"].json[\"body\"][\"action\"]}}",
+              "rightValue": "preview",
+              "operator": {
+                "type": "string",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "action-router-preview-1",
+      "name": "Route Preview Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [660, 800]
+    },
+    {
+      "parameters": {
+        "url": "={{\"http://localhost:3001/api/dungeons/\" + $node[\"DM Dashboard Webhook\"].json[\"body\"][\"dungeonId\"] + \"/visualize/\" + ($node[\"DM Dashboard Webhook\"].json[\"body\"][\"floorIndex\"] || 0)}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$node[\"DM Dashboard Webhook\"].json[\"body\"][\"visualizationOptions\"] || {}}",
+        "options": {}
+      },
+      "id": "get-visualization-1",
+      "name": "Get Dungeon Visualization",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [860, 800]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$node[\"Get Dungeon Visualization\"].json}}"
+      },
+      "id": "respond-preview-1",
+      "name": "Return Preview Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1060, 800]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSupported": false
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{$node[\"DM Dashboard Webhook\"].json[\"body\"][\"action\"]}}",
+              "rightValue": "list",
+              "operator": {
+                "type": "string",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "action-router-list-1",
+      "name": "Route List Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [660, 1000]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3001/api/dungeons?limit={{$node[\"DM Dashboard Webhook\"].json[\"body\"][\"limit\"] || 10}}",
+        "options": {}
+      },
+      "id": "list-dungeons-1",
+      "name": "List Dungeons",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [860, 1000]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$node[\"List Dungeons\"].json}}"
+      },
+      "id": "respond-list-1",
+      "name": "Return List Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1060, 1000]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "action",
+              "value": "={{$node[\"DM Dashboard Webhook\"].json[\"body\"][\"action\"]}}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{new Date().toISOString()}}"
+            },
+            {
+              "name": "status",
+              "value": "completed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-dm-action-1",
+      "name": "Log DM Action",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1260, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "fileId": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+        "sheetName": "DMActions",
+        "data": "={{$node[\"Log DM Action\"].json}}"
+      },
+      "id": "save-dm-log-1",
+      "name": "Save DM Action Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 3,
+      "position": [1460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{{\n  \"success\": false,\n  \"error\": {\n    \"message\": \"Unsupported action: \" + $node[\"DM Dashboard Webhook\"].json[\"body\"][\"action\"],\n    \"type\": \"invalid_action\",\n    \"supportedActions\": [\"generate\", \"modify\", \"export\", \"preview\", \"list\"]\n  }\n}}}"
+      },
+      "id": "respond-error-1",
+      "name": "Return Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [860, 1200]
+    }
+  ],
+  "connections": {
+    "DM Dashboard Webhook": {
+      "main": [
+        [
+          {
+            "node": "Route Action",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Modify Action",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Export Action",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Preview Action",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route List Action",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Return Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Action": {
+      "main": [
+        [
+          {
+            "node": "Generate Dungeon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Dungeon": {
+      "main": [
+        [
+          {
+            "node": "Return Generation Result",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log DM Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Modify Action": {
+      "main": [
+        [
+          {
+            "node": "Modify Dungeon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modify Dungeon": {
+      "main": [
+        [
+          {
+            "node": "Return Modification Result",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log DM Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Export Action": {
+      "main": [
+        [
+          {
+            "node": "Get Dungeon for Export",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Dungeon for Export": {
+      "main": [
+        [
+          {
+            "node": "Process Export Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Export Data": {
+      "main": [
+        [
+          {
+            "node": "Return Export Result",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log DM Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Preview Action": {
+      "main": [
+        [
+          {
+            "node": "Get Dungeon Visualization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Dungeon Visualization": {
+      "main": [
+        [
+          {
+            "node": "Return Preview Result",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log DM Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route List Action": {
+      "main": [
+        [
+          {
+            "node": "List Dungeons",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Dungeons": {
+      "main": [
+        [
+          {
+            "node": "Return List Result",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log DM Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log DM Action": {
+      "main": [
+        [
+          {
+            "node": "Save DM Action Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "createdAt": "2024-01-01T00:00:00.000Z",
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "1.0.0",
+  "triggerCount": 0,
+  "tags": [
+    {
+      "id": "tag-1",
+      "name": "DM Dashboard"
+    }
+  ]
+}

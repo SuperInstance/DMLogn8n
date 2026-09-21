@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-Powered D&D Recommendations - DMlogn8n</title>
+    <meta name="description" content="Intelligent content recommendations for D&D players and Dungeon Masters powered by machine learning">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <h1>DMlogn8n</h1>
+                    <span class="tagline">AI Recommendations</span>
+                </div>
+                <nav class="nav">
+                    <ul class="nav-list">
+                        <li><a href="#discover" class="nav-link">Discover</a></li>
+                        <li><a href="#player" class="nav-link">Player Tools</a></li>
+                        <li><a href="#dm" class="nav-link">DM Tools</a></li>
+                        <li><a href="#insights" class="nav-link">Insights</a></li>
+                    </ul>
+                </nav>
+                <div class="user-menu">
+                    <button id="userProfileBtn" class="btn btn-secondary">
+                        <i class="icon-user"></i>
+                        Profile
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Hero Section -->
+        <section class="hero">
+            <div class="container">
+                <div class="hero-content">
+                    <h2 class="hero-title">Intelligent D&D Content Recommendations</h2>
+                    <p class="hero-subtitle">
+                        Discover personalized adventures, character builds, spells, monsters, and more powered by advanced machine learning algorithms
+                    </p>
+                    <div class="hero-actions">
+                        <button id="getStartedBtn" class="btn btn-primary btn-large">
+                            Get Started
+                        </button>
+                        <button id="learnMoreBtn" class="btn btn-outline btn-large">
+                            Learn More
+                        </button>
+                    </div>
+                    <div class="hero-stats">
+                        <div class="stat-item">
+                            <span class="stat-number" data-count="10000">0</span>
+                            <span class="stat-label">Content Items</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-number" data-count="5000">0</span>
+                            <span class="stat-label">Active Users</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-number" data-count="95">0</span>
+                            <span class="stat-label">% Accuracy</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="hero-visual">
+                    <div class="floating-cards">
+                        <div class="card card-1">
+                            <i class="icon-dungeon"></i>
+                            <span>Adventures</span>
+                        </div>
+                        <div class="card card-2">
+                            <i class="icon-character"></i>
+                            <span>Characters</span>
+                        </div>
+                        <div class="card card-3">
+                            <i class="icon-spell"></i>
+                            <span>Spells</span>
+                        </div>
+                        <div class="card card-4">
+                            <i class="icon-monster"></i>
+                            <span>Monsters</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Section -->
+        <section class="features" id="features">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">Powered by Advanced AI</h2>
+                    <p class="section-subtitle">Our recommendation system uses multiple machine learning approaches to provide the best content suggestions</p>
+                </div>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="icon-collaborative"></i>
+                        </div>
+                        <h3 class="feature-title">Collaborative Filtering</h3>
+                        <p class="feature-description">
+                            Learn from thousands of users like you to discover content that matches your preferences
+                        </p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="icon-content"></i>
+                        </div>
+                        <h3 class="feature-title">Content-Based Analysis</h3>
+                        <p class="feature-description">
+                            Advanced NLP analyzes content features to find perfect matches for your playstyle
+                        </p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="icon-trending"></i>
+                        </div>
+                        <h3 class="feature-title">Real-Time Trending</h3>
+                        <p class="feature-description">
+                            Stay updated with the latest popular content and community favorites
+                        </p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="icon-personal"></i>
+                        </div>
+                        <h3 class="feature-title">Personalization Engine</h3>
+                        <p class="feature-description">
+                            Learns from your behavior to provide increasingly accurate recommendations
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Discovery Section -->
+        <section class="discovery" id="discover">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">Discover Content</h2>
+                    <p class="section-subtitle">Explore trending content and personalized recommendations</p>
+                </div>
+
+                <!-- Filter Tabs -->
+                <div class="filter-tabs">
+                    <button class="tab-btn active" data-tab="personalized">For You</button>
+                    <button class="tab-btn" data-tab="trending">Trending</button>
+                    <button class="tab-btn" data-tab="popular">Popular</button>
+                    <button class="tab-btn" data-tab="community">Community</button>
+                </div>
+
+                <!-- Filter Controls -->
+                <div class="filter-controls">
+                    <select id="categoryFilter" class="filter-select">
+                        <option value="">All Categories</option>
+                        <option value="adventure">Adventures</option>
+                        <option value="character">Characters</option>
+                        <option value="spell">Spells</option>
+                        <option value="monster">Monsters</option>
+                        <option value="item">Items</option>
+                        <option value="npc">NPCs</option>
+                        <option value="homebrew">Homebrew</option>
+                        <option value="tools">Tools</option>
+                    </select>
+                    <select id="difficultyFilter" class="filter-select">
+                        <option value="">All Difficulties</option>
+                        <option value="1">Beginner</option>
+                        <option value="2">Easy</option>
+                        <option value="3">Medium</option>
+                        <option value="4">Hard</option>
+                        <option value="5">Expert</option>
+                    </select>
+                    <button id="refreshBtn" class="btn btn-secondary">
+                        <i class="icon-refresh"></i>
+                        Refresh
+                    </button>
+                </div>
+
+                <!-- Content Grid -->
+                <div id="contentGrid" class="content-grid">
+                    <!-- Content items will be dynamically loaded here -->
+                    <div class="loading-skeleton">
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                        <div class="skeleton-card"></div>
+                    </div>
+                </div>
+
+                <!-- Load More -->
+                <div class="load-more-container">
+                    <button id="loadMoreBtn" class="btn btn-outline">Load More</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Player Tools Section -->
+        <section class="player-tools" id="player">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">Player Recommendations</h2>
+                    <p class="section-subtitle">Get personalized suggestions for your characters</p>
+                </div>
+
+                <!-- Character Input -->
+                <div class="character-input">
+                    <h3>Tell us about your character</h3>
+                    <form id="characterForm" class="character-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="characterClass">Class</label>
+                                <select id="characterClass" class="form-control" required>
+                                    <option value="">Select Class</option>
+                                    <option value="fighter">Fighter</option>
+                                    <option value="wizard">Wizard</option>
+                                    <option value="rogue">Rogue</option>
+                                    <option value="cleric">Cleric</option>
+                                    <option value="paladin">Paladin</option>
+                                    <option value="ranger">Ranger</option>
+                                    <option value="barbarian">Barbarian</option>
+                                    <option value="bard">Bard</option>
+                                    <option value="druid">Druid</option>
+                                    <option value="monk">Monk</option>
+                                    <option value="sorcerer">Sorcerer</option>
+                                    <option value="warlock">Warlock</option>
+                                    <option value="artificer">Artificer</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="characterLevel">Level</label>
+                                <input type="number" id="characterLevel" class="form-control" min="1" max="20" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="playstyle">Playstyle</label>
+                                <select id="playstyle" class="form-control">
+                                    <option value="">Select Playstyle</option>
+                                    <option value="damage">Damage Dealer</option>
+                                    <option value="tank">Tank/Defender</option>
+                                    <option value="support">Support/Healer</option>
+                                    <option value="control">Battlefield Control</option>
+                                    <option value="utility">Utility/Skill</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Get Recommendations</button>
+                    </form>
+                </div>
+
+                <!-- Player Results -->
+                <div id="playerResults" class="player-results" style="display: none;">
+                    <div class="results-tabs">
+                        <button class="result-tab active" data-result="builds">Character Builds</button>
+                        <button class="result-tab" data-result="equipment">Equipment</button>
+                        <button class="result-tab" data-result="spells">Spells</button>
+                    </div>
+                    <div id="playerContent" class="player-content">
+                        <!-- Player recommendations will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- DM Tools Section -->
+        <section class="dm-tools" id="dm">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">DM Recommendations</h2>
+                    <p class="section-subtitle">Tools and suggestions for Dungeon Masters</p>
+                </div>
+
+                <!-- DM Tool Tabs -->
+                <div class="dm-tabs">
+                    <button class="dm-tab active" data-tool="encounters">Encounters</button>
+                    <button class="dm-tab" data-tool="storyhooks">Story Hooks</button>
+                    <button class="dm-tab" data-tool="npcs">NPCs</button>
+                    <button class="dm-tab" data-tool="treasure">Treasure</button>
+                </div>
+
+                <!-- DM Tool Content -->
+                <div id="dmContent" class="dm-content">
+                    <!-- Party Input for Encounters -->
+                    <div id="encounterTool" class="dm-tool">
+                        <h3>Party Information</h3>
+                        <form id="partyForm" class="party-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="partyLevel">Party Level</label>
+                                    <input type="number" id="partyLevel" class="form-control" min="1" max="20" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="partySize">Party Size</label>
+                                    <input type="number" id="partySize" class="form-control" min="1" max="10" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="difficulty">Desired Difficulty</label>
+                                    <select id="difficulty" class="form-control">
+                                        <option value="easy">Easy</option>
+                                        <option value="medium" selected>Medium</option>
+                                        <option value="hard">Hard</option>
+                                        <option value="deadly">Deadly</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="environment">Environment</label>
+                                    <select id="environment" class="form-control">
+                                        <option value="dungeon">Dungeon</option>
+                                        <option value="wilderness">Wilderness</option>
+                                        <option value="urban">Urban</option>
+                                        <option value="planar">Planar</option>
+                                        <option value="nautical">Nautical</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="theme">Theme</label>
+                                    <select id="theme" class="form-control">
+                                        <option value="combat">Combat Focused</option>
+                                        <option value="investigation">Investigation</option>
+                                        <option value="social">Social</option>
+                                        <option value="exploration">Exploration</option>
+                                        <option value="puzzle">Puzzle</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Generate Encounters</button>
+                        </form>
+
+                        <div id="encounterResults" class="encounter-results" style="display: none;">
+                            <!-- Encounter recommendations will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- Other DM tools will be dynamically loaded -->
+                    <div id="otherDMTools" class="dm-tool" style="display: none;">
+                        <p>Content for other DM tools will be loaded here...</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Insights Section -->
+        <section class="insights" id="insights">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">Your Insights</h2>
+                    <p class="section-subtitle">Understand your preferences and discover patterns</p>
+                </div>
+
+                <div class="insights-grid">
+                    <div class="insight-card">
+                        <h3>Your Profile</h3>
+                        <div id="userProfile" class="profile-content">
+                            <p>Sign in to see your personalized insights</p>
+                        </div>
+                    </div>
+                    <div class="insight-card">
+                        <h3>Favorite Categories</h3>
+                        <div id="favoriteCategories" class="chart-container">
+                            <canvas id="categoriesChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="insight-card">
+                        <h3>Activity Timeline</h3>
+                        <div id="activityTimeline" class="chart-container">
+                            <canvas id="timelineChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="insight-card">
+                        <h3>Recommendations Accuracy</h3>
+                        <div id="accuracyMetrics" class="metrics-content">
+                            <div class="metric-item">
+                                <span class="metric-label">Click Rate</span>
+                                <span class="metric-value">87%</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">Satisfaction</span>
+                                <span class="metric-value">4.2/5</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">Discoveries</span>
+                                <span class="metric-value">23</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>DMlogn8n</h4>
+                    <p>AI-powered recommendations for D&D players and Dungeon Masters</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Features</h4>
+                    <ul>
+                        <li><a href="#discover">Content Discovery</a></li>
+                        <li><a href="#player">Player Tools</a></li>
+                        <li><a href="#dm">DM Tools</a></li>
+                        <li><a href="#insights">Personal Insights</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Resources</h4>
+                    <ul>
+                        <li><a href="/docs">Documentation</a></li>
+                        <li><a href="/api">API Reference</a></li>
+                        <li><a href="/support">Support</a></li>
+                        <li><a href="/blog">Blog</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Connect</h4>
+                    <div class="social-links">
+                        <a href="#" class="social-link"><i class="icon-twitter"></i></a>
+                        <a href="#" class="social-link"><i class="icon-discord"></i></a>
+                        <a href="#" class="social-link"><i class="icon-reddit"></i></a>
+                        <a href="#" class="social-link"><i class="icon-github"></i></a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 DMlogn8n. Powered by advanced machine learning.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Modals -->
+    <div id="userModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>User Profile</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="userModalContent">
+                    <!-- User profile content will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/js/app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</body>
+</html>

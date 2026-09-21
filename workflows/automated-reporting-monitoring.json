@@ -1,0 +1,463 @@
+{
+  "name": "Automated Reporting and Continuous Monitoring System",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "monitoring-trigger",
+      "name": "Continuous Monitoring Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize monitoring session\nconst monitoringSession = {\n  sessionId: 'monitor_' + Date.now(),\n  startTime: new Date().toISOString(),\n  monitoringType: 'continuous',\n  systemHealth: {\n    status: 'unknown',\n    checks: [],\n    metrics: {}\n  },\n  testResults: {\n    recent: [],\n    trends: {},\n    alerts: []\n  },\n  performanceData: {\n    current: {},\n    historical: [],\n    baselines: {}\n  },\n  alerts: {\n    active: [],\n    resolved: [],\n    escalated: []\n  }\n};\n\nreturn [{\n  json: {\n    ...monitoringSession,\n    status: 'monitoring_started',\n    currentPhase: 'health_checks'\n  }\n}];"
+      },
+      "id": "initialize-monitoring",
+      "name": "Initialize Monitoring Session",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/monitoring/health-check",
+        "jsonParameters": true,
+        "json": {
+          "sessionId": "={{ $json.sessionId }}",
+          "healthChecks": [
+n            "database_connectivity",\n            "api_response_time",\n            "ai_service_status",\n            "memory_system_health",\n            "websocket_connectivity",\n            "voice_service_status",\n            "authentication_system",\n            "file_system_health"\n          ],\n          "checkThresholds": {\n            "response_time": 2.0,\n            "error_rate": 5.0,\n            "cpu_usage": 85.0,\n            "memory_usage": 90.0,\n            "disk_usage": 80.0\n          }\n        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "system-health-checks",
+      "name": "System Health Checks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/monitoring/performance-metrics",
+        "jsonParameters": true,
+        "json": {
+          "sessionId": "={{ $json.sessionId }}",
+          "metricsCollection": {\n            "system_metrics": [\n              "cpu_usage",\n              "memory_usage",\n              "disk_io",\n              "network_io",\n              "load_average"\n            ],\n            "application_metrics": [\n              "active_sessions",\n              "api_response_times",\n              "database_query_times",\n              "ai_processing_times",\n              "error_rates"\n            ],\n            "user_metrics": [\n              "concurrent_users",\n              "session_duration",\n              "feature_usage",\n              "error_reports"\n            ]\n          },\n          "timeWindow": "6h",\n          "aggregationLevel": "5m"\n        },
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "collect-performance-metrics",
+      "name": "Collect Performance Metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:3000/api/test/recent-results",
+        "qs": {
+          "limit": 50,
+          "timeframe": "24h"
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "fetch-recent-test-results",
+      "name": "Fetch Recent Test Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyze monitoring data and detect anomalies\nconst healthData = $input.item(0).json;\nconst performanceData = $input.item(1).json;\nconst testData = $input.item(2).json;\n\nconst anomalyDetection = {\n  session_id: healthData.sessionId,\n  analysis_timestamp: new Date().toISOString(),\n  anomalies: [],\n  trends: {},\n  alerts: [],\n  system_status: 'healthy'\n};\n\n// Analyze health check results\nif (healthData.healthChecks) {\n  healthData.healthChecks.forEach(check => {\n    if (check.status === 'failed' || check.status === 'warning') {\n      anomalyDetection.anomalies.push({\n        type: 'health_check_failure',\n        component: check.component,\n        severity: check.status === 'failed' ? 'high' : 'medium',\n        details: check.details,\n        timestamp: check.timestamp\n      });\n    }\n  });\n}\n\n// Analyze performance metrics for anomalies\nif (performanceData.metrics) {\n  Object.keys(performanceData.metrics).forEach(metric => {\n    const currentValue = performanceData.metrics[metric].current;\n    const baseline = performanceData.metrics[metric].baseline;\n    const threshold = performanceData.metrics[metric].threshold;\n    \n    if (baseline && threshold) {\n      const percentChange = ((currentValue - baseline) / baseline) * 100;\n      \n      if (Math.abs(percentChange) > threshold) {\n        anomalyDetection.anomalies.push({\n          type: 'performance_anomaly',\n          metric: metric,\n          current_value: currentValue,\n          baseline_value: baseline,\n          percent_change: percentChange,\n          severity: Math.abs(percentChange) > threshold * 2 ? 'high' : 'medium',\n          timestamp: new Date().toISOString()\n        });\n      }\n      \n      // Detect trends\n      if (performanceData.metrics[metric].trend) {\n        anomalyDetection.trends[metric] = {\n          direction: performanceData.metrics[metric].trend.direction,\n          strength: performanceData.metrics[metric].trend.strength,\n          duration: performanceData.metrics[metric].trend.duration\n        };\n      }\n    }\n  });\n}\n\n// Analyze test results for patterns\nif (testData.recentResults) {\n  const failedTests = testData.recentResults.filter(r => r.status === 'failed');\n  const testSuites = {};\n  \n  failedTests.forEach(test => {\n    if (!testSuites[test.suite]) {\n      testSuites[test.suite] = { failed: 0, total: 0 };\n    }\n    testSuites[test.suite].failed++;\n  });\n  \n  testData.recentResults.forEach(test => {\n    if (!testSuites[test.suite]) {\n      testSuites[test.suite] = { failed: 0, total: 0 };\n    }\n    testSuites[test.suite].total++;\n  });\n  \n  // Identify test suites with high failure rates\n  Object.keys(testSuites).forEach(suite => {\n    const failureRate = (testSuites[suite].failed / testSuites[suite].total) * 100;\n    if (failureRate > 20) {\n      anomalyDetection.anomalies.push({\n        type: 'test_failure_rate',\n        suite: suite,\n        failure_rate: failureRate,\n        failed_tests: testSuites[suite].failed,\n        total_tests: testSuites[suite].total,\n        severity: failureRate > 50 ? 'high' : 'medium',\n        timestamp: new Date().toISOString()\n      });\n    }\n  });\n}\n\n// Determine overall system status\nconst highSeverityAnomalies = anomalyDetection.anomalies.filter(a => a.severity === 'high');\nconst mediumSeverityAnomalies = anomalyDetection.anomalies.filter(a => a.severity === 'medium');\n\nif (highSeverityAnomalies.length > 0) {\n  anomalyDetection.system_status = 'critical';\n} else if (mediumSeverityAnomalies.length > 3) {\n  anomalyDetection.system_status = 'warning';\n} else if (mediumSeverityAnomalies.length > 0) {\n  anomalyDetection.system_status = 'degraded';\n}\n\nreturn [{\n  json: {\n    ...anomalyDetection,\n    health_summary: {\n      total_anomalies: anomalyDetection.anomalies.length,\n      high_severity: highSeverityAnomalies.length,\n      medium_severity: mediumSeverityAnomalies.length,\n      trends_detected: Object.keys(anomalyDetection.trends).length\n    }\n  }\n}];"
+      },
+      "id": "analyze-monitoring-data",
+      "name": "Analyze Monitoring Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "critical-alert-condition",
+              "leftValue": "={{ $json.system_status }}",
+              "rightValue": "critical",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "alert-routing",
+      "name": "Alert Routing",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate critical alerts for immediate notification\nconst criticalAnomalies = $json.anomalies.filter(a => a.severity === 'high');\nconst alerts = [];\n\ncriticalAnomalies.forEach(anomaly => {\n  const alert = {\n    alert_id: 'alert_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),\n    severity: 'critical',\n    type: anomaly.type,\n    title: `Critical Alert: ${anomaly.type.replace(/_/g, ' ').toUpperCase()}`,\n    message: this._generateAlertMessage(anomaly),\n    component: anomaly.component || anomaly.metric || anomaly.suite,\n    timestamp: anomaly.timestamp || new Date().toISOString(),\n    session_id: $json.session_id,\n    requires_immediate_action: true,\n    escalation_level: 1\n  };\n  \n  alerts.push(alert);\n});\n\nreturn alerts.map(alert => ({ json: alert }));"
+      },
+      "id": "generate-critical-alerts",
+      "name": "Generate Critical Alerts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/alerts/send",
+        "jsonParameters": true,
+        "json": {
+          "alertId": "={{ $json.alert_id }}",
+          "severity": "={{ $json.severity }}",
+          "title": "={{ $json.title }}",
+          "message": "={{ $json.message }}",
+          "channels": ["email", "slack", "sms"],
+          "recipients": ["devops@dmlogn8n.com", "oncall@dmlogn8n.com"],
+          "escalationPolicy": "immediate"
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "send-critical-notifications",
+      "name": "Send Critical Notifications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1780, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/monitoring/generate-report",
+        "jsonParameters": true,
+        "json": {
+          "sessionId": "={{ $json.session_id }}",
+n          "reportType": "comprehensive_monitoring",\n          "timeframe": "6h",\n          "sections": [\n            "system_health",\n            "performance_metrics",\n            "test_results_summary",\n            "anomaly_analysis",\n            "trend_analysis",\n            "recommendations"\n          ],\n          "format": "json",\n          "includeAlerts": true\n        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "generate-monitoring-report",
+      "name": "Generate Monitoring Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/monitoring/store-metrics",
+        "jsonParameters": true,
+        "json": {
+          "sessionId": "={{ $json.session_id }}",
+          "metrics": {\n            "system_health": {\n              "status": "={{ $json.system_status }}",\n              "anomalies_count": "={{ $json.anomalies.length }}",\n              "trends_detected": "={{ Object.keys($json.trends).length }}"\n            },\n            "performance_summary": {\n              "cpu_usage": "={{ $input.item(1).json.metrics.cpu_usage.current }}",\n              "memory_usage": "={{ $input.item(1).json.metrics.memory_usage.current }}",\n              "response_time": "={{ $input.item(1).json.metrics.api_response_times.current }}"\n            },\n            "test_summary": {\n              "total_tests": "={{ $input.item(2).json.recentResults.length }}",\n              "failed_tests": "={{ $input.item(2).json.recentResults.filter(r => r.status === 'failed').length }}",\n              "success_rate": "={{ ($input.item(2).json.recentResults.filter(r => r.status === 'passed').length / $input.item(2).json.recentResults.length * 100).toFixed(1) }}"\n            }\n          },\n          "timestamp": new Date().toISOString()\n        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "store-monitoring-data",
+      "name": "Store Monitoring Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1780, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/monitoring/update-dashboard",
+        "jsonParameters": true,
+        "json": {
+          "sessionId": "={{ $json.session_id }}",
+          "dashboardData": {\n            "systemStatus": "={{ $json.system_status }}",\n            "anomalyCount": "={{ $json.anomalies.length }}",\n            "criticalAlerts": "={{ $json.anomalies.filter(a => a.severity === 'high').length }}",\n            "performanceMetrics": "={{ $input.item(1).json.metrics }}",\n            "testResults": "={{ $input.item(2).json.recentResults }}",\n            "trends": "={{ $json.trends }}",\n            "lastUpdated": new Date().toISOString()\n          }\n        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "update-dashboard",
+      "name": "Update Monitoring Dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2000, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate monitoring insights and recommendations\nconst insights = [];\nconst recommendations = [];\n\n// Analyze system health trends\nif ($json.trends && Object.keys($json.trends).length > 0) {\n  Object.keys($json.trends).forEach(metric => {\n    const trend = $json.trends[metric];\n    if (trend.direction === 'increasing' && trend.strength > 0.7) {\n      insights.push({\n        type: 'concerning_trend',\n        metric: metric,\n        description: `${metric} is showing a strong increasing trend over ${trend.duration} periods`,\n        impact: 'May indicate system stress or capacity issues'\n      });\n      \n      recommendations.push({\n        category: 'proactive_monitoring',\n        priority: 'medium',\n        metric: metric,\n        action: 'Investigate cause of increasing trend and consider capacity planning'\n      });\n    }\n  });\n}\n\n// Analyze anomaly patterns\nconst anomalyTypes = {};\n$json.anomalies.forEach(anomaly => {\n  if (!anomalyTypes[anomaly.type]) {\n    anomalyTypes[anomaly.type] = 0;\n  }\n  anomalyTypes[anomaly.type]++;\n});\n\nObject.keys(anomalyTypes).forEach(type => {\n  if (anomalyTypes[type] > 2) {\n    insights.push({\n      type: 'recurring_issue',\n      issue_type: type,\n      frequency: anomalyTypes[type],\n      description: `Multiple instances of ${type.replace(/_/g, ' ')} detected`\n    });\n    \n    recommendations.push({\n      category: 'root_cause_analysis',\n      priority: 'high',\n      issue_type: type,\n      action: `Investigate and address recurring ${type.replace(/_/g, ' ')} issues`\n    });\n  }\n});\n\n// Performance recommendations\nconst performanceData = $input.item(1).json.metrics;\nif (performanceData.cpu_usage && performanceData.cpu_usage.current > 80) {\n  recommendations.push({\n    category: 'performance_optimization',\n    priority: 'high',\n    metric: 'cpu_usage',\n    current_value: performanceData.cpu_usage.current,\n    action: 'Monitor CPU usage closely and consider optimization or scaling'\n  });\n}\n\nif (performanceData.memory_usage && performanceData.memory_usage.current > 85) {\n  recommendations.push({\n    category: 'performance_optimization',\n    priority: 'high',\n    metric: 'memory_usage',\n    current_value: performanceData.memory_usage.current,\n    action: 'Investigate memory usage patterns and optimize memory management'\n  });\n}\n\n// Test result analysis\nconst testData = $input.item(2).json.recentResults;\nconst recentFailures = testData.filter(t => t.status === 'failed' && \n  (new Date() - new Date(t.timestamp)) < 3600000); // Last hour\n\nif (recentFailures.length > 3) {\n  insights.push({\n    type: 'testing_concern',\n    description: `${recentFailures.length} test failures in the last hour`,\n    failed_suites: [...new Set(recentFailures.map(t => t.suite))]\n  });\n  \n  recommendations.push({\n    category: 'quality_assurance',\n    priority: 'high',\n    action: 'Investigate recent test failures and address underlying issues'\n  });\n}\n\nreturn [{\n  json: {\n    sessionId: $json.session_id,\n    insights,\n    recommendations,\n    summary: {\n      total_insights: insights.length,\n      total_recommendations: recommendations.length,\n      high_priority_actions: recommendations.filter(r => r.priority === 'high').length,\n      medium_priority_actions: recommendations.filter(r => r.priority === 'medium').length\n    },\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "generate-insights",
+      "name": "Generate Monitoring Insights",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/monitoring/insights",
+        "jsonParameters": true,
+        "json": "={{ $json }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "store-insights",
+      "name": "Store Monitoring Insights",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2000, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/monitoring/cleanup",
+        "jsonParameters": true,
+        "json": {
+          "sessionId": "={{ $json.session_id }}",
+n          "cleanupTasks": [\n            "archive_old_metrics",\n            "cleanup_temp_data",\n            "compress_historical_data"\n          ],\n          "retentionPeriod": "30d"\n        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "cleanup-monitoring-data",
+      "name": "Cleanup Monitoring Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2220, 400]
+    }
+  ],
+  "connections": {
+    "Continuous Monitoring Trigger": {
+      "main": [
+        [
+          {
+            "node": "Initialize Monitoring Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Monitoring Session": {
+      "main": [
+        [
+          {
+            "node": "System Health Checks",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Collect Performance Metrics",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Recent Test Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "System Health Checks": {
+      "main": [
+        [
+          {
+            "node": "Analyze Monitoring Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Performance Metrics": {
+      "main": [
+        [
+          {
+            "node": "Analyze Monitoring Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Recent Test Results": {
+      "main": [
+        [
+          {
+            "node": "Analyze Monitoring Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Analyze Monitoring Data": {
+      "main": [
+        [
+          {
+            "node": "Alert Routing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Routing": {
+      "main": [
+        [
+          {
+            "node": "Generate Critical Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Monitoring Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Critical Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Critical Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Critical Notifications": {
+      "main": [
+        [
+          {
+            "node": "Store Monitoring Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Monitoring Report": {
+      "main": [
+        [
+          {
+            "node": "Store Monitoring Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Monitoring Data": {
+      "main": [
+        [
+          {
+            "node": "Update Monitoring Dashboard",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Monitoring Insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Monitoring Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Cleanup Monitoring Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Monitoring Insights": {
+      "main": [
+        [
+          {
+            "node": "Store Monitoring Insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Monitoring Insights": {
+      "main": [
+        [
+          {
+            "node": "Cleanup Monitoring Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T17:30:00.000Z",
+      "updatedAt": "2024-10-23T17:30:00.000Z",
+      "id": "tag-monitoring",
+      "name": "Monitoring"
+    },
+    {
+      "createdAt": "2024-10-23T17:30:00.000Z",
+      "updatedAt": "2024-10-23T17:30:00.000Z",
+      "id": "tag-automation",
+      "name": "Automation"
+    },
+    {
+      "createdAt": "2024-10-23T17:30:00.000Z",
+      "updatedAt": "2024-10-23T17:30:00.000Z",
+      "id": "tag-reporting",
+      "name": "Reporting"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T17:30:00.000Z",
+  "versionId": "1"
+}

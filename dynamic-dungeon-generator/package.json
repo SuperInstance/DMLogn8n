@@ -1,0 +1,39 @@
+{
+  "name": "dynamic-dungeon-generator",
+  "version": "1.0.0",
+  "description": "Advanced procedural dungeon generation system for DMlogn8n",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint src/",
+    "docs": "jsdoc -c jsdoc.conf.json"
+  },
+  "keywords": ["dungeon", "generator", "procedural", "gaming", "dnd", "tabletop"],
+  "author": "DMlogn8n",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "lodash": "^4.17.21",
+    "uuid": "^9.0.0",
+    "canvas": "^2.11.2",
+    "perlin-noise": "^2.0.1",
+    "simplex-noise": "^4.0.1",
+    "d3-delaunay": "^6.0.4",
+    "seedrandom": "^3.0.5",
+    "yaml": "^2.3.2",
+    "winston": "^3.10.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "jest": "^29.6.2",
+    "eslint": "^8.46.0",
+    "jsdoc": "^4.0.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

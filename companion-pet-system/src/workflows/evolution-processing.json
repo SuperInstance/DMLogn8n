@@ -1,0 +1,252 @@
+{
+  "name": "Pet Evolution Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Evolution Check Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/pets/evolution-eligible",
+        "options": {}
+      },
+      "id": "b2c3d4e5-f1a2-3456-bcde-f12345678901",
+      "name": "Get Evolution-Eligible Pets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process evolution eligibility for each pet\nconst pets = $input.first().json.data || [];\nconst evolutionCandidates = [];\n\nfor (const pet of pets) {\n  const evolutionReadiness = checkEvolutionReadiness(pet);\n  \n  if (evolutionReadiness.ready) {\n    evolutionCandidates.push({\n      petId: pet.id,\n      petName: pet.name,\n      currentType: pet.typeId,\n      currentStage: pet.evolutionStage,\n      nextStage: evolutionReadiness.nextStage,\n      requirements: evolutionReadiness.requirements,\n      progress: evolutionReadiness.currentProgress,\n      priority: calculateEvolutionPriority(pet, evolutionReadiness)\n    });\n  }\n}\n\n// Sort by priority\nevolutionCandidates.sort((a, b) => b.priority - a.priority);\n\nreturn { \n  eligiblePets: evolutionCandidates, \n  totalChecked: pets.length,\n  candidatesFound: evolutionCandidates.length \n};\n\nfunction checkEvolutionReadiness(pet) {\n  // Simulate evolution readiness check\n  const baseRequirements = {\n    level: pet.level >= (pet.evolutionStage + 1) * 20,\n    bonding: pet.bonding >= (pet.evolutionStage + 1) * 25,\n    experience: pet.experience >= calculateRequiredExperience(pet.evolutionStage)\n  };\n  \n  const allMet = Object.values(baseRequirements).every(req => req);\n  const progress = calculateEvolutionProgress(baseRequirements);\n  \n  return {\n    ready: allMet && progress >= 1.0,\n    nextStage: pet.evolutionStage + 1,\n    requirements: baseRequirements,\n    currentProgress: progress\n  };\n}\n\nfunction calculateRequiredExperience(currentStage) {\n  return Math.floor(500 * Math.pow(1.5, currentStage));\n}\n\nfunction calculateEvolutionProgress(requirements) {\n  const reqValues = Object.values(requirements);\n  const metCount = reqValues.filter(Boolean).length;\n  return metCount / reqValues.length;\n}\n\nfunction calculateEvolutionPriority(pet, readiness) {\n  let priority = 0;\n  \n  // Higher priority for pets with higher bonding\n  priority += pet.bonding / 20;\n  \n  // Higher priority for pets that have been waiting longer\n  const timeSinceLastEvolution = Date.now() - (pet.lastEvolution || 0);\n  const daysSinceEvolution = timeSinceLastEvolution / (1000 * 60 * 60 * 24);\n  priority += Math.min(daysSinceEvolution / 7, 3); // Max 3 points for waiting\n  \n  // Higher priority for pets closer to max level\n  priority += pet.level / 50;\n  \n  // Higher priority for legendary pets (rare)\n  if (pet.rarity === 'legendary') priority += 5;\n  else if (pet.rarity === 'epic') priority += 3;\n  else if (pet.rarity === 'rare') priority += 1;\n  \n  return Math.floor(priority * 10) / 10; // Round to 1 decimal place\n}"
+      },
+      "id": "c3d4e5f6-a2b3-4567-cdef-234567890123",
+      "name": "Analyze Evolution Eligibility",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.eligiblePets.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d4e5f6g7-b3c4-5678-def0-345678901234",
+      "name": "Pets Ready for Evolution?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process evolution for eligible pets\nconst eligiblePets = $input.first().json.eligiblePets || [];\nconst evolutionResults = [];\n\n// Process up to 3 evolutions per run to prevent overload\nconst maxEvolutions = Math.min(eligiblePets.length, 3);\nconst petsToEvolve = eligiblePets.slice(0, maxEvolutions);\n\nfor (const candidate of petsToEvolve) {\n  try {\n    console.log(`Starting evolution for pet: ${candidate.petName}`);\n    \n    // Get detailed pet information\n    const petResponse = await $helpers.httpRequest({\n      method: 'GET',\n      url: `http://localhost:3000/api/pets/${candidate.petId}`,\n      headers: { 'Content-Type': 'application/json' }\n    });\n    \n    const pet = petResponse.data;\n    \n    // Check for special evolution conditions\n    const specialEvolutions = await checkSpecialEvolutions(pet);\n    let evolutionResult;\n    \n    if (specialEvolutions.length > 0) {\n      // Attempt special evolution first\n      evolutionResult = await attemptSpecialEvolution(pet, specialEvolutions[0]);\n    } else {\n      // Standard evolution\n      evolutionResult = await attemptStandardEvolution(pet);\n    }\n    \n    evolutionResults.push({\n      petId: candidate.petId,\n      petName: candidate.petName,\n      previousStage: candidate.currentStage,\n      evolutionType: evolutionResult.type,\n      success: evolutionResult.success,\n      result: evolutionResult,\n      timestamp: new Date().toISOString()\n    });\n    \n    // Add delay between evolutions\n    await new Promise(resolve => setTimeout(resolve, 2000));\n    \n  } catch (error) {\n    console.error(`Evolution failed for pet ${candidate.petName}:`, error);\n    evolutionResults.push({\n      petId: candidate.petId,\n      petName: candidate.petName,\n      success: false,\n      error: error.message,\n      timestamp: new Date().toISOString()\n    });\n  }\n}\n\nreturn {\n  processedPets: petsToEvolve.length,\n  totalEligible: eligiblePets.length,\n  skippedPets: eligiblePets.length - petsToEvolve.length,\n  results: evolutionResults\n};\n\nasync function checkSpecialEvolutions(pet) {\n  try {\n    const response = await $helpers.httpRequest({\n      method: 'GET',\n      url: `http://localhost:3000/api/pets/${pet.id}/special-evolutions`,\n      headers: { 'Content-Type': 'application/json' }\n    });\n    return response.data.possibleEvolutions || [];\n  } catch (error) {\n    console.log('No special evolutions available:', error.message);\n    return [];\n  }\n}\n\nasync function attemptSpecialEvolution(pet, specialEvolution) {\n  const response = await $helpers.httpRequest({\n    method: 'POST',\n    url: `http://localhost:3000/api/pets/${pet.id}/special-evolution`,\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({\n      evolutionId: specialEvolution.id,\n      forced: false\n    })\n  });\n  \n  return {\n    type: 'special',\n    evolutionName: specialEvolution.name,\n    ...response.data\n  };\n}\n\nasync function attemptStandardEvolution(pet) {\n  const response = await $helpers.httpRequest({\n    method: 'POST',\n    url: `http://localhost:3000/api/pets/${pet.id}/evolution`,\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({\n      forced: false\n    })\n  });\n  \n  return {\n    type: 'standard',\n    ...response.data\n  };\n}"
+      },
+      "id": "e5f6g7h8-c4d5-6789-ef01-456789012345",
+      "name": "Process Evolutions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare comprehensive evolution summary\nconst data = $input.first().json;\nconst results = data.results || [];\n\nconst summary = {\n  processingDate: new Date().toISOString(),\n  statistics: {\n    totalProcessed: data.processedPets || 0,\n    successfulEvolutions: results.filter(r => r.success).length,\n    failedEvolutions: results.filter(r => !r.success).length,\n    totalEligible: data.totalEligible || 0,\n    skippedPets: data.skippedPets || 0\n  },\n  evolutionDetails: results.map(result => ({\n    petId: result.petId,\n    petName: result.petName,\n    evolutionType: result.evolutionType || 'unknown',\n    success: result.success,\n    previousStage: result.previousStage,\n    newStage: result.result?.newStage,\n    changes: result.result?.changes || {},\n    error: result.error || null,\n    timestamp: result.timestamp\n  })),\n  notifications: generateNotifications(results)\n};\n\nreturn summary;\n\nfunction generateNotifications(results) {\n  const notifications = [];\n  \n  // Successful evolutions\n  const successful = results.filter(r => r.success);\n  if (successful.length > 0) {\n    notifications.push({\n      type: 'evolution_success',\n      title: `🎉 Pet Evolution Complete!`,\n      message: `${successful.length} pet(s) have successfully evolved!`,\n      pets: successful.map(r => ({ name: r.petName, type: r.evolutionType })),\n      priority: 'high'\n    });\n  }\n  \n  // Failed evolutions\n  const failed = results.filter(r => !r.success);\n  if (failed.length > 0) {\n    notifications.push({\n      type: 'evolution_failure',\n      title: '⚠️ Evolution Failed',\n      message: `${failed.length} pet(s) evolution attempts failed`,\n      pets: failed.map(r => ({ name: r.petName, error: r.error })),\n      priority: 'medium'\n    });\n  }\n  \n  // Special evolutions\n  const specialEvolutions = successful.filter(r => r.evolutionType === 'special');\n  if (specialEvolutions.length > 0) {\n    notifications.push({\n      type: 'special_evolution',\n      title: '✨ Special Evolution Achieved!',\n      message: `${specialEvolutions.length} rare special evolution(s) occurred!`,\n      pets: specialEvolutions.map(r => ({ name: r.petName, result: r.result })),\n      priority: 'legendary'\n    });\n  }\n  \n  return notifications;\n}"
+      },
+      "id": "f6g7h8i9-d5e6-7890-f012-567890123456",
+      "name": "Create Evolution Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/evolution/log",
+        "sendBody": true,
+        "jsonParameters": true,
+        "bodyParametersJson": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "g7h8i9j0-e6f7-8901-0123-678901234567",
+      "name": "Log Evolution Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1560,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle pets that were skipped due to processing limits\nconst data = $input.first().json;\nconst skippedCount = data.totalEligible - data.processedPets;\n\nif (skippedCount > 0) {\n  return {\n    message: 'Evolution processing completed with pending pets',\n    timestamp: new Date().toISOString(),\n    processed: data.processedPets,\n    skipped: skippedCount,\n    nextRun: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 minutes from now\n    status: 'pending_remaining'\n  };\n} else {\n  return {\n    message: 'No pets eligible for evolution',\n    timestamp: new Date().toISOString(),\n    checked: data.totalChecked || 0,\n    status: 'no_eligible_pets'\n  };\n}"
+      },
+      "id": "h8i9j0k1-f7g8-9012-1234-789012345678",
+      "name": "No Evolution Processing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/evolution/log",
+        "sendBody": true,
+        "jsonParameters": true,
+        "bodyParametersJson": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "i9j0k1l2-g8h9-0123-2345-890123456789",
+      "name": "Log No Evolution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1340,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Evolution Check Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Evolution-Eligible Pets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Evolution-Eligible Pets": {
+      "main": [
+        [
+          {
+            "node": "Analyze Evolution Eligibility",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Evolution Eligibility": {
+      "main": [
+        [
+          {
+            "node": "Pets Ready for Evolution?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pets Ready for Evolution?": {
+      "main": [
+        [
+          {
+            "node": "Process Evolutions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Evolution Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Evolutions": {
+      "main": [
+        [
+          {
+            "node": "Create Evolution Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Evolution Summary": {
+      "main": [
+        [
+          {
+            "node": "Log Evolution Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Evolution Processing": {
+      "main": [
+        [
+          {
+            "node": "Log No Evolution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["pet", "evolution", "automation"],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T14:45:00.000Z",
+  "versionId": "1.0.0"
+}

@@ -1,0 +1,416 @@
+{
+  "name": "Code Fabric Orchestrator - Main Intelligence System Coordinator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "code-fabric",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-code-fabric",
+      "name": "Code Fabric Orchestrator",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "code-fabric-orchestrator"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse and orchestrate Code Fabric request\nconst request = $input.first().json;\n\n// Required fields validation\nif (!request.character_request) {\n  return [{\n    json: {\n      error: 'Missing required field: character_request',\n      status: 'invalid_request',\n      message: 'Please provide your character request in the character_request field'\n    }\n  }];\n}\n\n// Create orchestration context\nconst context = {\n  session_id: generateSessionId(),\n  timestamp: new Date().toISOString(),\n  character_request: request.character_request,\n  character_profile: {\n    character_id: request.character_id || 'character_' + Date.now(),\n    character_class: request.character_class || 'unknown',\n    character_level: request.character_level || 1,\n    party_composition: request.party_composition || [],\n    current_situation: request.current_situation || 'unknown',\n    play_style: request.play_style || 'balanced',\n    preferences: request.preferences || {}\n  },\n  orchestration_config: {\n    processing_mode: request.processing_mode || 'comprehensive',\n    include_learning: request.include_learning !== false,\n    include_pattern_matching: request.include_pattern_matching !== false,\n    generate_complete_solution: request.generate_complete_solution !== false,\n    provide_explanations: request.provide_explanations !== false,\n    enable_feedback_loop: request.enable_feedback_loop !== false\n  },\n  workflow_state: {\n    current_phase: 'initialization',\n    completed_phases: [],\n    active_components: [],\n    data_flow: {},\n    errors: [],\n    metrics: {\n      processing_start_time: Date.now(),\n      phase_timings: {},\n      component_timings: {}\n    }\n  }\n};\n\nfunction generateSessionId() {\n  return 'cf_session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 8);\n}\n\nreturn [{\n  json: context\n}];"
+      },
+      "id": "code-parse-orchestration",
+      "name": "Parse Orchestration Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize orchestration workflow and determine processing path\nconst context = $input.first().json;\n\n// Analyze request complexity and determine processing strategy\nconst requestAnalysis = {\n  complexity_level: determineComplexityLevel(context.character_request),\n  processing_phases: determineProcessingPhases(context),\n  component_sequence: determineComponentSequence(context),\n  estimated_processing_time: estimateProcessingTime(context),\n  resource_requirements: calculateResourceRequirements(context)\n};\n\nfunction determineComplexityLevel(request) {\n  const requestText = (request.character_request || '').toLowerCase();\n  let complexity = 1;\n  \n  // Base complexity factors\n  if (requestText.length > 100) complexity += 1;\n  if (requestText.includes('protect') || requestText.includes('heal')) complexity += 1;\n  if (requestText.includes('party') || requestText.includes('team')) complexity += 1;\n  if (requestText.includes('automatic') || requestText.includes('automation')) complexity += 2;\n  \n  // Class-specific complexity\n  if (request.character_class === 'wizard' || request.character_class === 'cleric') complexity += 1;\n  if (request.character_level > 10) complexity += 1;\n  \n  if (complexity <= 2) return 'simple';\n  if (complexity <= 4) return 'medium';\n  if (complexity <= 6) return 'complex';\n  return 'enterprise';\n}\n\nfunction determineProcessingPhases(context) {\n  const phases = ['semantic_understanding'];\n  \n  if (context.orchestration_config.include_pattern_matching) {\n    phases.push('pattern_recognition');\n  }\n  \n  phases.push('business_logic_interpretation');\n  \n  if (context.orchestration_config.include_learning) {\n    phases.push('codebase_intelligence');\n  }\n  \n  if (context.orchestration_config.generate_complete_solution) {\n    phases.push('solution_architecture');\n  }\n  \n  phases.push('response_generation');\n  \n  return phases;\n}\n\nfunction determineComponentSequence(context) {\n  return [\n    {\n      component: 'semantic_understanding_engine',\n      phase: 'semantic_understanding',\n      dependencies: [],\n      critical_path: true\n    },\n    {\n      component: 'pattern_recognition_library',\n      phase: 'pattern_recognition',\n      dependencies: ['semantic_understanding'],\n      critical_path: context.orchestration_config.include_pattern_matching\n    },\n    {\n      component: 'business_logic_interpreter',\n      phase: 'business_logic_interpretation',\n      dependencies: ['semantic_understanding'],\n      critical_path: true\n    },\n    {\n      component: 'codebase_intelligence_system',\n      phase: 'codebase_intelligence',\n      dependencies: ['semantic_understanding', 'pattern_recognition'],\n      critical_path: context.orchestration_config.include_learning\n    },\n    {\n      component: 'solution_architecture_generator',\n      phase: 'solution_architecture',\n      dependencies: ['business_logic_interpretation', 'pattern_recognition'],\n      critical_path: context.orchestration_config.generate_complete_solution\n    }\n  ].filter(comp => comp.critical_path !== false);\n}\n\nfunction estimateProcessingTime(context) {\n  const baseTime = 5; // Base 5 seconds\n  const complexityMultipliers = {\n    simple: 1.0,\n    medium: 1.5,\n    complex: 2.0,\n    enterprise: 3.0\n  };\n  \n  const phaseMultipliers = {\n    semantic_understanding: 1.0,\n    pattern_recognition: 0.8,\n    business_logic_interpretation: 1.2,\n    codebase_intelligence: 0.6,\n    solution_architecture: 1.5\n  };\n  \n  const phases = determineProcessingPhases(context);\n  const totalMultiplier = phases.reduce((sum, phase) => \n    sum + (phaseMultipliers[phase] || 1.0), 0\n  ) / phases.length;\n  \n  return Math.ceil(baseTime * complexityMultipliers[requestAnalysis.complexity_level] * totalMultiplier);\n}\n\nfunction calculateResourceRequirements(context) {\n  return {\n    ai_tokens_estimate: estimateTokens(context),\n    processing_memory: requestAnalysis.complexity_level === 'enterprise' ? 'high' : 'medium',\n    integration_calls: determineProcessingPhases(context).length,\n    concurrent_processing: requestAnalysis.complexity_level === 'simple' ? false : true\n  };\n}\n\nfunction estimateTokens(context) {\n  const baseTokens = 1000;\n  const requestTokens = context.character_request.length * 2;\n  const complexityTokens = {\n    simple: 500,\n    medium: 1000,\n    complex: 2000,\n    enterprise: 3000\n  };\n  \n  return baseTokens + requestTokens + complexityTokens[requestAnalysis.complexity_level];\n}\n\nreturn [{\n  json: {\n    ...context,\n    request_analysis: requestAnalysis,\n    orchestration_plan: {\n      total_phases: requestAnalysis.processing_phases.length,\n      estimated_duration: requestAnalysis.estimated_processing_time,\n      component_sequence: requestAnalysis.component_sequence,\n      parallel_execution: requestAnalysis.complexity_level !== 'simple'\n    },\n    current_phase: 'semantic_understanding',\n    phase_start_time: Date.now()\n  }\n}];"
+      },
+      "id": "code-initialize-orchestration",
+      "name": "Initialize Orchestration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Phase 1: Semantic Understanding\nconst context = $input.first().json;\n\nconst semanticRequest = {\n  character_input: context.character_request,\n  character_class: context.character_profile.character_class,\n  character_level: context.character_profile.character_level,\n  party_composition: context.character_profile.party_composition,\n  current_quest: context.character_profile.current_situation,\n  play_style: context.character_profile.play_style,\n  analysis_depth: context.orchestration_config.processing_mode,\n  include_code_generation: context.orchestration_config.generate_complete_solution,\n  include_explanations: context.orchestration_config.provide_explanations,\n  learning_mode: 'adaptive',\n  session_id: context.session_id,\n  character_id: context.character_profile.character_id\n};\n\nreturn [{\n  json: {\n    ...context,\n    phase: 'semantic_understanding',\n    phase_start_time: Date.now(),\n    semantic_request: semanticRequest,\n    next_phase: context.orchestration_config.include_pattern_matching ? 'pattern_recognition' : 'business_logic_interpretation'\n  }\n}];"
+      },
+      "id": "code-semantic-understanding-phase",
+      "name": "Phase 1: Semantic Understanding",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/webhook/semantic-understanding",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "payload",
+              "value": "={{ $json.semantic_request }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-semantic-understanding",
+      "name": "Call Semantic Engine",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process semantic understanding results\nconst response = $input.first().json;\nconst originalContext = items.find(item => item.json.phase === 'semantic_understanding')?.json;\n\nconst phaseResult = {\n  phase: 'semantic_understanding',\n  status: response.status || 'unknown',\n  start_time: originalContext.phase_start_time,\n  end_time: Date.now(),\n  duration: Date.now() - originalContext.phase_start_time,\n  result: response,\n  success: response.status === 'success'\n};\n\nreturn [{\n  json: {\n    ...originalContext,\n    workflow_state: {\n      ...originalContext.workflow_state,\n      completed_phases: [...originalContext.workflow_state.completed_phases, 'semantic_understanding'],\n      current_phase: originalContext.next_phase,\n      metrics: {\n        ...originalContext.workflow_state.metrics,\n        phase_timings: {\n          ...originalContext.workflow_state.metrics.phase_timings,\n          semantic_understanding: phaseResult.duration\n        }\n      }\n    },\n    phase_results: {\n      ...originalContext.phase_results || {},\n      semantic_understanding: phaseResult\n    },\n    semantic_understanding_result: response,\n    character_intent_understood: response.character_intent_understood || 'Intent analysis failed'\n  }\n}];"
+      },
+      "id": "code-process-semantic-result",
+      "name": "Process Semantic Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Phase 2: Pattern Recognition (if enabled)\nconst context = $input.first().json;\n\nif (!context.orchestration_config.include_pattern_matching) {\n  return [{\n    json: {\n      ...context,\n      workflow_state: {\n        ...context.workflow_state,\n        current_phase: 'business_logic_interpretation'\n      },\n      phase: 'pattern_recognition',\n      status: 'skipped',\n      reason: 'Pattern matching disabled in configuration'\n    }\n  }];\n}\n\nconst patternRequest = {\n  operation_type: 'identify_patterns',\n  character_id: context.character_profile.character_id,\n  session_id: context.session_id,\n  input_data: {\n    scenario_description: context.character_request,\n    character_class: context.character_profile.character_class,\n    character_level: context.character_profile.character_level,\n    party_composition: context.character_profile.party_composition,\n    objectives: [context.semantic_understanding_result?.business_goal || 'Achieve character goal'],\n    urgency_level: 'normal'\n  },\n  search_scope: 'all_characters',\n  time_period: 'last_30_days',\n  success_threshold: 0.7,\n  include_explanations: context.orchestration_config.provide_explanations,\n  confidence_threshold: 0.6\n};\n\nreturn [{\n  json: {\n    ...context,\n    phase: 'pattern_recognition',\n    phase_start_time: Date.now(),\n    pattern_request: patternRequest,\n    next_phase: 'business_logic_interpretation'\n  }\n}];"
+      },
+      "id": "code-pattern-recognition-phase",
+      "name": "Phase 2: Pattern Recognition",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/webhook/pattern-recognition",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "payload",
+              "value": "={{ $json.pattern_request }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-pattern-recognition",
+      "name": "Call Pattern Library",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process pattern recognition results\nconst response = $input.first().json;\nconst originalContext = items.find(item => item.json.phase === 'pattern_recognition')?.json;\n\nconst phaseResult = {\n  phase: 'pattern_recognition',\n  status: response.status || 'unknown',\n  start_time: originalContext.phase_start_time,\n  end_time: Date.now(),\n  duration: Date.now() - originalContext.phase_start_time,\n  result: response,\n  success: response.status === 'success'\n};\n\nreturn [{\n  json: {\n    ...originalContext,\n    workflow_state: {\n      ...originalContext.workflow_state,\n      completed_phases: [...originalContext.workflow_state.completed_phases, 'pattern_recognition'],\n      current_phase: originalContext.next_phase,\n      metrics: {\n        ...originalContext.workflow_state.metrics,\n        phase_timings: {\n          ...originalContext.workflow_state.metrics.phase_timings,\n          pattern_recognition: phaseResult.duration\n        }\n      }\n    },\n    phase_results: {\n      ...originalContext.phase_results || {},\n      pattern_recognition: phaseResult\n    },\n    pattern_recognition_result: response,\n    identified_patterns: response.pattern_analysis?.patterns_identified || 0\n  }\n}];"
+      },
+      "id": "code-process-pattern-result",
+      "name": "Process Pattern Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Phase 3: Business Logic Interpretation\nconst context = $input.first().json;\n\nconst businessRequest = {\n  character_goal: context.character_request,\n  character_context: {\n    class: context.character_profile.character_class,\n    level: context.character_profile.character_level,\n    party_role: context.character_profile.party_composition.length > 0 ? 'leader' : 'member',\n    play_style: context.character_profile.play_style,\n    current_situation: context.character_profile.current_situation,\n    available_resources: context.character_profile.preferences || {},\n    constraints: [],\n    preferences: context.character_profile.preferences\n  },\n  urgency_level: 'normal',\n  complexity_tolerance: 'medium',\n  automation_preference: 'balanced',\n  success_metrics: ['effectiveness', 'reliability'],\n  stakeholder_analysis: {\n    primary: 'character',\n    secondary: ['party', 'dm']\n  },\n  analysis_depth: context.orchestration_config.processing_mode\n};\n\nreturn [{\n  json: {\n    ...context,\n    phase: 'business_logic_interpretation',\n    phase_start_time: Date.now(),\n    business_request: businessRequest,\n    next_phase: context.orchestration_config.include_learning ? 'codebase_intelligence' : 'solution_architecture'\n  }\n}];"
+      },
+      "id": "code-business-logic-phase",
+      "name": "Phase 3: Business Logic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/webhook/business-logic-interpreter",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "payload",
+              "value": "={{ $json.business_request }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-business-logic",
+      "name": "Call Business Logic",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process business logic interpretation results\nconst response = $input.first().json;\nconst originalContext = items.find(item => item.json.phase === 'business_logic_interpretation')?.json;\n\nconst phaseResult = {\n  phase: 'business_logic_interpretation',\n  status: response.status || 'unknown',\n  start_time: originalContext.phase_start_time,\n  end_time: Date.now(),\n  duration: Date.now() - originalContext.phase_start_time,\n  result: response,\n  success: response.status === 'success'\n};\n\nreturn [{\n  json: {\n    ...originalContext,\n    workflow_state: {\n      ...originalContext.workflow_state,\n      completed_phases: [...originalContext.workflow_state.completed_phases, 'business_logic_interpretation'],\n      current_phase: originalContext.next_phase,\n      metrics: {\n        ...originalContext.workflow_state.metrics,\n        phase_timings: {\n          ...originalContext.workflow_state.metrics.phase_timings,\n          business_logic_interpretation: phaseResult.duration\n        }\n      }\n    },\n    phase_results: {\n      ...originalContext.phase_results || {},\n      business_logic_interpretation: phaseResult\n    },\n    business_logic_result: response,\n    business_strategy_defined: response.strategic_analysis?.problem_statement ? true : false\n  }\n}];"
+      },
+      "id": "code-process-business-result",
+      "name": "Process Business Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "jsCode":">// Final orchestration response preparation\nconst context = $input.first().json;\n\n// Calculate overall metrics\nconst totalProcessingTime = Date.now() - context.workflow_state.metrics.processing_start_time;\nconst successfulPhases = context.workflow_state.completed_phases.filter(phase => \n  context.phase_results?.[phase]?.success\n).length;\nconst totalPhases = context.request_analysis.processing_phases.length;\n\n// Generate comprehensive response\nconst orchestrationResponse = {\n  status: successfulPhases === totalPhases ? 'success' : 'partial_success',\n  session_id: context.session_id,\n  character_id: context.character_profile.character_id,\n  timestamp: new Date().toISOString(),\n  processing_summary: {\n    total_phases: totalPhases,\n    completed_phases: successfulPhases,\n    total_processing_time: totalProcessingTime,\n    complexity_level: context.request_analysis.complexity_level,\n    orchestration_mode: context.orchestration_config.processing_mode\n  },\n  character_understanding: {\n    original_request: context.character_request,\n    interpreted_intent: context.semantic_understanding_result?.character_intent_understood || 'Intent unclear',\n    business_goal: context.semantic_understanding_result?.business_goal || 'Goal identification failed',\n    automation_type: context.semantic_understanding_result?.automation_type || 'general'\n  },\n  solution_components: {\n    semantic_analysis: context.semantic_understanding_result || null,\n    pattern_matches: context.pattern_recognition_result || null,\n    business_strategy: context.business_logic_result || null,\n    solution_architecture: null // Will be populated if solution generation was triggered\n  },\n  recommendations: {\n    immediate_actions: generateImmediateActions(context),\n    implementation_suggestions: generateImplementationSuggestions(context),\n    learning_opportunities: generateLearningOpportunities(context),\n    customization_options: generateCustomizationOptions(context)\n  },\n  character_friendly_summary: generateCharacterFriendlySummary(context),\n  next_steps: generateNextSteps(context),\n  quality_metrics: {\n    confidence_score: calculateOverallConfidence(context),\n    completeness_score: (successfulPhases / totalPhases) * 100,\n    accuracy_estimate: estimateAccuracy(context),\n    user_satisfaction_prediction: predictUserSatisfaction(context)\n  },\n  metadata: {\n    tokens_used_estimate: context.request_analysis.resource_requirements.ai_tokens_estimate,\n    components_executed: context.orchestration_plan.component_sequence.length,\n    errors_encountered: context.workflow_state.errors.length,\n    learning_enabled: context.orchestration_config.include_learning,\n    pattern_matching_enabled: context.orchestration_config.include_pattern_matching\n  }\n};\n\nfunction generateImmediateActions(context) {\n  const actions = [];\n  \n  if (context.semantic_understanding_result?.next_actions) {\n    actions.push(...context.semantic_understanding_result.next_actions);\n  }\n  \n  if (context.pattern_recognition_result?.pattern_recommendations) {\n    actions.push('Review identified patterns for applicability');\n  }\n  \n  if (context.business_logic_result?.next_actions) {\n    actions.push(...context.business_logic_result.next_actions);\n  }\n  \n  return actions.slice(0, 5); // Limit to 5 most important actions\n}\n\nfunction generateImplementationSuggestions(context) {\n  const suggestions = [];\n  \n  if (context.semantic_understanding_result?.automation_type) {\n    suggestions.push(`Implement ${context.semantic_understanding_result.automation_type} automation system`);\n  }\n  \n  if (context.pattern_recognition_result?.implementation_readiness?.ready_to_implement) {\n    suggestions.push('Begin implementation of recommended patterns');\n  }\n  \n  if (context.business_logic_result?.technical_roadmap) {\n    suggestions.push('Follow the technical roadmap for implementation');\n  }\n  \n  return suggestions;\n}\n\nfunction generateLearningOpportunities(context) {\n  const opportunities = [];\n  \n  if (context.pattern_recognition_result?.learning_insights?.success_factors) {\n    opportunities.push('Learn from identified success factors');\n  }\n  \n  if (context.business_logic_result?.implementation_readiness?.risk_assessment) {\n    opportunities.push('Study risk assessment for future improvements');\n  }\n  \n  opportunities.push('Monitor system performance and user feedback');\n  \n  return opportunities;\n}\n\nfunction generateCustomizationOptions(context) {\n  return [\n    'Adjust automation sensitivity and responsiveness',\n    'Customize notification preferences',\n    'Modify success criteria and thresholds',\n    'Personalize interaction style and language'\n  ];\n}\n\nfunction generateCharacterFriendlySummary(context) {\n  const intent = context.semantic_understanding_result?.character_intent_understood || 'your request';\n  const automationType = context.semantic_understanding_result?.automation_type || 'assistance';\n  const complexity = context.request_analysis.complexity_level;\n  \n  return {\n    what_i_understand: `You want to ${intent.toLowerCase()}`,\n    what_i_can_do: `I can create a ${automationType} system to help you achieve this goal`,\n    how_complex: `This is a ${complexity} solution that will require some setup`,\n    what_to_expect: 'The system will monitor your situation and automatically help when needed',\n    your_control: 'You can customize settings and override automation at any time'\n  };\n}\n\nfunction generateNextSteps(context) {\n  const steps = [\n    'Review the understanding and recommendations provided',\n    'Decide on the level of automation you want',\n    'Begin implementation based on your preferences'\n  ];\n  \n  if (context.orchestration_config.enable_feedback_loop) {\n    steps.push('Provide feedback to help improve future recommendations');\n  }\n  \n  return steps;\n}\n\nfunction calculateOverallConfidence(context) {\n  let confidence = 70; // Base confidence\n  \n  if (context.semantic_understanding_result?.status === 'success') confidence += 15;\n  if (context.pattern_recognition_result?.status === 'success') confidence += 10;\n  if (context.business_logic_result?.status === 'success') confidence += 15;\n  \n  // Adjust based on complexity\n  if (context.request_analysis.complexity_level === 'simple') confidence += 5;\n  if (context.request_analysis.complexity_level === 'enterprise') confidence -= 10;\n  \n  return Math.min(confidence, 95);\n}\n\nfunction estimateAccuracy(context) {\n  const successfulPhases = context.workflow_state.completed_phases.filter(phase => \n    context.phase_results?.[phase]?.success\n  ).length;\n  return Math.round((successfulPhases / context.request_analysis.processing_phases.length) * 100);\n}\n\nfunction predictUserSatisfaction(context) {\n  const accuracy = estimateAccuracy(context);\n  const confidence = calculateOverallConfidence(context);\n  const complexity = context.request_analysis.complexity_level;\n  \n  let satisfaction = (accuracy + confidence) / 2;\n  \n  if (complexity === 'simple') satisfaction += 10;\n  if (complexity === 'enterprise') satisfaction -= 15;\n  \n  if (context.orchestration_config.provide_explanations) satisfaction += 5;\n  \n  return Math.min(Math.round(satisfaction), 95);\n}\n\nreturn [{\n  json: orchestrationResponse\n}];"
+      },
+      "id": "code-final-orchestration-response",
+      "name": "Generate Final Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "webhook-orchestration-response",
+      "name": "Send Orchestration Response",
+      "type": "n8n-nodes-base.webhookResponse",
+      "typeVersion": 1,
+      "position": [2440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Error handling for orchestration\nconst error = $input.first().json;\n\nconst errorResponse = {\n  status: 'error',\n  timestamp: new Date().toISOString(),\n  session_id: error.session_id || 'unknown',\n  character_id: error.character_id || 'unknown',\n  error: error.error || 'Orchestration failed',\n  details: error.details || 'No additional details available',\n  phase_failed: error.phase || 'unknown',\n  suggestions: [\n    'Check your request format and try again',\n    'Ensure all required fields are provided',\n    'Try with a simpler request if the problem persists',\n    'Contact support if the issue continues'\n  ],\n  partial_results: error.phase_results || {},\n  recovery_options: [\n    'Retry the orchestration',\n    'Request a simpler analysis',\n    'Proceed with manual implementation'\n  ]\n};\n\nreturn [{\n  json: errorResponse\n}];"
+      },
+      "id": "code-orchestration-error-handling",
+      "name": "Orchestration Error Handling",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "webhook-error-response",
+      "name": "Send Error Response",
+      "type": "n8n-nodes-base.webhookResponse",
+      "typeVersion": 1,
+      "position": [2220, 500]
+    }
+  ],
+  "connections": {
+    "Code Fabric Orchestrator": {
+      "main": [
+        [
+          {
+            "node": "Parse Orchestration Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Orchestration Request": {
+      "main": [
+        [
+          {
+            "node": "Initialize Orchestration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Orchestration": {
+      "main": [
+        [
+          {
+            "node": "Phase 1: Semantic Understanding",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Phase 2: Pattern Recognition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phase 1: Semantic Understanding": {
+      "main": [
+        [
+          {
+            "node": "Call Semantic Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Semantic Engine": {
+      "main": [
+        [
+          {
+            "node": "Process Semantic Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Semantic Result": {
+      "main": [
+        [
+          {
+            "node": "Phase 3: Business Logic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phase 2: Pattern Recognition": {
+      "main": [
+        [
+          {
+            "node": "Call Pattern Library",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Pattern Library": {
+      "main": [
+        [
+          {
+            "node": "Process Pattern Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Pattern Result": {
+      "main": [
+        [
+          {
+            "node": "Phase 3: Business Logic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phase 3: Business Logic": {
+      "main": [
+        [
+          {
+            "node": "Call Business Logic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Business Logic": {
+      "main": [
+        [
+          {
+            "node": "Process Business Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Business Result": {
+      "main": [
+        [
+          {
+            "node": "Generate Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Final Response": {
+      "main": [
+        [
+          {
+            "node": "Send Orchestration Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Orchestration Error Handling": {
+      "main": [
+        [
+          {
+            "node": "Send Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T15:45:00.000Z",
+      "updatedAt": "2024-10-23T15:45:00.000Z",
+      "id": "code-fabric",
+      "name": "Code Fabric"
+    },
+    {
+      "createdAt": "2024-10-23T15:45:00.000Z",
+      "updatedAt": "2024-10-23T15:45:00.000Z",
+      "id": "orchestration",
+      "name": "Orchestration"
+    },
+    {
+      "createdAt": "2024-10-23T15:45:00.000Z",
+      "updatedAt": "2024-10-23T15:45:00.000Z",
+      "id": "intelligence-system",
+      "name": "Intelligence System"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T15:45:00.000Z",
+  "versionId": "1"
+}

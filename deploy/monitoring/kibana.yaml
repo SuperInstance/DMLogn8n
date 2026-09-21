@@ -1,0 +1,192 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kibana
+  namespace: logging
+  labels:
+    app: kibana
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: kibana
+  template:
+    metadata:
+      labels:
+        app: kibana
+    spec:
+      containers:
+      - name: kibana
+        image: docker.elastic.co/kibana/kibana:8.6.0
+        ports:
+        - containerPort: 5601
+          name: http
+        env:
+        - name: ELASTICSEARCH_HOSTS
+          value: "http://elasticsearch:9200"
+        - name: SERVER_NAME
+          value: "kibana.dmlog.com"
+        - name: SERVER_HOST
+          value: "0.0.0.0"
+        - name: SERVER_PUBLICBASEURL
+          value: "https://logs.dmlog.com"
+        - name: LOGGING_SILENT
+          value: "false"
+        - name: XPACK_SECURITY_ENABLED
+          value: "false"
+        - name: XPACK_MONITORING_ENABLED
+          value: "true"
+        - name: XPACK_MONITORING_UI_CONTAINER_ELASTICSEARCH_ENABLED
+          value: "true"
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+        volumeMounts:
+        - name: kibana-config
+          mountPath: /usr/share/kibana/config/kibana.yml
+          subPath: kibana.yml
+        readinessProbe:
+          httpGet:
+            path: /api/status
+            port: 5601
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /api/status
+            port: 5601
+          initialDelaySeconds: 60
+          periodSeconds: 30
+      volumes:
+      - name: kibana-config
+        configMap:
+          name: kibana-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kibana-config
+  namespace: logging
+data:
+  kibana.yml: |
+    server.name: kibana
+    server.host: "0.0.0.0"
+    server.publicBaseUrl: "https://logs.dmlog.com"
+    elasticsearch.hosts: ["http://elasticsearch:9200"]
+
+    # Security
+    xpack.security.enabled: false
+    xpack.encryptedSavedObjects.encryptionKey: "dmlog-encryption-key-32-chars"
+
+    # Monitoring
+    xpack.monitoring.enabled: true
+    xpack.monitoring.ui.container.elasticsearch.enabled: true
+
+    # Logging
+    logging.silent: false
+    logging.quiet: false
+    logging.verbose: false
+
+    # Performance
+    elasticsearch.pingTimeout: 1500
+    elasticsearch.requestTimeout: 30000
+    elasticsearch.shutdownTimeout: 5000
+
+    # Search
+    search.maxBuckets: 10000
+
+    # Dashboard settings
+    dashboard.defaultDarkTheme: true
+
+    # Index patterns
+    # These will be created automatically
+    savedObjects:
+      maxImportPayloadBytes: 10485760
+
+  # Index pattern and dashboard configurations
+  index-patterns.json: |
+    [
+      {
+        "id": "dmlog-logs-*",
+        "attributes": {
+          "title": "dmlog-logs-*",
+          "timeFieldName": "@timestamp",
+          "fields": "[{\"name\":\"@timestamp\",\"type\":\"date\",\"searchable\":true,\"aggregatable\":true},{\"name\":\"level\",\"type\":\"string\",\"searchable\":true,\"aggregatable\":true},{\"name\":\"message\",\"type\":\"string\",\"searchable\":true,\"aggregatable\":false},{\"name\":\"service\",\"type\":\"string\",\"searchable\":true,\"aggregatable\":true},{\"name\":\"environment\",\"type\":\"string\",\"searchable\":true,\"aggregatable\":true},{\"name\":\"trace_id\",\"type\":\"string\",\"searchable\":true,\"aggregatable\":true},{\"name\":\"span_id\",\"type\":\"string\",\"searchable\":true,\"aggregatable\":true},{\"name\":\"user_id\",\"type\":\"string\",\"searchable\":true,\"aggregatable\":true},{\"name\":\"request_id\",\"type\":\"string\",\"searchable\":true,\"aggregatable\":true},{\"name\":\"status_code\",\"type\":\"number\",\"searchable\":true,\"aggregatable\":true},{\"name\":\"duration_ms\",\"type\":\"number\",\"searchable\":true,\"aggregatable\":true}]"
+        }
+      }
+    ]
+
+  # Initial dashboards configuration
+  dashboards.json: |
+    [
+      {
+        "id": "dmlog-application-dashboard",
+        "attributes": {
+          "title": "DMLog Application Logs",
+          "hits": 0,
+          "description": "Dashboard for DMLog application logs monitoring",
+          "panelsJSON": "[{\"version\":\"8.4.0\",\"gridData\":{\"x\":0,\"y\":0,\"w\":24,\"h\":15,\"i\":\"1\"},\"panelIndex\":\"1\",\"embeddableConfig\":{},\"panelRefName\":\"panel_1\"},{\"version\":\"8.4.0\",\"gridData\":{\"x\":24,\"y\":0,\"w\":24,\"h\":15,\"i\":\"2\"},\"panelIndex\":\"2\",\"embeddableConfig\":{},\"panelRefName\":\"panel_2\"}]",
+          "timeRestore": false,
+          "timeTo": "now",
+          "timeFrom": "now-15m",
+          "refreshInterval": {
+            "pause": false,
+            "value": 30000
+          },
+          "kibanaSavedObjectMeta": {
+            "searchSourceJSON": "{\"query\":{\"match_all\":{}},\"filter\":[]}"
+          }
+        }
+      }
+    ]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana
+  namespace: logging
+  labels:
+    app: kibana
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5601
+    targetPort: 5601
+    name: http
+  selector:
+    app: kibana
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kibana-ingress
+  namespace: logging
+  labels:
+    app: kibana
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  tls:
+  - hosts:
+    - logs.dmlog.com
+    secretName: kibana-tls
+  rules:
+  - host: logs.dmlog.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: kibana
+            port:
+              number: 5601

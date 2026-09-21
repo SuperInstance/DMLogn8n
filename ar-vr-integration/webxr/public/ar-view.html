@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D&D AR Character View - Mixed Reality Experience</title>
+    <meta name="description" content="AR character sheets, virtual dice, and 3D spell effects in real space">
+    <meta name="theme-color" content="#1a1a2e">
+
+    <!-- AR-specific meta tags -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <!-- ARKit meta tags for iOS -->
+    <meta name="apple-mobile-web-app-title" content="D&D AR">
+    <link rel="apple-touch-icon" href="/assets/icons/icon-192x192.png">
+
+    <!-- ARCore meta tags for Android -->
+    <meta name="theme-color" content="#1a1a2e">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: transparent;
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+            position: relative;
+            touch-action: none;
+        }
+
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(26, 26, 46, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top: 3px solid #4ecdc4;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            font-size: 16px;
+            color: #4ecdc4;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .ar-instructions {
+            text-align: center;
+            margin: 20px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            max-width: 300px;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100vh;
+            position: relative;
+            background: transparent;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #ar-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .ar-panel {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(78, 205, 196, 0.5);
+            border-radius: 15px;
+            padding: 15px;
+            backdrop-filter: blur(10px);
+            pointer-events: auto;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        #character-sheet {
+            top: 20px;
+            left: 20px;
+            width: 320px;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        #dice-roller {
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 280px;
+        }
+
+        #spell-caster {
+            top: 20px;
+            right: 20px;
+            width: 200px;
+        }
+
+        #camera-controls {
+            bottom: 20px;
+            right: 20px;
+            width: 60px;
+        }
+
+        .panel-header {
+            font-size: 14px;
+            font-weight: bold;
+            color: #4ecdc4;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(78, 205, 196, 0.3);
+            padding-bottom: 8px;
+        }
+
+        .panel-toggle {
+            cursor: pointer;
+            font-size: 16px;
+            color: #4ecdc4;
+            transition: transform 0.3s ease;
+        }
+
+        .panel-toggle:hover {
+            transform: scale(1.2);
+        }
+
+        /* Character Sheet Styles */
+        .character-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #4ecdc4, #44a3aa);
+            margin: 0 auto 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            border: 3px solid rgba(78, 205, 196, 0.5);
+        }
+
+        .character-name {
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 5px;
+            color: #4ecdc4;
+        }
+
+        .character-class {
+            font-size: 14px;
+            text-align: center;
+            color: #95afc0;
+            margin-bottom: 15px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 8px 0;
+            padding: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            font-size: 13px;
+        }
+
+        .stat-label {
+            color: #95afc0;
+        }
+
+        .stat-value {
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .health-bar {
+            width: 100%;
+            height: 24px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 10px 0;
+            position: relative;
+        }
+
+        .health-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff6b6b, #ee5a24);
+            transition: width 0.5s ease;
+            border-radius: 12px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .health-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: health-shimmer 2s infinite;
+        }
+
+        @keyframes health-shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .health-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 12px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        .mana-bar {
+            width: 100%;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+
+        .mana-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3498db, #2980b9);
+            transition: width 0.5s ease;
+            border-radius: 10px;
+        }
+
+        .xp-bar {
+            width: 100%;
+            height: 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+
+        .xp-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f9ca24, #f0932b);
+            transition: width 0.5s ease;
+            border-radius: 8px;
+        }
+
+        /* Dice Roller Styles */
+        .dice-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .dice-button {
+            padding: 12px;
+            background: linear-gradient(135deg, #4ecdc4, #44a3aa);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .dice-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(78, 205, 196, 0.4);
+        }
+
+        .dice-button:active {
+            transform: translateY(0);
+        }
+
+        .dice-button::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.5);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .dice-button:active::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        #dice-result {
+            text-align: center;
+            margin-top: 12px;
+            font-size: 24px;
+            color: #4ecdc4;
+            font-weight: bold;
+            min-height: 30px;
+        }
+
+        .dice-animation {
+            animation: dice-roll 0.5s ease-in-out;
+        }
+
+        @keyframes dice-roll {
+            0% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(180deg) scale(1.2); }
+            100% { transform: rotate(360deg) scale(1); }
+        }
+
+        /* Spell Caster Styles */
+        .spell-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .spell-button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 6px 0;
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .spell-button:hover {
+            transform: translateX(5px);
+            box-shadow: 0 3px 10px rgba(255, 107, 107, 0.4);
+        }
+
+        .spell-button.cast::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+            animation: spell-cast 1s ease-in-out;
+        }
+
+        @keyframes spell-cast {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+
+        .spell-name {
+            font-weight: bold;
+            font-size: 13px;
+        }
+
+        .spell-level {
+            font-size: 11px;
+            opacity: 0.8;
+        }
+
+        /* Camera Controls */
+        .control-button {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid rgba(78, 205, 196, 0.5);
+            color: #4ecdc4;
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 5px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .control-button:hover {
+            background: rgba(78, 205, 196, 0.2);
+            transform: scale(1.1);
+        }
+
+        /* AR-specific styles */
+        .ar-mode #canvas-container {
+            background: transparent;
+        }
+
+        .ar-mode .ar-panel {
+            background: rgba(0, 0, 0, 0.7);
+        }
+
+        /* Permission Request Overlay */
+        #permission-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(26, 26, 46, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+        }
+
+        .permission-message {
+            text-align: center;
+            max-width: 350px;
+            padding: 20px;
+        }
+
+        .permission-title {
+            font-size: 20px;
+            color: #4ecdc4;
+            margin-bottom: 15px;
+        }
+
+        .permission-text {
+            font-size: 14px;
+            line-height: 1.5;
+            color: #95afc0;
+            margin-bottom: 20px;
+        }
+
+        .permission-button {
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #4ecdc4, #44a3aa);
+            border: none;
+            border-radius: 25px;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .permission-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(78, 205, 196, 0.4);
+        }
+
+        /* AR Indicator */
+        #ar-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px;
+            height: 60px;
+            border: 3px solid #4ecdc4;
+            border-radius: 50%;
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        #ar-indicator.active {
+            animation: ar-pulse 2s infinite;
+        }
+
+        @keyframes ar-pulse {
+            0% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
+            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.8; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .ar-panel {
+                padding: 10px;
+            }
+
+            #character-sheet {
+                width: 280px;
+                font-size: 12px;
+            }
+
+            #dice-roller {
+                width: 250px;
+            }
+
+            #spell-caster {
+                width: 180px;
+            }
+
+            .character-avatar {
+                width: 60px;
+                height: 60px;
+                font-size: 24px;
+            }
+
+            .dice-button {
+                padding: 10px;
+                font-size: 12px;
+            }
+        }
+
+        /* Touch optimizations */
+        @media (pointer: coarse) {
+            .dice-button, .spell-button, .control-button {
+                min-height: 44px;
+                min-width: 44px;
+            }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Reduce motion for accessibility */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+    </style>
+</head>
+<body class="ar-mode">
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Initializing AR Experience...</div>
+        <div class="ar-instructions">
+            <p><strong>AR Setup Instructions:</strong></p>
+            <p>1. Allow camera access when prompted</p>
+            <p>2. Point your camera at a flat surface</p>
+            <p>3. Tap to place AR objects</p>
+            <p>4. Move around to explore</p>
+        </div>
+    </div>
+
+    <!-- Permission Request Overlay -->
+    <div id="permission-overlay" class="hidden">
+        <div class="permission-message">
+            <div class="permission-title">Camera Access Required</div>
+            <div class="permission-text">
+                This D&D AR experience needs camera access to overlay virtual objects in your real environment. Your camera feed is processed locally and never stored.
+            </div>
+            <button class="permission-button" onclick="requestCameraPermission()">Enable Camera</button>
+        </div>
+    </div>
+
+    <!-- Canvas Container -->
+    <div id="canvas-container">
+        <canvas id="ar-canvas"></canvas>
+
+        <!-- AR Indicator -->
+        <div id="ar-indicator"></div>
+    </div>
+
+    <!-- AR Overlay UI -->
+    <div id="ar-overlay">
+        <!-- Character Sheet Panel -->
+        <div class="ar-panel" id="character-sheet">
+            <div class="panel-header">
+                <span>Character Sheet</span>
+                <span class="panel-toggle" onclick="togglePanel('character-sheet')">−</span>
+            </div>
+
+            <div class="character-avatar">🧙‍♂️</div>
+            <div class="character-name">Aldric Stormwind</div>
+            <div class="character-class">Wizard Level 5</div>
+
+            <div class="health-bar">
+                <div class="health-fill" id="health-fill" style="width: 75%">
+                    <div class="health-text">24/32 HP</div>
+                </div>
+            </div>
+
+            <div class="mana-bar">
+                <div class="mana-fill" id="mana-fill" style="width: 60%"></div>
+            </div>
+
+            <div class="xp-bar">
+                <div class="xp-fill" id="xp-fill" style="width: 45%"></div>
+            </div>
+
+            <div class="stat-row">
+                <span class="stat-label">Armor Class:</span>
+                <span class="stat-value">14</span>
+            </div>
+
+            <div class="stat-row">
+                <span class="stat-label">Initiative:</span>
+                <span class="stat-value">+2</span>
+            </div>
+
+            <div class="stat-row">
+                <span class="stat-label">Speed:</span>
+                <span class="stat-value">30 ft</span>
+            </div>
+
+            <div class="stat-row">
+                <span class="stat-label">Proficiency:</span>
+                <span class="stat-value">+3</span>
+            </div>
+        </div>
+
+        <!-- Dice Roller Panel -->
+        <div class="ar-panel" id="dice-roller">
+            <div class="panel-header">
+                <span>Dice Roller</span>
+                <span class="panel-toggle" onclick="togglePanel('dice-roller')">−</span>
+            </div>
+
+            <div class="dice-grid">
+                <button class="dice-button" onclick="rollDice(4)">d4</button>
+                <button class="dice-button" onclick="rollDice(6)">d6</button>
+                <button class="dice-button" onclick="rollDice(8)">d8</button>
+                <button class="dice-button" onclick="rollDice(10)">d10</button>
+                <button class="dice-button" onclick="rollDice(12)">d12</button>
+                <button class="dice-button" onclick="rollDice(20)">d20</button>
+            </div>
+
+            <div id="dice-result"></div>
+        </div>
+
+        <!-- Spell Caster Panel -->
+        <div class="ar-panel" id="spell-caster">
+            <div class="panel-header">
+                <span>Spells</span>
+                <span class="panel-toggle" onclick="togglePanel('spell-caster')">−</span>
+            </div>
+
+            <div class="spell-list">
+                <button class="spell-button" onclick="castARSpell('fireball')">
+                    <div class="spell-name">🔥 Fireball</div>
+                    <div class="spell-level">3rd Level • 8d6 fire</div>
+                </button>
+
+                <button class="spell-button" onclick="castARSpell('lightning')">
+                    <div class="spell-name">⚡ Lightning Bolt</div>
+                    <div class="spell-level">3rd Level • 8d6 lightning</div>
+                </button>
+
+                <button class="spell-button" onclick="castARSpell('shield')">
+                    <div class="spell-name">🛡️ Shield</div>
+                    <div class="spell-level">1st Level • +5 AC</div>
+                </button>
+
+                <button class="spell-button" onclick="castARSpell('heal')">
+                    <div class="spell-name">💚 Healing Word</div>
+                    <div class="spell-level">1st Level • 1d4 healing</div>
+                </button>
+            </div>
+        </div>
+
+        <!-- Camera Controls -->
+        <div class="ar-panel" id="camera-controls">
+            <button class="control-button" onclick="resetARView()" title="Reset View">
+                🎯
+            </button>
+            <button class="control-button" onclick="toggleARRecording()" title="Toggle Recording">
+                📹
+            </button>
+        </div>
+    </div>
+
+    <!-- WebXR Polyfill for AR support -->
+    <script src="https://cdn.jsdelivr.net/npm/webxr-polyfill@latest/build/webxr-polyfill.js"></script>
+
+    <!-- AR.js for marker-based AR (optional) -->
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+
+    <!-- Main AR Application Script -->
+    <script src="dist/ar.js"></script>
+
+    <!-- UI Interaction Scripts -->
+    <script>
+        // UI Panel Management
+        function togglePanel(panelId) {
+            const panel = document.getElementById(panelId);
+            const toggle = panel.querySelector('.panel-toggle');
+
+            if (panel.style.display === 'none') {
+                panel.style.display = 'block';
+                toggle.textContent = '−';
+            } else {
+                panel.style.display = 'none';
+                toggle.textContent = '+';
+            }
+        }
+
+        // Dice Rolling
+        function rollDice(sides) {
+            const result = Math.floor(Math.random() * sides) + 1;
+            const resultElement = document.getElementById('dice-result');
+
+            // Add animation
+            resultElement.classList.add('dice-animation');
+
+            setTimeout(() => {
+                resultElement.textContent = `d${sides}: ${result}`;
+                resultElement.classList.remove('dice-animation');
+
+                // Trigger AR dice effect
+                if (window.arApp) {
+                    window.arApp.rollVirtualDice(sides, result);
+                }
+            }, 250);
+        }
+
+        // AR Spell Casting
+        function castARSpell(spellId) {
+            const button = event.target.closest('.spell-button');
+            button.classList.add('cast');
+
+            setTimeout(() => {
+                button.classList.remove('cast');
+            }, 1000);
+
+            // Trigger AR spell effect
+            if (window.arApp) {
+                window.arApp.castSpellInAR(spellId);
+            }
+        }
+
+        // Camera Controls
+        function resetARView() {
+            if (window.arApp) {
+                window.arApp.resetView();
+            }
+        }
+
+        function toggleARRecording() {
+            if (window.arApp) {
+                window.arApp.toggleRecording();
+            }
+        }
+
+        // Camera Permission
+        async function requestCameraPermission() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' }
+                });
+
+                // Permission granted, hide overlay
+                document.getElementById('permission-overlay').classList.add('hidden');
+
+                // Stop the stream (we'll let AR.js handle it)
+                stream.getTracks().forEach(track => track.stop());
+
+                // Initialize AR if not already done
+                if (window.arApp) {
+                    window.arApp.initialize();
+                }
+
+            } catch (error) {
+                console.error('Camera permission denied:', error);
+                alert('Camera access is required for AR functionality. Please enable camera permissions in your browser settings.');
+            }
+        }
+
+        // Check for camera permissions on load
+        window.addEventListener('load', async () => {
+            // Check if WebXR is supported
+            if (!navigator.xr) {
+                console.warn('WebXR not supported, falling back to WebRTC AR');
+                return;
+            }
+
+            // Check AR support
+            try {
+                const isARSupported = await navigator.xr.isSessionSupported('immersive-ar');
+                if (!isARSupported) {
+                    console.warn('AR not supported on this device');
+                    return;
+                }
+            } catch (error) {
+                console.warn('AR support check failed:', error);
+                return;
+            }
+
+            // Request camera permissions
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' }
+                });
+
+                // Permission already granted
+                stream.getTracks().forEach(track => track.stop());
+                document.getElementById('permission-overlay').classList.add('hidden');
+
+            } catch (error) {
+                // Show permission overlay
+                document.getElementById('permission-overlay').classList.remove('hidden');
+            }
+        });
+
+        // Hide loading screen after initialization
+        setTimeout(() => {
+            const loadingScreen = document.getElementById('loading-screen');
+            loadingScreen.style.opacity = '0';
+            setTimeout(() => {
+                loadingScreen.classList.add('hidden');
+            }, 500);
+        }, 3000);
+    </script>
+</body>
+</html>

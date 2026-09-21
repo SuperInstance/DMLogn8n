@@ -1,0 +1,309 @@
+{
+  "name": "End-to-End Test Suite - Complete System Validation",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/test/start",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "e2e-test-trigger",
+      "name": "Start E2E Test Suite",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [240, 300],
+      "webhookId": "e2e-test-suite-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize test session data\nconst testSession = {\n  sessionId: $json.sessionId || 'test_' + Date.now(),\n  startTime: new Date().toISOString(),\n  testSuite: 'end_to_end',\n  environment: 'test',\n  testResults: [],\n  performanceMetrics: {}\n};\n\n// Store test session data for later use\n$items[0].json.testSession = testSession;\n\nreturn [{\n  json: {\n    ...testSession,\n    status: 'initialized',\n    nextTest: 'character_creation_to_ai_decision'\n  }\n}];"
+      },
+      "id": "initialize-test-session",
+      "name": "Initialize Test Session",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {\n          "options": {\n            "caseSensitive": true,\n            "leftValue": "",\n            "typeValidation": "strict"\n          },\n          "conditions": [\n            {\n              "id": "test-1-condition",\n              "leftValue": "={{ $json.nextTest }}",\n              "rightValue": "character_creation_to_ai_decision",\n              "operator": {\n                "type": "string",\n                "operation": "equals"\n              }\n            }\n          ],\n          "combinator": "and"\n        }\n      },\n      "id": "test-router",\n      "name": "Route Test Execution",\n      "type": "n8n-nodes-base.if",\n      "typeVersion": 2,\n      "position": [680, 300]\n    },\n    {\n      "parameters": {\n        "method": "POST",\n        "url": "http://localhost:3000/api/character/create",\n        "jsonParameters": true,\n        "json": {\n          "name": "TestCharacter_E2E",\n          "class": "Fighter",\n          "level": 1,\n          "race": "Human",\n          "background": "Soldier",\n          "abilities": {\n            "strength": 16,\n            "dexterity": 14,\n            "constitution": 15,\n            "intelligence": 12,\n            "wisdom": 13,\n            "charisma": 11\n          },\n          "testMode": true\n        },\n        "options": {\n          "timeout": 10000\n        }\n      },\n      "id": "create-test-character",\n      "name": "Create Test Character",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 4.1,\n      "position": [900, 200]\n    },\n    {\n      "parameters": {\n        "method": "POST",\n        "url": "http://localhost:3000/api/ai/decision",\n        "jsonParameters": true,\n        "json": {\n          "characterId": "={{ $json.characterId }}",\n          "scenario": "combat_encounter",\n          "context": {\n            "enemies": ["Goblin", "Goblin Shaman"],\n            "environment": "forest_clearing",\n            "timeOfDay": "dawn",\n            "weather": "foggy"\n          },\n          "testMode": true\n        },\n        "options": {\n          "timeout": 15000\n        }\n      },\n      "id": "trigger-ai-decision",\n      "name": "Trigger AI Decision",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 4.1,\n      "position": [1120, 200]\n    },\n    {\n      "parameters": {\n        "method": "GET",\n        "url": "http://localhost:3000/api/memory/{{ $json.characterId }}/acquire",\n        "options": {\n          "timeout": 8000\n        }\n      },\n      "id": "test-memory-acquisition",\n      "name": "Test Memory Acquisition",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 4.1,\n      "position": [1340, 200]\n    },\n    {\n      "parameters": {\n        "method": "POST",\n        "url": "http://localhost:3000/api/memory/consolidate",\n        "jsonParameters": true,\n        "json": {\n          "characterId": "={{ $json.characterId }}",\n          "sessionMemories": "={{ $json.recentMemories }}",\n          "consolidationType": "short_to_long_term",\n          "testMode": true\n        },\n        "options": {\n          "timeout": 12000\n        }\n      },\n      "id": "test-memory-consolidation",\n      "name": "Test Memory Consolidation",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 4.1,\n      "position": [1560, 200]\n    },\n    {\n      "parameters": {\n        "method": "POST",\n        "url": "http://localhost:3000/api/session/multiplayer/create",\n        "jsonParameters": true,\n        "json": {\n          "sessionName": "E2E Multiplayer Test",\n          "gameType": "dnd5e",\n          "maxPlayers": 4,\n          "dmMode": "ai",\n          "testMode": true,\n          "players": [\n            {\n              "id": "={{ $json.characterId }}",\n              "role": "player"\n            },\n            {\n              "id": "npc_test_1",\n              "role": "npc",\n              "characterType": "ally"\n            }\n          ]\n        },\n        "options": {\n          "timeout": 10000\n        }\n      },\n      "id": "create-multiplayer-session",\n      "name": "Create Multiplayer Session",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 4.1,\n      "position": [900, 400]\n    },\n    {\n      "parameters": {\n        "method": "POST",\n        "url": "http://localhost:3000/api/session/multiplayer/sync",\n        "jsonParameters": true,\n        "json": {\n          "sessionId": "={{ $json.sessionId }}",\n          "syncType": "full_state",\n          "testMode": true\n        },\n        "options": {\n          "timeout": 8000\n        }\n      },\n      "id": "test-session-sync",\n      "name": "Test Session Synchronization",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 4.1,\n      "position": [1120, 400]\n    },\n    {\n      "parameters": {\n        "method": "POST",\n        "url": "http://localhost:3000/api/voice/session/start",\n        "jsonParameters": true,\n        "json": {\n          "sessionId": "={{ $json.sessionId }}",\n          "participants": ["={{ $json.characterId }}", "npc_test_1"],\n          "voiceSettings": {\n            "language": "en-US",\n            "quality": "high",\n            "noiseReduction": true\n          },\n          "testMode": true\n        },\n        "options": {\n          "timeout": 15000\n        }\n      },\n      "id": "test-voice-session",\n      "name": "Test Voice Chat Session",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 4.1,\n      "position": [1340, 400]\n    },\n    {\n      "parameters": {\n        "method": "POST",\n        "url": "http://localhost:3000/api/websocket/connect",\n        "jsonParameters": true,\n        "json": {\n          "sessionId": "={{ $json.sessionId }}",\n          "clientType": "test",\n          "testMode": true\n        },\n        "options": {\n          "timeout": 5000\n        }\n      },\n      "id": "test-websocket-connection",\n      "name": "Test WebSocket Connection",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 4.1,\n      "position": [1560, 400]\n    },\n    {\n      "parameters": {\n        "method": "POST",\n        "url": "http://localhost:3000/api/campaign/create",\n        "jsonParameters": true,\n        "json": {\n          "campaignName": "E2E Test Campaign",\n          "campaignType": "short_adventure",\n          "startingLevel": 1,\n          "targetLevel": 3,\n          "estimatedSessions": 5,\n          "theme": "heroic_fantasy",\n          "testMode": true\n        },\n        "options": {\n          "timeout": 10000\n        }\n      },\n      "id": "create-test-campaign",\n      "name": "Create Test Campaign",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 4.1,\n      "position": [900, 600]\n    },\n    {\n      "parameters": {\n        "method": "POST",\n        "url": "http://localhost:3000/api/quest/generate",\n        "jsonParameters": true,\n        "json": {\n          "campaignId": "={{ $json.campaignId }}",\n          "questType": "main_story",\n          "difficulty": "medium",\n          "playerCount": 4,\n          "testMode": true\n        },\n        "options": {\n          "timeout": 20000\n        }\n      },\n      "id": "generate-quest",\n      "name": "Generate Quest",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 4.1,\n      "position": [1120, 600]\n    },\n    {\n      "parameters": {\n        "method": "POST",\n        "url": "http://localhost:3000/api/quest/complete",\n        "jsonParameters": true,\n        "json": {\n          "questId": "={{ $json.questId }}",\n          "completionType": "success",\n          "outcomes": {\n            "experienceGained": 300,\n            "treasureFound": true,\n            "reputationChange": "+10"\n          },\n          "testMode": true\n        },\n        "options": {\n          "timeout": 10000\n        }\n      },\n      "id": "complete-quest",\n      "name": "Complete Quest",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 4.1,\n      "position": [1340, 600]\n    },\n    {\n      "parameters": {\n        "jsCode": "// Validate test results and generate comprehensive report\nconst testResults = {\n  sessionId: $json.sessionId,\n  testSuite: 'end_to_end',\n  startTime: $json.startTime,\n  endTime: new Date().toISOString(),\n  duration: Date.now() - new Date($json.startTime).getTime(),\n  tests: [\n    {\n      name: 'character_creation',\n      status: $json.characterId ? 'passed' : 'failed',\n      details: { characterId: $json.characterId },\n      duration: $json.characterCreationTime || 0\n    },\n    {\n      name: 'ai_decision_flow',\n      status: $json.aiDecision ? 'passed' : 'failed',\n      details: { decision: $json.aiDecision },\n      duration: $json.aiDecisionTime || 0\n    },\n    {\n      name: 'memory_acquisition',\n      status: $json.memoryAcquired ? 'passed' : 'failed',\n      details: { memoriesCount: $json.memoriesCount },\n      duration: $json.memoryAcquisitionTime || 0\n    },\n    {\n      name: 'memory_consolidation',\n      status: $json.memoryConsolidated ? 'passed' : 'failed',\n      details: { consolidatedMemories: $json.consolidatedMemories },\n      duration: $json.memoryConsolidationTime || 0\n    },\n    {\n      name: 'multiplayer_session',\n      status: $json.multiplayerSessionId ? 'passed' : 'failed',\n      details: { sessionId: $json.multiplayerSessionId },\n      duration: $json.sessionCreationTime || 0\n    },\n    {\n      name: 'voice_chat',\n      status: $json.voiceSessionActive ? 'passed' : 'failed',\n      details: { voiceSessionId: $json.voiceSessionId },\n      duration: $json.voiceSessionTime || 0\n    },\n    {\n      name: 'websocket_connection',\n      status: $json.websocketConnected ? 'passed' : 'failed',\n      details: { connectionId: $json.connectionId },\n      duration: $json.websocketConnectionTime || 0\n    },\n    {\n      name: 'campaign_management',\n      status: $json.campaignId ? 'passed' : 'failed',\n      details: { campaignId: $json.campaignId },\n      duration: $json.campaignCreationTime || 0\n    },\n    {\n      name: 'quest_completion',\n      status: $json.questCompleted ? 'passed' : 'failed',\n      details: { questId: $json.questId },\n      duration: $json.questCompletionTime || 0\n    }\n  ]\n};\n\n// Calculate summary statistics\nconst passedTests = testResults.tests.filter(t => t.status === 'passed').length;\nconst totalTests = testResults.tests.length;\nconst successRate = (passedTests / totalTests * 100).toFixed(1);\n\nconst summary = {\n  totalTests,\n  passedTests,\n  failedTests: totalTests - passedTests,\n  successRate: parseFloat(successRate),\n  overallStatus: successRate >= 90 ? 'passed' : successRate >= 70 ? 'warning' : 'failed',\n  averageTestDuration: testResults.tests.reduce((sum, t) => sum + t.duration, 0) / totalTests\n};\n\n// Performance metrics\nconst performanceMetrics = {\n  apiResponseTimes: {\n    characterCreation: $json.characterCreationTime,\n    aiDecision: $json.aiDecisionTime,\n    memoryOperations: $json.memoryOperationTime,\n    sessionManagement: $json.sessionManagementTime,\n    voiceChat: $json.voiceChatTime\n  },\n  systemLatency: {\n    average: summary.averageTestDuration,\n    max: Math.max(...testResults.tests.map(t => t.duration)),\n    min: Math.min(...testResults.tests.map(t => t.duration))\n  }\n};\n\nreturn [{\n  json: {\n    testSuite: 'end_to_end',\n    ...testResults,\n    summary,\n    performanceMetrics,\n    status: summary.overallStatus,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "validate-test-results",
+      "name": "Validate Test Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/test/results",
+        "jsonParameters": true,
+        "json": "={{ $json }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "save-test-results",
+      "name": "Save Test Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2000, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "return-test-report",
+      "name": "Return Test Report",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2220, 400]
+    },
+    {
+      "parameters": {\n        "conditions": {\n          "options": {\n            "caseSensitive": true,\n            "leftValue": "",\n            "typeValidation": "strict"\n          },\n          "conditions": [\n            {\n              "id": "error-condition",\n              "leftValue": "={{ $json.status }}",\n              "rightValue": "error",\n              "operator": {\n                "type": "string",\n                "operation": "equals"\n              }\n            }\n          ],\n          "combinator": "and"\n        }\n      },\n      "id": "error-handler-router",\n      "name": "Error Handler Router",\n      "type": "n8n-nodes-base.if",\n      "typeVersion": 2,\n      "position": [1340, 800]\n    },\n    {\n      "parameters": {\n        "jsCode": "// Handle test failures and generate error reports\nconst errorReport = {\n  testSuite: 'end_to_end',\n  sessionId: $json.sessionId,\n  errorType: $json.errorType || 'unknown',\n  errorMessage: $json.errorMessage || 'Unknown error occurred',\n  failedStep: $json.failedStep || 'unknown',\n  timestamp: new Date().toISOString(),\n  context: {\n    lastSuccessfulStep: $json.lastSuccessfulStep,\n    testProgress: $json.testProgress,\n    systemState: $json.systemState\n  }\n};\n\nreturn [{\n  json: {\n    ...errorReport,\n    status: 'failed',\n    errorReport: true\n  }\n}];"
+      },
+      "id": "handle-test-failure",
+      "name": "Handle Test Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+n      "position": [1560, 800]\n    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "return-error-response",
+      "name": "Return Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1780, 800]\n    }
+  ],
+  "connections": {
+    "Start E2E Test Suite": {
+      "main": [
+        [
+          {
+            "node": "Initialize Test Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Test Session": {
+      "main": [
+        [
+          {
+            "node": "Route Test Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Test Execution": {
+      "main": [
+        [
+          {
+            "node": "Create Test Character",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Multiplayer Session",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Test Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Test Character": {
+      "main": [
+        [
+          {
+            "node": "Trigger AI Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger AI Decision": {
+      "main": [
+        [
+          {
+            "node": "Test Memory Acquisition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Memory Acquisition": {
+      "main": [
+        [
+          {
+            "node": "Test Memory Consolidation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Memory Consolidation": {
+      "main": [
+        [
+          {
+            "node": "Validate Test Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Multiplayer Session": {
+      "main": [
+        [
+          {
+            "node": "Test Session Synchronization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Session Synchronization": {
+      "main": [
+        [
+          {
+            "node": "Test Voice Chat Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Voice Chat Session": {
+      "main": [
+        [
+          {
+            "node": "Test WebSocket Connection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test WebSocket Connection": {
+      "main": [
+        [
+          {
+            "node": "Validate Test Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Test Campaign": {
+      "main": [
+        [
+          {
+            "node": "Generate Quest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Quest": {
+      "main": [
+        [
+          {
+            "node": "Complete Quest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete Quest": {
+      "main": [
+        [
+          {
+            "node": "Validate Test Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Test Results": {
+      "main": [
+        [
+          {
+            "node": "Save Test Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Test Results": {
+      "main": [
+        [
+          {
+            "node": "Return Test Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Test Failure": {
+      "main": [
+        [
+          {
+            "node": "Return Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T15:00:00.000Z",
+      "updatedAt": "2024-10-23T15:00:00.000Z",
+      "id": "tag-testing",
+      "name": "Testing"
+    },
+    {
+      "createdAt": "2024-10-23T15:00:00.000Z",
+      "updatedAt": "2024-10-23T15:00:00.000Z",
+      "id": "tag-integration",
+      "name": "Integration"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T15:00:00.000Z",
+  "versionId": "1"
+}

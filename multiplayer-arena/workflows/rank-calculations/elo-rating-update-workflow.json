@@ -1,0 +1,411 @@
+{
+  "name": "ELO Rating Update Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "elo-update",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "ELO Update Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process ELO rating updates from match results\nconst { matchResults, tournamentMultiplier = 1.0, seasonMultiplier = 1.0 } = $input.first().json;\n\nif (!matchResults || !Array.isArray(matchResults)) {\n  throw new Error('Match results array is required');\n}\n\nconst eloUpdates = [];\n\n// Process each player's rating update\nmatchResults.forEach(playerResult => {\n  const {\n    playerId,\n    playerName,\n    previousElo,\n    newElo,\n    eloChange,\n    opponentAverageElo,\n    matchResult,\n    kda,\n    mvp,\n    arenaType,\n    wasUpset\n  } = playerResult;\n\n  // Calculate additional factors\n  const performanceBonus = this.calculatePerformanceBonus(kda, mvp, wasUpset);\n  const streakBonus = this.calculateStreakBonus(playerId, matchResult);\n  \n  // Apply multipliers\n  const finalEloChange = Math.round(\n    eloChange * tournamentMultiplier * seasonMultiplier + \n    performanceBonus + \n    streakBonus\n  );\n\n  // Calculate new league status\n  const previousLeague = this.getLeague(previousElo);\n  const newLeague = this.getLeague(newElo + finalEloChange);\n  const leagueChanged = previousLeague !== newLeague;\n  \n  eloUpdates.push({\n    playerId,\n    playerName,\n    previousElo,\n    baseEloChange: eloChange,\n    tournamentMultiplier,\n    seasonMultiplier,\n    performanceBonus,\n    streakBonus,\n    finalEloChange,\n    newElo: newElo + finalEloChange,\n    previousLeague,\n    newLeague,\n    leagueChanged,\n    promotion: leagueChanged && this.isPromotion(previousLeague, newLeague),\n    demotion: leagueChanged && this.isDemotion(previousLeague, newLeague),\n    arenaType,\n    matchResult,\n    kda,\n    mvp,\n    wasUpset,\n    timestamp: new Date().toISOString()\n  });\n});\n\nreturn { eloUpdates };",
+        "functionCode": "// Calculate performance bonus based on KDA and other factors\nfunction calculatePerformanceBonus(kda, mvp, wasUpset) {\n  let bonus = 0;\n  \n  // KDA bonus\n  if (kda >= 5.0) bonus += 15;\n  else if (kda >= 3.0) bonus += 10;\n  else if (kda >= 2.0) bonus += 5;\n  \n  // MVP bonus\n  if (mvp) bonus += 8;\n  \n  // Upset bonus\n  if (wasUpset) bonus += 12;\n  \n  return bonus;\n}\n\n// Calculate streak bonus (would fetch from database)\nfunction calculateStreakBonus(playerId, matchResult) {\n  // Mock implementation - would fetch current streak from database\n  const mockStreak = Math.random() > 0.7 ? Math.floor(Math.random() * 5) + 1 : 0;\n  \n  if (mockStreak >= 3) return 10;\n  if (mockStreak >= 5) return 20;\n  \n  return 0;\n}\n\n// Get league based on ELO\nfunction getLeague(elo) {\n  if (elo >= 2900) return 'Mythic';\n  if (elo >= 2600) return 'Master';\n  if (elo >= 2300) return 'Diamond';\n  if (elo >= 2000) return 'Platinum';\n  if (elo >= 1700) return 'Gold';\n  if (elo >= 1400) return 'Silver';\n  return 'Bronze';\n}\n\n// Check if it's a promotion\nfunction isPromotion(oldLeague, newLeague) {\n  const leagues = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond', 'Master', 'Mythic'];\n  return leagues.indexOf(newLeague) > leagues.indexOf(oldLeague);\n}\n\n// Check if it's a demotion\nfunction isDemotion(oldLeague, newLeague) {\n  const leagues = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond', 'Master', 'Mythic'];\n  return leagues.indexOf(newLeague) < leagues.indexOf(oldLeague);\n}\n\nreturn { eloUpdates };"
+      },
+      "id": "function-1",
+      "name": "Calculate ELO Updates",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "resource": "document",
+        "database": "dmlogn8n_players",
+        "collection": "players",
+        "documentId": "={{ $json.playerId }}",
+        "returnAll": true
+      },
+      "id": "mongodb-1",
+      "name": "Get Player Data",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "mongodb": {
+          "id": "mongodb_credential_id",
+          "name": "MongoDB Atlas"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "if-1",
+      "name": "Player Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "resource": "document",
+        "database": "dmlogn8n_players",
+        "collection": "players",
+        "documentId": "={{ $json.playerId }}",
+        "updateFields": {
+          "elo": "={{ $json.newElo }}",
+          "league": "={{ $json.newLeague }}",
+          "lastUpdated": "={{ $json.timestamp }}",
+          "eloHistory": "={{ {\n  $push: {\n    change: $json.finalEloChange,\n    newElo: $json.newElo,\n    previousElo: $json.previousElo,\n    matchType: $json.arenaType,\n    result: $json.matchResult,\n    timestamp: $json.timestamp,\n    wasPromotion: $json.promotion,\n    wasDemotion: $json.demotion\n  }\n} }}",
+          "careerStats": {
+            "totalMatches": "={{ { $inc: 1 } }}",
+            "totalEloChange": "={{ { $inc: $json.finalEloChange } }}",
+            "peakElo": "={{ { $max: [$json.newElo, '$careerStats.peakElo'] } }}",
+            "bestStreak": "={{ { $max: [3, '$careerStats.bestStreak'] } }}"
+          }
+        }
+      },
+      "id": "mongodb-2",
+      "name": "Update Player ELO",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "resource": "document",
+        "database": "dmlogn8n_rankings",
+        "collection": "elo_history",
+        "fields": {
+          "playerId": "={{ $json.playerId }}",
+          "playerName": "={{ $json.playerName }}",
+          "previousElo": "={{ $json.previousElo }}",
+          "newElo": "={{ $json.newElo }}",
+          "eloChange": "={{ $json.finalEloChange }}",
+          "previousLeague": "={{ $json.previousLeague }}",
+          "newLeague": "={{ $json.newLeague }}",
+          "promotion": "={{ $json.promotion }}",
+          "demotion": "={{ $json.demotion }}",
+          "matchType": "={{ $json.arenaType }}",
+          "result": "={{ $json.matchResult }}",
+          "kda": "={{ $json.kda }}",
+          "mvp": "={{ $json.mvp }}",
+          "wasUpset": "={{ $json.wasUpset }}",
+          "timestamp": "={{ $json.timestamp }}"
+        }
+      },
+      "id": "mongodb-3",
+      "name": "Log ELO History",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Generate notifications for league changes\nconst eloUpdate = $input.first().json;\nconst notifications = [];\n\n// League promotion notification\nif (eloUpdate.promotion) {\n  notifications.push({\n    playerId: eloUpdate.playerId,\n    type: 'league_promotion',\n    title: '🎉 League Promotion!',\n    message: `Congratulations! You've been promoted to ${eloUpdate.newLeague}!`,\n    data: {\n      previousLeague: eloUpdate.previousLeague,\n      newLeague: eloUpdate.newLeague,\n      newElo: eloUpdate.newElo,\n      eloChange: eloUpdate.finalEloChange\n    },\n    rewards: this.calculatePromotionRewards(eloUpdate.newLeague),\n    timestamp: eloUpdate.timestamp\n  });\n}\n\n// League demotion notification\nif (eloUpdate.demotion) {\n  notifications.push({\n    playerId: eloUpdate.playerId,\n    type: 'league_demotion',\n    title: 'League Demotion',\n    message: `You've been demoted to ${eloUpdate.newLeague}. Keep practicing to climb back up!`,\n    data: {\n      previousLeague: eloUpdate.previousLeague,\n      newLeague: eloUpdate.newLeague,\n      newElo: eloUpdate.newElo,\n      eloChange: eloUpdate.finalEloChange\n    },\n    timestamp: eloUpdate.timestamp\n  });\n}\n\n// New personal best notification\nif (eloUpdate.newElo >= eloUpdate.previousElo && eloUpdate.newElo > 2000) {\n  // Check if it's a new peak (would need to compare with stored peak)\n  notifications.push({\n    playerId: eloUpdate.playerId,\n    type: 'personal_best',\n    title: '⭐ New Personal Best!',\n    message: `New peak ELO rating: ${eloUpdate.newElo}!`,\n    data: {\n      newElo: eloUpdate.newElo,\n      eloChange: eloUpdate.finalEloChange,\n      league: eloUpdate.newLeague\n    },\n    timestamp: eloUpdate.timestamp\n  });\n}\n\nreturn { notifications };\n\n// Calculate promotion rewards\nfunction calculatePromotionRewards(league) {\n  const rewards = {\n    'Bronze': { gold: 100, gems: 10 },\n    'Silver': { gold: 250, gems: 25 },\n    'Gold': { gold: 500, gems: 50 },\n    'Platinum': { gold: 1000, gems: 100 },\n    'Diamond': { gold: 2000, gems: 200 },\n    'Master': { gold: 5000, gems: 500 },\n    'Mythic': { gold: 10000, gems: 1000 }\n  };\n  \n  return rewards[league] || { gold: 50, gems: 5 };\n}"
+      },
+      "id": "function-2",
+      "name": "Generate League Notifications",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "resource": "document",
+        "database": "dmlogn8n_notifications",
+        "collection": "player_notifications",
+        "fields": {
+          "notifications": "={{ $json.notifications }}",
+          "createdAt": "={{ new Date().toISOString() }}"
+        }
+      },
+      "id": "mongodb-4",
+      "name": "Queue Notifications",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Update global rankings\nconst eloUpdate = $input.first().json;\n\n// Get current global ranking position\nconst rankingUpdate = {\n  playerId: eloUpdate.playerId,\n  playerName: eloUpdate.playerName,\n  newElo: eloUpdate.newElo,\n  previousElo: eloUpdate.previousElo,\n  league: eloUpdate.newLeague,\n  change: eloUpdate.finalEloChange,\n  timestamp: eloUpdate.timestamp,\n  region: 'global' // Would be fetched from player data\n};\n\nreturn { rankingUpdate };"
+      },
+      "id": "function-3",
+      "name": "Update Global Rankings",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "resource": "document",
+        "database": "dmlogn8n_rankings",
+        "collection": "global_rankings",
+        "filter": {
+          "playerId": "={{ $json.playerId }}"
+        },
+        "updateFields": {
+          "playerId": "={{ $json.playerId }}",
+          "playerName": "={{ $json.playerName }}",
+          "elo": "={{ $json.newElo }}",
+          "league": "={{ $json.newLeague }}",
+          "lastUpdated": "={{ $json.timestamp }}",
+          "change": "={{ $json.change }}"
+        },
+        "options": {
+          "upsert": true
+        }
+      },
+      "id": "mongodb-5",
+      "name": "Save Global Ranking",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Generate ELO analytics data\nconst eloUpdates = $input.first().json;\n\nconst analytics = {\n  date: new Date().toISOString().split('T')[0], // YYYY-MM-DD format\n  totalUpdates: eloUpdates.length,\n  averageEloChange: eloUpdates.reduce((sum, update) => sum + update.finalEloChange, 0) / eloUpdates.length,\n  promotions: eloUpdates.filter(update => update.promotion).length,\n  demotions: eloUpdates.filter(update => update.demotion).length,\n  biggestGain: eloUpdates.reduce((max, update) => update.finalEloChange > (max?.change || 0) ? { playerId: update.playerId, playerName: update.playerName, change: update.finalEloChange, newElo: update.newElo } : max, null),\n  biggestLoss: eloUpdates.reduce((min, update) => update.finalEloChange < (min?.change || 0) ? { playerId: update.playerId, playerName: update.playerName, change: update.finalEloChange, newElo: update.newElo } : min, null),\n  leagueDistribution: this.calculateLeagueDistribution(eloUpdates),\n  arenaTypeStats: this.calculateArenaTypeStats(eloUpdates)\n};\n\nreturn { analytics };\n\n// Calculate league distribution\nfunction calculateLeagueDistribution(updates) {\n  const distribution = {};\n  updates.forEach(update => {\n    distribution[update.newLeague] = (distribution[update.newLeague] || 0) + 1;\n  });\n  return distribution;\n}\n\n// Calculate arena type statistics\nfunction calculateArenaTypeStats(updates) {\n  const stats = {};\n  updates.forEach(update => {\n    if (!stats[update.arenaType]) {\n      stats[update.arenaType] = {\n        count: 0,\n        totalChange: 0,\n        averageChange: 0\n      };\n    }\n    stats[update.arenaType].count++;\n    stats[update.arenaType].totalChange += update.finalEloChange;\n  });\n  \n  // Calculate averages\n  Object.keys(stats).forEach(arenaType => {\n    stats[arenaType].averageChange = stats[arenaType].totalChange / stats[arenaType].count;\n  });\n  \n  return stats;\n}"
+      },
+      "id": "function-4",
+      "name": "Generate ELO Analytics",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "resource": "document",
+        "database": "dmlogn8n_analytics",
+        "collection": "elo_analytics_daily",
+        "fields": "={{ $json.analytics }}"
+      },
+      "id": "mongodb-6",
+      "name": "Store ELO Analytics",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: true,\n  updatedPlayers: $json.eloUpdates.length,\n  promotions: $json.eloUpdates.filter(u => u.promotion).length,\n  demotions: $json.eloUpdates.filter(u => u.demotion).length,\n  averageEloChange: Math.round($json.eloUpdates.reduce((sum, u) => sum + u.finalEloChange, 0) / $json.eloUpdates.length),\n  biggestGain: $json.eloUpdates.reduce((max, u) => u.finalEloChange > max ? u.finalEloChange : max, 0),\n  biggestLoss: $json.eloUpdates.reduce((min, u) => u.finalEloChange < min ? u.finalEloChange : min, 0)\n} }}"\n      },
+      "id": "webhook-response-1",
+      "name": "Return Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1580,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: false,\n  error: 'Player not found',\n  playerId: $json.playerId\n} }}\"\n      },
+      "id": "webhook-response-2",
+      "name": "Return Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        1000
+      ]
+    }
+  ],
+  "connections": {
+    "ELO Update Trigger": {
+      "main": [
+        [
+          {
+            "node": "Calculate ELO Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate ELO Updates": {
+      "main": [
+        [
+          {
+            "node": "Get Player Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Player Data": {
+      "main": [
+        [
+          {
+            "node": "Player Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Player Exists?": {
+      "main": [
+        [
+          {
+            "node": "Update Player ELO",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate League Notifications",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Global Rankings",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate ELO Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Player ELO": {
+      "main": [
+        [
+          {
+            "node": "Log ELO History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate League Notifications": {
+      "main": [
+        [
+          {
+            "node": "Queue Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Global Rankings": {
+      "main": [
+        [
+          {
+            "node": "Save Global Ranking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate ELO Analytics": {
+      "main": [
+        [
+          {
+            "node": "Store ELO Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log ELO History": {
+      "main": [
+        [
+          {
+            "node": "Return Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "4",
+      "name": "Rankings"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

@@ -1,0 +1,323 @@
+{
+  "name": "DeepSeek NLP Processor - Natural Language Understanding for Agent Communications",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nlp-process",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "NLP Processing Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "deepseek-nlp-processor"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse NLP processing request\nconst request = $input.first().json;\n\n// Required fields validation\nif (!request.text || !request.processing_type) {\n  return [{\n    json: {\n      error: 'Missing required fields: text, processing_type',\n      status: 'invalid'\n    }\n  }];\n}\n\n// Define processing configuration\nconst processingConfig = {\n  text: request.text,\n  processing_type: request.processing_type, // sentiment, intent, entities, summarization, etc.\n  context: request.context || {},\n  agent_id: request.agent_id || 'unknown',\n  conversation_id: request.conversation_id || null,\n  timestamp: new Date().toISOString(),\n  options: {\n    language: request.language || 'en',\n    detail_level: request.detail_level || 'standard',\n    include_confidence: request.include_confidence !== false,\n    max_tokens: request.max_tokens || 1000\n  }\n};\n\nreturn [{\n  json: processingConfig\n}];"
+      },
+      "id": "code-1",
+      "name": "Parse NLP Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {\n          "options": {\n            "caseSensitive": true,\n            "leftValue": "",\n            "typeValidation": "strict"\n          },\n          "conditions": [\n            {\n              "leftValue": "={{ $json.processing_type }}",\n              "rightValue": "sentiment",\n              "operator": {\n                "type": "string",\n                "operation": "equals"\n              }\n            }\n          ],\n          "combinator": "and"\n        }
+      },
+      "id": "if-1",
+      "name": "Route Processing Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare sentiment analysis prompt for DeepSeek\nconst config = $input.first().json;\n\nconst sentimentPrompt = `\nYou are an expert sentiment analyzer for AI agent communications. Analyze the following text and provide detailed sentiment analysis.\n\nText to analyze: \"${config.text}\"\n\nContext: ${JSON.stringify(config.context, null, 2)}\n\nPlease provide a JSON response with the following structure:\n{\n  \"sentiment\": {\n    \"overall\": \"positive/negative/neutral\",\n    \"confidence\": 0.95,\n    \"scores\": {\n      \"positive\": 0.1,\n      \"negative\": 0.8,\n      \"neutral\": 0.1\n    },\n    \"emotions\": [\"frustration\", \"concern\", \"determination\"]\n  },\n  \"tone\": \"formal/informal/technical/emotional\",\n  \"urgency\": \"low/medium/high\",\n  \"agent_state_implications\": {\n    \"possible_mood\": \"concerned\",\n    \"attention_level\": \"high\",\n    \"cooperation_level\": \"medium\"\n  }\n}\n\nFocus on understanding the emotional state and intentions of the AI agent. Consider the context of multi-agent coordination and decision making.`;\n\nreturn [{\n  json: {\n    ...config,\n    deepseek_prompt: sentimentPrompt,\n    analysis_type: 'sentiment_analysis'\n  }\n}];"
+      },
+      "id": "code-2",
+      "name": "Prepare Sentiment Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare intent analysis prompt for DeepSeek\nconst config = $input.first().json;\n\nconst intentPrompt = `\nYou are an expert in understanding AI agent intentions and communication goals. Analyze the following text to determine the agent's intent and objectives.\n\nText to analyze: \"${config.text}\"\n\nContext: ${JSON.stringify(config.context, null, 2)}\n\nPlease provide a JSON response with the following structure:\n{\n  \"intent\": {\n    \"primary\": \"request_information/provide_information/propose_action/coordinate/express_opinion\",\n    \"confidence\": 0.92,\n    \"secondary_intents\": [\"seek_validation\", \"build_consensus\"],\n    \"goals\": [\"obtain_data\", \"coordinate_action\", \"share_knowledge\"]\n  },\n  \"actionability\": {\n    \"requires_response\": true,\n    \"response_type\": \"data_provided/action_taken/coordination_needed\",\n    \"urgency\": \"immediate/normal/low_priority\",\n    \"complexity\": \"simple/medium/complex\"\n  },\n  \"communication_style\": {\n    \"directness\": \"direct/indirect\",\n    \"formality\": \"formal/casual/technical\",\n    \"assertiveness\": \"high/medium/low\"\n  }\n}\n\nFocus on understanding what the agent wants to achieve and what kind of response or action is needed.`;\n\nreturn [{\n  json: {\n    ...config,\n    deepseek_prompt: intentPrompt,\n    analysis_type: 'intent_analysis'\n  }\n}];"
+      },
+      "id": "code-3",
+      "name": "Prepare Intent Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare entity extraction prompt for DeepSeek\nconst config = $input.first().json;\n\nconst entityPrompt = `\nYou are an expert in information extraction for multi-agent systems. Extract key entities, relationships, and data points from the following text.\n\nText to analyze: \"${config.text}\"\n\nContext: ${JSON.stringify(config.context, null, 2)}\n\nPlease provide a JSON response with the following structure:\n{\n  \"entities\": [\n    {\n      \"text\": \"the missing artifact\",\n      \"type\": \"quest_item/objective\",\n      \"confidence\": 0.95,\n      \"attributes\": {\"status\": \"missing\", \"importance\": \"high\"}\n    }\n  ],\n  \"relationships\": [\n    {\n      \"subject\": \"party\",\n      \"relation\": \"searching_for\",\n      \"object\": \"missing_artifact\",\n      \"confidence\": 0.88\n    }\n  ],\n  \"data_points\": [\n    {\n      \"key\": \"location\",\n      \"value\": \"ancient_temple\",\n      \"certainty\": \"high\",\n      \"source\": \"agent_testimony\"\n    }\n  ],\n  \"actions_mentioned\": [\n    {\n      \"action\": \"investigate\",\n      \"actor\": \"party\",\n      \"target\": \"temple_ruins\",\n      \"timing\": \"immediate\"\n    }\n  ],\n  \"shared_knowledge\": {\n    \"new_information\": [\"artifact_location_clue\"],\n    \"confirmed_information\": [\"party_location\"],\n    \"contradictions\": []\n  }\n}\n\nFocus on extracting information that would be valuable for shared context and coordination between agents.`;\n\nreturn [{\n  json: {\n    ...config,\n    deepseek_prompt: entityPrompt,\n    analysis_type: 'entity_extraction'\n  }\n}];"
+      },
+      "id": "code-4",
+      "name": "Prepare Entity Extraction",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer sk-3b0251d9943549a2b475eb9e57e46ee6"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "deepseek-chat"
+            },
+            {
+              "name": "messages",
+              "value": "=[{\"role\": \"user\", \"content\": \"{{ $json.deepseek_prompt }}\"}]"
+            },
+            {
+              "name": "max_tokens",
+              "value": "={{ $json.options.max_tokens }}"
+            },
+            {
+              "name": "temperature",
+              "value": "0.1"
+            },
+            {
+              "name": "response_format",
+              "value": "{\"type\": \"json_object\"}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-1",
+      "name": "Call DeepSeek API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process DeepSeek response\nconst response = $input.first().json;\nconst originalRequest = $('Parse NLP Request').first().json;\n\nif (!response.choices || !response.choices[0]) {\n  return [{\n    json: {\n      error: 'Invalid response from DeepSeek API',\n      status: 'failed',\n      original_request: originalRequest\n    }\n  }];\n}\n\nlet analysisResult;\ntry {\n  analysisResult = JSON.parse(response.choices[0].message.content);\n} catch (error) {\n  return [{\n    json: {\n      error: 'Failed to parse DeepSeek response',\n      status: 'failed',\n      raw_response: response.choices[0].message.content\n    }\n  }];\n}\n\nconst processedResult = {\n  original_request: originalRequest,\n  processing_type: originalRequest.processing_type,\n  analysis_result: analysisResult,\n  processing_metadata: {\n    model: 'deepseek-chat',\n    tokens_used: response.usage.total_tokens,\n    processing_time: new Date().toISOString(),\n    agent_id: originalRequest.agent_id\n  },\n  status: 'completed'\n};\n\nreturn [{\n  json: processedResult\n}];"
+      },
+      "id": "code-5",
+      "name": "Process Analysis Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate actionable insights and recommendations\nconst result = $input.first().json;\nconst analysis = result.analysis_result;\n\nlet insights = {\n  agent_coordination_needs: [],\n  context_updates_required: [],\n  recommended_actions: [],\n  follow_up_questions: [],\n  conflict_indicators: [],\n  collaboration_opportunities: []\n};\n\n// Generate insights based on analysis type\nif (result.processing_type === 'sentiment_analysis') {\n  if (analysis.sentiment.overall === 'negative' && analysis.sentiment.confidence > 0.7) {\n    insights.conflict_indicators.push('Agent shows negative sentiment with high confidence');\n    insights.recommended_actions.push('Consider conflict resolution intervention');\n  }\n  \n  if (analysis.urgency === 'high') {\n    insights.agent_coordination_needs.push('High urgency communication requires immediate attention');\n  }\n  \n  if (analysis.emotions.includes('frustration') || analysis.emotions.includes('confusion')) {\n    insights.follow_up_questions.push('Is additional clarification needed?');\n  }\n}\n\nif (result.processing_type === 'intent_analysis') {\n  if (analysis.intent.primary === 'coordinate') {\n    insights.agent_coordination_needs.push('Coordination request detected');\n    insights.recommended_actions.push('Initiate party coordination workflow');\n  }\n  \n  if (analysis.actionability.requires_response && analysis.actionability.urgency === 'immediate') {\n    insights.recommended_actions.push('Priority response needed');\n  }\n  \n  if (analysis.communication_style.assertiveness === 'high') {\n    insights.follow_up_questions.push('Strong position expressed - check for consensus needs');\n  }\n}\n\nif (result.processing_type === 'entity_extraction') {\n  if (analysis.shared_knowledge.new_information.length > 0) {\n    insights.context_updates_required.push('New information detected - update shared context');\n  }\n  \n  if (analysis.actions_mentioned.length > 0) {\n    insights.agent_coordination_needs.push('Actions mentioned that may require coordination');\n  }\n  \n  if (analysis.relationships.length > 0) {\n    insights.collaboration_opportunities.push('New relationships identified for collaboration');\n  }\n}\n\nconst enhancedResult = {\n  ...result,\n  actionable_insights: insights,\n  processing_summary: {\n    text_analyzed: result.original_request.text.substring(0, 100) + '...',\n    processing_type: result.processing_type,\n    agent_id: result.original_request.agent_id,\n    insights_generated: Object.keys(insights).filter(key => insights[key].length > 0).length,\n    status: 'analysis_completed_with_insights'\n  }\n};\n\nreturn [{\n  json: enhancedResult\n}];"
+      },
+      "id": "code-6",
+      "name": "Generate Insights",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/api/v1/nlp/results",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "nlp_result",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-2",
+      "name": "Store NLP Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1780, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"nlp_processing_completed\",\n  \"processing_type\": \"{{ $json.processing_type }}\",\n  \"agent_id\": \"{{ $json.original_request.agent_id }}\",\n  \"analysis_available\": true,\n  \"insights_generated\": {{ $json.actionable_insights | length > 0 }},\n  \"result_id\": \"{{ $json.processing_metadata.processing_time }}\",\n  \"message\": \"Natural language processing completed successfully\"\n}"
+      },
+      "id": "respond-1",
+      "name": "Send NLP Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2000, 400]
+    }
+  ],
+  "connections": {
+    "NLP Processing Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse NLP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse NLP Request": {
+      "main": [
+        [
+          {
+            "node": "Route Processing Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Processing Type": {
+      "main": [
+        [
+          {
+            "node": "Prepare Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Intent Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Entity Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Sentiment Analysis": {
+      "main": [
+        [
+          {
+            "node": "Call DeepSeek API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Intent Analysis": {
+      "main": [
+        [
+          {
+            "node": "Call DeepSeek API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Entity Extraction": {
+      "main": [
+        [
+          {
+            "node": "Call DeepSeek API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call DeepSeek API": {
+      "main": [
+        [
+          {
+            "node": "Process Analysis Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Analysis Result": {
+      "main": [
+        [
+          {
+            "node": "Generate Insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Insights": {
+      "main": [
+        [
+          {
+            "node": "Store NLP Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store NLP Results": {
+      "main": [
+        [
+          {
+            "node": "Send NLP Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T21:00:00.000Z",
+      "updatedAt": "2024-10-23T21:00:00.000Z",
+      "id": "tag-nlp-processing",
+      "name": "NLP Processing"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T21:00:00.000Z",
+  "versionId": "1"
+}

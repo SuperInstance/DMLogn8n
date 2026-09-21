@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D&D VR Tabletop - Mixed Reality Experience</title>
+    <meta name="description" content="Immersive D&D VR tabletop with hand tracking, 3D miniatures, and spell casting">
+    <meta name="theme-color" content="#1a1a2e">
+
+    <!-- WebXR required meta tags -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+            position: relative;
+        }
+
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(26, 26, 46, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top: 4px solid #4ecdc4;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            font-size: 18px;
+            color: #4ecdc4;
+            margin-bottom: 10px;
+        }
+
+        .loading-progress {
+            width: 300px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .loading-progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #4ecdc4, #44a3aa);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        #ui-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .ui-panel {
+            position: absolute;
+            background: rgba(26, 26, 46, 0.9);
+            border: 1px solid rgba(78, 205, 196, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            backdrop-filter: blur(10px);
+            pointer-events: auto;
+            transition: all 0.3s ease;
+        }
+
+        .ui-panel.collapsed {
+            transform: translateX(-100%);
+        }
+
+        #character-panel {
+            top: 20px;
+            left: 20px;
+            min-width: 250px;
+        }
+
+        #dice-panel {
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            min-width: 300px;
+        }
+
+        #spell-panel {
+            top: 20px;
+            right: 20px;
+            min-width: 200px;
+        }
+
+        #performance-monitor {
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            color: #4ecdc4;
+            text-align: center;
+        }
+
+        .panel-header {
+            font-size: 16px;
+            font-weight: bold;
+            color: #4ecdc4;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-toggle {
+            cursor: pointer;
+            font-size: 18px;
+            color: #4ecdc4;
+            transition: transform 0.3s ease;
+        }
+
+        .panel-toggle:hover {
+            transform: scale(1.2);
+        }
+
+        .character-stat {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+            padding: 5px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 5px;
+        }
+
+        .health-bar {
+            width: 100%;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .health-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff6b6b, #ee5a24);
+            transition: width 0.3s ease;
+            border-radius: 10px;
+        }
+
+        .dice-container {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: 10px;
+        }
+
+        .dice-button {
+            padding: 10px 15px;
+            background: linear-gradient(135deg, #4ecdc4, #44a3aa);
+            border: none;
+            border-radius: 5px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .dice-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(78, 205, 196, 0.4);
+        }
+
+        .dice-button:active {
+            transform: translateY(0);
+        }
+
+        .spell-button {
+            display: block;
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            border: none;
+            border-radius: 5px;
+            color: white;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .spell-button:hover {
+            transform: translateX(5px);
+            box-shadow: 0 3px 10px rgba(255, 107, 107, 0.4);
+        }
+
+        .spell-name {
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .spell-level {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100vh;
+            position: relative;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Mobile responsive styles */
+        @media (max-width: 768px) {
+            .ui-panel {
+                padding: 10px;
+                font-size: 14px;
+            }
+
+            #character-panel, #spell-panel {
+                min-width: 200px;
+            }
+
+            .dice-button {
+                padding: 8px 12px;
+                font-size: 14px;
+            }
+        }
+
+        /* VR-specific styles */
+        .vr-mode .ui-panel {
+            transform: scale(0.8);
+            opacity: 0.8;
+        }
+
+        /* AR-specific styles */
+        .ar-mode #canvas-container {
+            background: transparent;
+        }
+
+        .ar-mode .ui-panel {
+            background: rgba(0, 0, 0, 0.7);
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading D&D VR Experience...</div>
+        <div class="loading-progress">
+            <div class="loading-progress-bar" id="progress-bar"></div>
+        </div>
+    </div>
+
+    <!-- UI Overlay -->
+    <div id="ui-overlay">
+        <!-- Character Panel -->
+        <div class="ui-panel" id="character-panel">
+            <div class="panel-header">
+                <span>Character Sheet</span>
+                <span class="panel-toggle" onclick="togglePanel('character-panel')">−</span>
+            </div>
+            <div class="character-info">
+                <div class="character-stat">
+                    <span>Name:</span>
+                    <span id="character-name">Aldric Stormwind</span>
+                </div>
+                <div class="character-stat">
+                    <span>Class:</span>
+                    <span id="character-class">Wizard Level 5</span>
+                </div>
+                <div class="character-stat">
+                    <span>AC:</span>
+                    <span id="character-ac">14</span>
+                </div>
+                <div class="health-bar">
+                    <div class="health-fill" id="health-fill" style="width: 75%"></div>
+                </div>
+                <div class="character-stat">
+                    <span>HP:</span>
+                    <span id="character-hp">24/32</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Spell Panel -->
+        <div class="ui-panel" id="spell-panel">
+            <div class="panel-header">
+                <span>Spells</span>
+                <span class="panel-toggle" onclick="togglePanel('spell-panel')">−</span>
+            </div>
+            <div class="spell-list">
+                <button class="spell-button" onclick="castSpell('fireball')">
+                    <div class="spell-name">Fireball</div>
+                    <div class="spell-level">3rd Level • 8d6 fire</div>
+                </button>
+                <button class="spell-button" onclick="castSpell('lightning')">
+                    <div class="spell-name">Lightning Bolt</div>
+                    <div class="spell-level">3rd Level • 8d6 lightning</div>
+                </button>
+                <button class="spell-button" onclick="castSpell('shield')">
+                    <div class="spell-name">Shield</div>
+                    <div class="spell-level">1st Level • +5 AC</div>
+                </button>
+                <button class="spell-button" onclick="castSpell('teleport')">
+                    <div class="spell-name">Misty Step</div>
+                    <div class="spell-level">2nd Level • 30ft teleport</div>
+                </button>
+            </div>
+        </div>
+
+        <!-- Dice Panel -->
+        <div class="ui-panel" id="dice-panel">
+            <div class="panel-header">
+                <span>Dice Roller</span>
+                <span class="panel-toggle" onclick="togglePanel('dice-panel')">−</span>
+            </div>
+            <div class="dice-container">
+                <button class="dice-button" onclick="rollDice(4)">d4</button>
+                <button class="dice-button" onclick="rollDice(6)">d6</button>
+                <button class="dice-button" onclick="rollDice(8)">d8</button>
+                <button class="dice-button" onclick="rollDice(10)">d10</button>
+                <button class="dice-button" onclick="rollDice(12)">d12</button>
+                <button class="dice-button" onclick="rollDice(20)">d20</button>
+            </div>
+            <div id="dice-result" style="text-align: center; margin-top: 10px; font-size: 24px; color: #4ecdc4;"></div>
+        </div>
+
+        <!-- Performance Monitor -->
+        <div class="ui-panel" id="performance-monitor">
+            <div>FPS: <span id="fps-counter">0</span></div>
+            <div>Memory: <span id="memory-usage">0MB</span></div>
+        </div>
+    </div>
+
+    <!-- Canvas Container -->
+    <div id="canvas-container">
+        <canvas id="vr-canvas"></canvas>
+    </div>
+
+    <!-- WebXR Polyfill (if needed) -->
+    <script src="https://cdn.jsdelivr.net/npm/webxr-polyfill@latest/build/webxr-polyfill.js"></script>
+
+    <!-- Main Application Script -->
+    <script src="dist/main.js"></script>
+</body>
+</html>

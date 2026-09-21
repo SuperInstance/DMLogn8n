@@ -1,0 +1,61 @@
+{
+  "service": {
+    "name": "dmlogn8n-api-gateway",
+    "id": "api-gateway-1",
+    "tags": [
+      "api-gateway",
+      "dmlogn8n",
+      "gateway",
+      "lb-weight:5",
+      "version:1.0.0"
+    ],
+    "address": "api-gateway.dmlogn8n.local",
+    "port": 8080,
+    "meta": {
+      "service_id": "api-gateway-1",
+      "service_type": "api-gateway",
+      "version": "1.0.0",
+      "owner": "platform-team",
+      "team": "platform",
+      "environment": "production",
+      "region": "us-east-1",
+      "availability_zone": "us-east-1a",
+      "max_connections": "1000",
+      "lb_weight": "5"
+    },
+    "enable_tag_override": false,
+    "check": {
+      "id": "api-gateway-health",
+      "name": "API Gateway Health Check",
+      "http": "http://api-gateway.dmlogn8n.local:8080/health",
+      "method": "GET",
+      "interval": "10s",
+      "timeout": "3s",
+      "deregister_critical_service_after": "30s",
+      "success_before_passing": 3,
+      "failures_before_critical": 3
+    },
+    "connect": {
+      "sidecar_service": {
+        "proxy": {
+          "config": {
+            "upstreams": [
+              {
+                "destination_name": "character-portal",
+                "local_bind_port": 20001
+              },
+              {
+                "destination_name": "dialogue-system",
+                "local_bind_port": 20002
+              },
+              {
+                "destination_name": "world-simulation",
+                "local_bind_port": 20003
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

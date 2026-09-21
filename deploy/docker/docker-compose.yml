@@ -1,0 +1,377 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: dmlogn8n-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-dmlogn8n_root_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-dmlogn8n}
+      MYSQL_USER: ${MYSQL_USER:-dmlogn8n_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-dmlogn8n_password}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql:/etc/mysql/conf.d:ro
+    ports:
+      - "3306:3306"
+    networks:
+      - dmlogn8n-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: dmlogn8n-redis
+    restart: unless-stopped
+    command: redis-server /usr/local/etc/redis/redis.conf
+    volumes:
+      - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    ports:
+      - "6379:6379"
+    networks:
+      - dmlogn8n-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # N8N Workflow Automation
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: dmlogn8n-n8n
+    restart: unless-stopped
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD:-n8n_admin_password}
+      - N8N_HOST=${N8N_HOST:-localhost}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
+      - WEBHOOK_URL=${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      - DB_TYPE=mysql
+      - DB_MYSQLDB_HOST=mysql
+      - DB_MYSQLDB_PORT=3306
+      - DB_MYSQLDB_DATABASE=${DB_MYSQLDB_DATABASE:-n8n}
+      - DB_MYSQLDB_USER=${DB_MYSQLDB_USER:-n8n_user}
+      - DB_MYSQLDB_PASSWORD=${DB_MYSQLDB_PASSWORD:-n8n_password}
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_BULL_REDIS_PORT=6379
+      - QUEUE_BULL_REDIS_PASSWORD=${QUEUE_BULL_REDIS_PASSWORD:-}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - N8N_JWT_AUTH_HEADER=authorization
+      - N8N_JWT_AUTH_HEADER_VALUE_PREFIX=Bearer
+      - N8N_JWT_SECRET=${N8N_JWT_SECRET}
+      - TZ=${TZ:-UTC}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n:/etc/n8n:ro
+    ports:
+      - "5678:5678"
+    networks:
+      - dmlogn8n-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Character Coder Service
+  character-coder:
+    build:
+      context: ../../
+      dockerfile: character-coder/Dockerfile
+    image: dmlogn8n/character-coder:latest
+    container_name: dmlogn8n-character-coder
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - FLASK_ENV=${FLASK_ENV:-development}
+      - DEBUG=${DEBUG:-true}
+      - SECRET_KEY=${CHARACTER_CODER_SECRET_KEY}
+      - DATABASE_URL=mysql://${MYSQL_USER:-dmlogn8n_user}:${MYSQL_PASSWORD:-dmlogn8n_password}@mysql:3306/${MYSQL_DATABASE:-dmlogn8n}
+      - REDIS_URL=redis://:${QUEUE_BULL_REDIS_PASSWORD:-}@redis:6379/0
+      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL:-http://n8n:5678/}
+      - N8N_API_KEY=${N8N_ENCRYPTION_KEY}
+      - CHARACTER_MODEL=${CHARACTER_MODEL:-gpt-4}
+      - CHARACTER_TEMPERATURE=${CHARACTER_TEMPERATURE:-0.7}
+      - CHARACTER_MAX_TOKENS=${CHARACTER_MAX_TOKENS:-1000}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - TZ=${TZ:-UTC}
+    volumes:
+      - ../../character-coder:/app
+      - ../../logs:/app/logs
+      - /var/log/dmlogn8n:/app/logs
+    ports:
+      - "3001:3001"
+    networks:
+      - dmlogn8n-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      n8n:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # API Service
+  api:
+    build:
+      context: ../../
+      dockerfile: api/Dockerfile
+    image: dmlogn8n/api:latest
+    container_name: dmlogn8n-dmlogn8n-api
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - FLASK_ENV=${FLASK_ENV:-development}
+      - DEBUG=${DEBUG:-true}
+      - SECRET_KEY=${API_SECRET_KEY}
+      - JWT_SECRET_KEY=${API_JWT_SECRET_KEY}
+      - DATABASE_URL=mysql://${MYSQL_USER:-dmlogn8n_user}:${MYSQL_PASSWORD:-dmlogn8n_password}@mysql:3306/${MYSQL_DATABASE:-dmlogn8n}
+      - REDIS_URL=redis://:${QUEUE_BULL_REDIS_PASSWORD:-}@redis:6379/0
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - RATE_LIMIT=${RATE_LIMIT:-100/hour}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - TZ=${TZ:-UTC}
+    volumes:
+      - ../../api:/app
+      - ../../logs:/app/logs
+      - /var/log/dmlogn8n:/app/logs
+    ports:
+      - "8000:8000"
+    networks:
+      - dmlogn8n-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Player Portal (React Application)
+  player-portal:
+    build:
+      context: ../../
+      dockerfile: player-portal/Dockerfile
+    image: dmlogn8n/player-portal:latest
+    container_name: dmlogn8n-player-portal
+    restart: unless-stopped
+    environment:
+      - REACT_APP_API_URL=${REACT_APP_API_URL:-http://localhost:8000}
+      - REACT_APP_N8N_URL=${REACT_APP_N8N_URL:-http://localhost:5678}
+      - REACT_APP_WS_URL=${REACT_APP_WS_URL:-ws://localhost:8000}
+      - REACT_APP_ENVIRONMENT=${ENVIRONMENT:-development}
+      - REACT_APP_VERSION=${REACT_APP_VERSION:-1.0.0}
+      - REACT_APP_FEATURES_CHARACTER_CODE=${REACT_APP_FEATURES_CHARACTER_CODE:-true}
+      - REACT_APP_FEATURES_VOICE_CHAT=${REACT_APP_FEATURES_VOICE_CHAT:-true}
+      - REACT_APP_FEATURES_REAL_TIME_COMBAT=${REACT_APP_FEATURES_REAL_TIME_COMBAT:-true}
+    ports:
+      - "3000:80"
+    networks:
+      - dmlogn8n-network
+    depends_on:
+      api:
+        condition: service_healthy
+      n8n:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: dmlogn8n-nginx
+    restart: unless-stopped
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - /var/log/nginx:/var/log/nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - dmlogn8n-network
+    depends_on:
+      player-portal:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+      character-coder:
+        condition: service_healthy
+      n8n:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: dmlogn8n-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - dmlogn8n-network
+    profiles:
+      - monitoring
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Grafana Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: dmlogn8n-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+    networks:
+      - dmlogn8n-network
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Node Exporter for system metrics
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: dmlogn8n-node-exporter
+    restart: unless-stopped
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    ports:
+      - "9100:9100"
+    networks:
+      - dmlogn8n-network
+    profiles:
+      - monitoring
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+  n8n_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  dmlogn8n-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

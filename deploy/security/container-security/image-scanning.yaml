@@ -1,0 +1,515 @@
+# Comprehensive Container Security and Image Scanning
+# Implements multi-layered security for container images and runtime
+
+---
+# Trivy Vulnerability Scanner
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: trivy-image-scanner
+  namespace: dmlog
+  labels:
+    app: trivy-scanner
+    component: security
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: dmlog-security-scanner
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+          containers:
+          - name: trivy-scanner
+            image: aquasec/trivy:latest
+            imagePullPolicy: Always
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting comprehensive security scan at $(date)"
+
+              # Create results directory
+              mkdir -p /tmp/results/{images,filesystem,config}
+
+              # Get all images running in the cluster
+              kubectl get pods -A -o jsonpath='{range .items[*]}{.spec.containers[*].image}{"\n"}{end}' | sort -u > /tmp/images.txt
+
+              # Scan each image for vulnerabilities
+              while read image; do
+                echo "Scanning image: $image"
+                image_name=$(echo $image | tr '/' '-' | tr ':' '-' | tr '@' '-')
+
+                # Scan for vulnerabilities
+                trivy image --format json --output "/tmp/results/images/${image_name}-vulns.json" \
+                  --severity HIGH,CRITICAL "$image" || true
+
+                # Scan for misconfigurations
+                trivy image --format json --output "/tmp/results/images/${image_name}-misconfig.json" \
+                  --scanners misconfig "$image" || true
+
+                # Scan for secrets
+                trivy image --format json --output "/tmp/results/images/${image_name}-secrets.json" \
+                  --scanners secret "$image" || true
+              done < /tmp/images.txt
+
+              # Scan container file systems
+              kubectl get pods -n dmlog -o name | while read pod; do
+                pod_name=$(echo $pod | cut -d'/' -f2)
+                echo "Scanning pod filesystem: $pod_name"
+
+                # Try to scan pod filesystem (requires privileged access)
+                kubectl exec -n dmlog $pod_name -- ls / > /tmp/filesystem-${pod_name}.txt 2>/dev/null || true
+              done
+
+              # Generate comprehensive report
+              cat > /tmp/results/security-report-$(date +%Y-%m-%d).json << EOF
+              {
+                "scan_date": "$(date -Iseconds)",
+                "cluster": "dmlog-$(kubectl config current-context)",
+                "scans": {
+                  "vulnerabilities": $(find /tmp/results/images -name "*-vulns.json" | wc -l),
+                  "misconfigurations": $(find /tmp/results/images -name "*-misconfig.json" | wc -l),
+                  "secrets": $(find /tmp/results/images -name "*-secrets.json" | wc -l)
+                },
+                "summary": {
+                  "total_images_scanned": $(wc -l < /tmp/images.txt),
+                  "critical_vulnerabilities": $(find /tmp/results/images -name "*-vulns.json" -exec jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL") | .VulnerabilityID' {} \; | sort -u | wc -l),
+                  "high_vulnerabilities": $(find /tmp/results/images -name "*-vulns.json" -exec jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH") | .VulnerabilityID' {} \; | sort -u | wc -l)
+                }
+              }
+              EOF
+
+              # Upload results to S3
+              aws s3 sync /tmp/results/ s3://dmlog-security-scans/$(date +%Y-%m-%d)/ \
+                --region us-west-2 --exclude "*" --include "*.json" --include "*.txt"
+
+              # Generate alert if critical vulnerabilities found
+              critical_count=$(find /tmp/results/images -name "*-vulns.json" -exec jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL") | .VulnerabilityID' {} \; | wc -l)
+              if [ $critical_count -gt 0 ]; then
+                curl -X POST -H 'Content-type: application/json' \
+                  --data "{\"text\":\"🚨 CRITICAL: Found $critical_count critical vulnerabilities in DMLog cluster images. Check S3: s3://dmlog-security-scans/$(date +%Y-%m-%d)/\"}" \
+                  "$SLACK_WEBHOOK_URL"
+              fi
+
+              echo "Security scan completed at $(date)"
+            env:
+            - name: TRIVY_CACHE_DIR
+              value: /tmp/.cache/trivy
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: scanner-secrets
+                  key: aws-access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: scanner-secrets
+                  key: aws-secret-access-key
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: scanner-secrets
+                  key: slack-webhook-url
+            volumeMounts:
+            - name: scan-results
+              mountPath: /tmp/results
+            - name: trivy-cache
+              mountPath: /tmp/.cache
+            resources:
+              requests:
+                cpu: 1000m
+                memory: 1Gi
+              limits:
+                cpu: 2000m
+                memory: 4Gi
+          volumes:
+          - name: scan-results
+            emptyDir: {}
+          - name: trivy-cache
+            emptyDir: {}
+---
+# Grype Vulnerability Scanner (Alternative)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: grype-image-scanner
+  namespace: dmlog
+  labels:
+    app: grype-scanner
+    component: security
+spec:
+  schedule: "0 3 * * *"  # Daily at 3 AM UTC
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: dmlog-security-scanner
+          restartPolicy: OnFailure
+          containers:
+          - name: grype-scanner
+            image: anchore/grype:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting Grype security scan at $(date)"
+
+              # Get all images
+              kubectl get pods -A -o jsonpath='{range .items[*]}{.spec.containers[*].image}{"\n"}{end}' | sort -u > /tmp/images.txt
+
+              # Scan with Grype for cross-validation
+              while read image; do
+                echo "Grype scanning: $image"
+                image_name=$(echo $image | tr '/' '-' | tr ':' '-')
+                grype "$image" -o json > "/tmp/grype-results-${image_name}.json" || true
+              done < /tmp/images.txt
+
+              # Upload results
+              aws s3 sync /tmp/ s3://dmlog-security-scans/grype/$(date +%Y-%m-%d)/ \
+                --region us-west-2 --include "grype-results-*.json"
+
+              echo "Grype scan completed at $(date)"
+            env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: scanner-secrets
+                  key: aws-access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: scanner-secrets
+                  key: aws-secret-access-key
+            resources:
+              requests:
+                cpu: 500m
+                memory: 512Mi
+              limits:
+                cpu: 1000m
+                memory: 2Gi
+---
+# Falco Runtime Security Monitor
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: falco
+  namespace: dmlog
+  labels:
+    app: falco
+    component: runtime-security
+spec:
+  selector:
+    matchLabels:
+      app: falco
+  template:
+    metadata:
+      labels:
+        app: falco
+        component: runtime-security
+    spec:
+      serviceAccountName: dmlog-security-scanner
+      hostPID: true
+      hostNetwork: true
+      containers:
+      - name: falco
+        image: falcosecurity/falco:latest
+        imagePullPolicy: Always
+        securityContext:
+          privileged: true
+        args:
+        - /usr/bin/falco
+        - --crio
+        - --json
+        - --output-file
+        - /var/log/falco/falco.log
+        - --outputs
+        - file,json
+        - --outputs
+        - webhook,json,http://falco-webhook:9280/
+        volumeMounts:
+        - name: var-run-crio
+          mountPath: /var/run/crio
+          readOnly: true
+        - name: var-run-containerd
+          mountPath: /var/run/containerd
+          readOnly: true
+        - name: var-run-docker
+          mountPath: /var/run/docker.sock
+          readOnly: true
+        - name: dev
+          mountPath: /dev
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: boot
+          mountPath: /host/boot
+          readOnly: true
+        - name: lib-modules
+          mountPath: /host/lib/modules
+          readOnly: true
+        - name: usr
+          mountPath: /host/usr
+          readOnly: true
+        - name: etc
+          mountPath: /host/etc
+          readOnly: true
+        - name: falco-logs
+          mountPath: /var/log/falco
+        env:
+        - name: HOST_ROOT
+          value: /host
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+      volumes:
+      - name: var-run-crio
+        hostPath:
+          path: /var/run/crio
+      - name: var-run-containerd
+        hostPath:
+          path: /var/run/containerd
+      - name: var-run-docker
+        hostPath:
+          path: /var/run/docker.sock
+      - name: dev
+        hostPath:
+          path: /dev
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: boot
+        hostPath:
+          path: /boot
+      - name: lib-modules
+        hostPath:
+          path: /lib/modules
+      - name: usr
+        hostPath:
+          path: /usr
+      - name: etc
+        hostPath:
+          path: /etc
+      - name: falco-logs
+        hostPath:
+          path: /var/log/falco
+          type: DirectoryOrCreate
+---
+# Falco Rules Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-rules
+  namespace: dmlog
+data:
+  falco_rules.local.yaml: |
+    # Custom Falco Rules for DMLog
+    - rule: Detect Shell in Container
+      desc: Detect shell spawned in container
+      condition: >
+        spawned_process and
+        container and
+        proc.name in (bash, sh, zsh, fish) and
+        not user.name = "root"
+      output: >
+        Shell spawned in container (user=%user.name container=%container.name
+        shell=%proc.name parent=%proc.pname cmdline=%proc.cmdline)
+      priority: WARNING
+      tags: [container, shell]
+
+    - rule: Detect Sensitive File Access
+      desc: Detect access to sensitive files in container
+      condition: >
+        open_read and
+        container and
+        fd.name in (/etc/shadow, /etc/passwd, /etc/hosts, /root/.ssh/*)
+      output: >
+        Sensitive file accessed in container (user=%user.name container=%container.name
+        file=%fd.name)
+      priority: HIGH
+      tags: [container, file]
+
+    - rule: Detect Unexpected Network Connection
+      desc: Detect unexpected network connections from container
+      condition: >
+        connect and
+        container and
+        not fd.sip.ip in (127.0.0.1, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) and
+        not fd.name in (/var/run/docker.sock)
+      output: >
+        Unexpected network connection (user=%user.name container=%container.name
+        sip=%fd.sip.ip dip=%fd.dip.ip)
+      priority: MEDIUM
+      tags: [container, network]
+
+    - rule: Detect Privilege Escalation
+      desc: Detect privilege escalation attempts
+      condition: >
+        spawned_process and
+        container and
+        (proc.name in (sudo, su, chmod, chown) or
+         proc.cmdline contains "setuid" or
+         proc.cmdline contains "setgid")
+      output: >
+        Privilege escalation attempt (user=%user.name container=%container.name
+        process=%proc.name cmdline=%proc.cmdline)
+      priority: HIGH
+      tags: [container, privilege]
+
+    - rule: Detect Package Installation
+      desc: Detect package installation in container
+      condition: >
+        spawned_process and
+        container and
+        proc.name in (apt, yum, dnf, apk, pip, npm, yarn)
+      output: >
+        Package installation detected (user=%user.name container=%container.name
+        process=%proc.name package=%proc.cmdline)
+      priority: INFO
+      tags: [container, package]
+---
+# OPA Gatekeeper Admission Controller
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gatekeeper-controller-manager
+  namespace: gatekeeper-system
+  labels:
+    app: gatekeeper
+    component: controller-manager
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: gatekeeper
+      component: controller-manager
+  template:
+    metadata:
+      labels:
+        app: gatekeeper
+        component: controller-manager
+    spec:
+      serviceAccountName: gatekeeper-admin
+      containers:
+      - name: gatekeeper-controller-manager
+        image: openpolicyagent/gatekeeper:v3.13.0
+        imagePullPolicy: Always
+        args:
+        - --audit-interval=30
+        - --constraint-violations-limit=20
+        - --audit-match-kind-only
+        - --logtostderr
+        - --port=8443
+        - --exempt-namespace=gatekeeper-system
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        ports:
+        - containerPort: 8443
+          name: webhook-server
+          protocol: TCP
+        - containerPort: 8888
+          name: metrics
+          protocol: TCP
+        - containerPort: 9090
+          name: healthz
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9090
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 9090
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+# Gatekeeper Security Constraints
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gatekeeper-constraints
+  namespace: gatekeeper-system
+data:
+  k8srequiredlabels.yaml: |
+    apiVersion: constraints.gatekeeper.sh/v1beta1
+    kind: K8sRequiredLabels
+    metadata:
+      name: required-labels
+    spec:
+      enforcementAction: deny
+      match:
+        kinds:
+        - apiGroups: [""]
+          kinds: ["Pod"]
+      parameters:
+        labels: ["app", "security-tier"]
+
+  k8spspprivileged.yaml: |
+    apiVersion: constraints.gatekeeper.sh/v1beta1
+    kind: K8sPSPPrivilegedContainer
+    metadata:
+      name: psp-privileged-containers
+    spec:
+      enforcementAction: deny
+      match:
+        kinds:
+        - apiGroups: [""]
+          kinds: ["Pod"]
+      parameters:
+        exemptImages: []
+
+  k8spsphostfilesystem.yaml: |
+    apiVersion: constraints.gatekeeper.sh/v1beta1
+    kind: K8sPSPHostFilesystem
+    metadata:
+      name: psp-host-filesystem
+    spec:
+      enforcementAction: deny
+      match:
+        kinds:
+        - apiGroups: [""]
+          kinds: ["Pod"]
+
+  k8scontainerlimits.yaml: |
+    apiVersion: constraints.gatekeeper.sh/v1beta1
+    kind: K8sContainerLimits
+    metadata:
+      name: container-limits
+    spec:
+      enforcementAction: deny
+      match:
+        kinds:
+        - apiGroups: [""]
+          kinds: ["Pod"]
+      parameters:
+        cpu: "2"
+        memory: "4Gi"

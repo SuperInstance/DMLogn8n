@@ -1,0 +1,37 @@
+{
+  "service": {
+    "name": "redis",
+    "id": "redis-1",
+    "tags": [
+      "cache",
+      "redis",
+      "dmlogn8n",
+      "primary",
+      "version:7"
+    ],
+    "address": "redis.dmlogn8n.local",
+    "port": 6379,
+    "meta": {
+      "service_id": "redis-1",
+      "service_type": "cache",
+      "version": "7.0",
+      "owner": "data-team",
+      "team": "data",
+      "environment": "production",
+      "region": "us-east-1",
+      "availability_zone": "us-east-1a",
+      "cache_type": "redis",
+      "role": "primary",
+      "memory_limit": "8GB"
+    },
+    "enable_tag_override": false,
+    "check": {
+      "id": "redis-health",
+      "name": "Redis Health Check",
+      "tcp": "redis.dmlogn8n.local:6379",
+      "interval": "5s",
+      "timeout": "2s",
+      "deregister_critical_service_after": "30s"
+    }
+  }
+}

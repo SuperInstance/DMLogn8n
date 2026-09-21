@@ -1,0 +1,196 @@
+# Agent Load Testing Configuration
+# Comprehensive load testing for AI agent systems
+
+tests:
+  - name: "Agent Simulation Load Test - Light"
+    scenario: "agent_simulation"
+    target_url: "http://localhost:8000"
+    duration: 300  # 5 minutes
+    users: 100
+    spawn_rate: 10  # agents per second
+    ramp_up: 30  # seconds
+    ramp_down: 30  # seconds
+    think_time: 1.0  # seconds between actions
+    timeout: 30  # seconds
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "DMLogn8n-Agent-LoadTester/1.0"
+    auth:
+      type: "bearer"
+      token: "${AGENT_AUTH_TOKEN}"
+    test_data:
+      agent_types: ["dm_assistant", "npc", "combat_agent", "world_state"]
+      complexity_levels: [3, 5, 7, 9]
+      interaction_patterns: ["sequential", "random", "burst"]
+    monitoring:
+      metrics_interval: 5  # seconds
+      system_monitoring: true
+      detailed_logging: true
+    reporting:
+      generate_html: true
+      generate_json: true
+      generate_dashboard: true
+      include_charts: true
+      include_recommendations: true
+
+  - name: "Agent Simulation Load Test - Medium"
+    scenario: "agent_simulation"
+    target_url: "http://localhost:8000"
+    duration: 600  # 10 minutes
+    users: 500
+    spawn_rate: 25  # agents per second
+    ramp_up: 60  # seconds
+    ramp_down: 60  # seconds
+    think_time: 0.8  # seconds between actions
+    timeout: 30  # seconds
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "DMLogn8n-Agent-LoadTester/1.0"
+    auth:
+      type: "bearer"
+      token: "${AGENT_AUTH_TOKEN}"
+    test_data:
+      agent_types: ["dm_assistant", "npc", "combat_agent", "world_state", "dialogue_manager", "quest_giver"]
+      complexity_levels: [5, 7, 9]
+      interaction_patterns: ["realistic", "stress", "coordination"]
+      memory_sizes: [256, 512, 1024]  # MB
+    monitoring:
+      metrics_interval: 5  # seconds
+      system_monitoring: true
+      detailed_logging: true
+      resource_tracking: true
+    reporting:
+      generate_html: true
+      generate_json: true
+      generate_dashboard: true
+      include_charts: true
+      include_recommendations: true
+
+  - name: "Agent Simulation Load Test - Heavy"
+    scenario: "agent_simulation"
+    target_url: "http://localhost:8000"
+    duration: 900  # 15 minutes
+    users: 1000
+    spawn_rate: 50  # agents per second
+    ramp_up: 120  # seconds
+    ramp_down: 120  # seconds
+    think_time: 0.5  # seconds between actions
+    timeout: 45  # seconds
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "DMLogn8n-Agent-LoadTester/1.0"
+    auth:
+      type: "bearer"
+      token: "${AGENT_AUTH_TOKEN}"
+    test_data:
+      agent_types: ["dm_assistant", "npc", "combat_agent", "world_state", "dialogue_manager", "quest_giver", "merchant", "guardian"]
+      complexity_levels: [7, 9, 10]
+      interaction_patterns: ["stress", "coordination", "realistic"]
+      memory_sizes: [512, 1024, 2048]  # MB
+      communication_patterns: ["peer_to_peer", "broadcast", "multicast"]
+    monitoring:
+      metrics_interval: 3  # seconds
+      system_monitoring: true
+      detailed_logging: true
+      resource_tracking: true
+      network_monitoring: true
+    reporting:
+      generate_html: true
+      generate_json: true
+      generate_dashboard: true
+      include_charts: true
+      include_recommendations: true
+      baseline_comparison: true
+
+  - name: "Agent Stress Test - Spike"
+    scenario: "agent_simulation"
+    target_url: "http://localhost:8000"
+    duration: 1200  # 20 minutes
+    users: 1500
+    spawn_rate: 100  # agents per second
+    ramp_up: 60  # seconds (rapid spike)
+    ramp_down: 180  # seconds
+    think_time: 0.3  # seconds between actions
+    timeout: 60  # seconds
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "DMLogn8n-Agent-LoadTester/1.0"
+    auth:
+      type: "bearer"
+      token: "${AGENT_AUTH_TOKEN}"
+    test_data:
+      agent_types: ["dm_assistant", "npc", "combat_agent", "world_state", "dialogue_manager", "quest_giver", "merchant", "guardian", "storyteller", "combat_logician"]
+      complexity_levels: [8, 9, 10]
+      interaction_patterns: ["stress", "chaos", "extreme_load"]
+      memory_sizes: [1024, 2048]  # MB
+      failure_injection: true
+      network_conditions: "variable"
+    monitoring:
+      metrics_interval: 2  # seconds
+      system_monitoring: true
+      detailed_logging: true
+      resource_tracking: true
+      network_monitoring: true
+      error_tracking: true
+    reporting:
+      generate_html: true
+      generate_json: true
+      generate_dashboard: true
+      include_charts: true
+      include_recommendations: true
+      baseline_comparison: true
+      performance_regression: true
+
+# Global settings
+global:
+  # Load testing parameters
+  max_concurrent_tests: 2
+  test_cleanup: true
+  resource_monitoring: true
+
+  # Database settings
+  metrics_storage: "sqlite"
+  metrics_retention_days: 30
+
+  # Reporting settings
+  reports_output_dir: "./reports"
+  auto_open_reports: false
+
+  # Alerting settings
+  alert_thresholds:
+    response_time_p95: 2000  # ms
+    error_rate: 5.0  # %
+    cpu_usage: 85.0  # %
+    memory_usage: 90.0  # %
+
+  # Performance baselines
+  baseline_comparison:
+    enabled: true
+    baseline_file: "./baselines/agent_baseline.json"
+    deviation_threshold: 15.0  # %
+
+# Environment-specific overrides
+environments:
+  development:
+    target_url: "http://localhost:8000"
+    users_multiplier: 0.5
+    monitoring:
+      detailed_logging: true
+
+  staging:
+    target_url: "https://staging.dmlogn8n.com"
+    users_multiplier: 0.8
+    monitoring:
+      detailed_logging: true
+      system_monitoring: true
+
+  production:
+    target_url: "https://api.dmlogn8n.com"
+    users_multiplier: 1.0
+    monitoring:
+      detailed_logging: false  # Reduced logging in production
+      system_monitoring: true
+    auth:
+      type: "oauth2"
+      client_id: "${OAUTH_CLIENT_ID}"
+      client_secret: "${OAUTH_CLIENT_SECRET}"

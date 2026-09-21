@@ -1,0 +1,454 @@
+{
+  "name": "User Experience Testing Suite - Player Journey Validation",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ux/test/start",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "ux-test-trigger",
+      "name": "Start UX Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [240, 300],
+      "webhookId": "ux-test-suite-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize User Experience test configuration\nconst uxTestConfig = {\n  testId: 'ux_test_' + Date.now(),\n  startTime: new Date().toISOString(),\n  testSuite: 'user_experience',\n  playerPersonas: [\n    {\n      type: 'new_player',\n      experience: 'beginner',\n      goals: ['learn_game', 'create_character', 'complete_first_quest'],\n      painPoints: ['complex_rules', 'overwhelming_options', 'unclear_objectives']\n    },\n    {\n      type: 'experienced_player',\n      experience: 'advanced',\n      goals: ['optimize_character', 'master_advanced_features', 'lead_parties'],\n      painPoints: ['limited_customization', 'repetitive_content', 'poor_ai_challenge']\n    },\n    {\n      type: 'casual_player',\n      experience: 'intermediate',\n      goals: ['social_interaction', 'story_exploration', 'occasional_combat'],\n      painPoints: ['time_commitment', 'complex_mechanics', 'social_pressure']\n    },\n    {\n      type: 'power_gamer',\n      experience: 'expert',\n      goals: ['min_max_character', 'speed_run_content', 'competitive_advantage'],\n      painPoints: ['balance_issues', 'exploit_fixes', 'progression_gates']\n    }\n  ],\n  testScenarios: {\n    newPlayerOnboarding: {\n      steps: [\n        'account_creation',\n        'tutorial_completion',\n        'character_creation',\n        'first_session_join',\n        'initial_combat_experience',\n        'social_interaction_first'\n      ],\n      metrics: [\n        'completion_rate',\n        'time_to_completion',\n        'error_rate',\n        'satisfaction_score',\n        'retention_indicators'\n      ]\n    },\n    characterProgression: {\n      progressionLevels: ['level_1_to_5', 'level_5_to_10', 'level_10_to_15', 'level_15_to_20'],\n      progressionAspects: [\n        'skill_advancement',\n        'equipment_acquisition',\n        'story_progression',\n        'social_status',\n        'mastery_development'\n      ],\n      satisfactionMetrics: [\n        'meaningful_choices',\n        'visible_progress',\n        'achievement_adequacy',\n        'challenge_appropriateness',\n        'reward_satisfaction'\n      ]\n    },\n    combatMechanics: {\n      combatScenarios: [\n        'single_enemy_encounter',\n        'group_combat',\n        'boss_battle',\n        'pvp_combat',\n        'environmental_hazards'\n      ],\n      mechanicsAspects: [\n        'interface_usability',\n        'action_clarity',\n        'feedback_effectiveness',\n        'tactical_depth',\n        'flow_consistency'\n      ],\n      accuracyMetrics: [\n        'rule_adherence',\n        'calculation_correctness',\n        'timing_precision',\n        'effect_consistency',\n        'balance_appropriateness'\n      ]\n    },\n    socialInteraction: {\n      interactionTypes: [\n        'party_coordination',\n        'npc_dialogue',\n        'roleplaying immersion',\n        'conflict_resolution',\n        'community_engagement'\n      ],\n      qualityAspects: [\n        'natural_conversation_flow',\n        'meaningful_choices',\n        'emotional_impact',\n        'relationship_development',\n        'social_rewards'\n      ],\n      qualityMetrics: [\n        'engagement_depth',\n        'conversation_satisfaction',\n        'relationship_building',\n        'immersion_level',\n        'social_retention'\n      ]\n    },\n    engagementMetrics: {\n      trackingPeriods: ['session_based', 'daily', 'weekly', 'monthly'],\n      engagementIndicators: [\n        'session_duration',\n        'return_frequency',\n        'feature_adoption',\n        'social_interaction',\n        'content_consumption',\n        'creation_activities'\n      ],\n      satisfactionMeasures: [\n        'fun_factor',\n        'challenge_satisfaction',\n        'social_satisfaction',\n        'progress_satisfaction',\n        'overall_satisfaction'\n      ]\n    }\n  },\n  thresholds: {\n    onboardingCompletion: 90,\n    progressionSatisfaction: 80,\n    combatAccuracy: 95,\n    socialEngagement: 75,\n    overallSatisfaction: 85\n  }\n};\n\n$items[0].json.uxTestConfig = uxTestConfig;\n\nreturn [{\n  json: {\n    ...uxTestConfig,\n    status: 'initialized',\n    currentTest: 'new_player_onboarding'\n  }\n}];"
+      },
+      "id": "initialize-ux-test",
+      "name": "Initialize UX Test",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "onboarding-condition",
+              "leftValue": "={{ $json.currentTest }}",
+              "rightValue": "new_player_onboarding",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "ux-test-router",
+      "name": "Route UX Test",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ux/onboarding",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "playerPersona": "={{ $json.playerPersonas[0] }}",
+          "onboardingSteps": "={{ $json.testScenarios.newPlayerOnboarding.steps }}",
+          "metrics": "={{ $json.testScenarios.newPlayerOnboarding.metrics }}",
+          "testConditions": {\n            "tutorialOptions": ["interactive", "guided", "self_paced"],\n            "complexityLevels": ["minimal", "standard", "detailed"],\n            "assistanceLevels": ["full_help", "contextual_help", "minimal_help"]\n          },\n          "successCriteria": {\n            "completionThreshold": "={{ $json.thresholds.onboardingCompletion }}",\n            "maxTimePerStep": 300,\n            "maxErrorsPerStep": 3,\n            "satisfactionMinimum": 7\n          }\n        },
+        "options": {
+          "timeout": 900000\n        }\n      },
+      "id": "new-player-onboarding-test",
+      "name": "New Player Onboarding Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ux/character-progression",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "progressionLevels": "={{ $json.testScenarios.characterProgression.progressionLevels }}",
+n          "progressionAspects": "={{ $json.testScenarios.characterProgression.progressionAspects }}",
+          "satisfactionMetrics": "={{ $json.testScenarios.characterProgression.satisfactionMetrics }}",
+          "testDuration": 7200,\n          "playerScenarios": [\n            {\n              "scenario": "power_gamer_progression",\n              "focus": "optimization",\n              "expected_satisfaction": 85\n            },\n            {\n              "scenario": "story_focused_progression",\n              "focus": "narrative",\n              "expected_satisfaction": 80\n            },\n            {\n              "scenario": "social_progression",\n              "focus": "relationships",\n              "expected_satisfaction": 75\n            }\n          ],\n          "satisfactionThreshold": "={{ $json.thresholds.progressionSatisfaction }}"\n        },
+        "options": {
+          "timeout": 1080000\n        }\n      },
+      "id": "character-progression-test",
+      "name": "Character Progression Satisfaction Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ux/combat-mechanics",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "combatScenarios": "={{ $json.testScenarios.combatMechanics.combatScenarios }}",
+          "mechanicsAspects": "={{ $json.testScenarios.combatMechanics.mechanicsAspects }}",
+          "accuracyMetrics": "={{ $json.testScenarios.combatMechanics.accuracyMetrics }}",
+          "testParameters": {\n            "ruleComplexity": ["basic", "intermediate", "advanced", "expert"],\n            "characterLevels": [1, 5, 10, 15, 20],\n            "partySizes": [1, 2, 4, 6],\n            "encounterDifficulties": ["easy", "medium", "hard", "deadly"]\n          },\n          "accuracyValidation": {\n            "diceRollAccuracy": true,\n            "ruleApplicationAccuracy": true,\n            "damageCalculationAccuracy": true,\n            "statusEffectAccuracy": true,\n            "timingAccuracy": true\n          },\n          "accuracyThreshold": "={{ $json.thresholds.combatAccuracy }}"\n        },
+        "options": {
+          "timeout": 900000\n        }\n      },
+      "id": "combat-mechanics-test",
+      "name": "Combat Mechanics Accuracy Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ux/social-interaction",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "interactionTypes": "={{ $json.testScenarios.socialInteraction.interactionTypes }}",
+          "qualityAspects": "={{ $json.testScenarios.socialInteraction.qualityAspects }}",
+          "qualityMetrics": "={{ $json.testScenarios.socialInteraction.qualityMetrics }}",
+          "socialScenarios": [\n            {\n              "scenario": "party_dynamics",\n              "participants": ["fighter", "wizard", "cleric", "rogue"],\n              "social_challenges": ["leadership_conflict", "resource_disagreement", "moral_dilemma"]\n            },\n            {\n              "scenario": "npc_relationships",\n              "npc_types": ["quest_giver", "merchant", "mentor", "romantic_interest", "rival"],\n              "relationship_depths": ["casual", "friendly", "close", "intimate"]\n            },\n            {\n              "scenario": "community_integration",\n              "community_types": ["guild", "faction", "town", "online_community"],\n              "integration_levels": ["newcomer", "member", "respected", "leader"]\n            }\n          ],\n          "engagementThreshold": "={{ $json.thresholds.socialEngagement }}",\n          "testDuration": 3600\n        },
+        "options": {
+          "timeout": 720000\n        }\n      },
+      "id": "social-interaction-test",
+      "name": "Social Interaction Quality Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ux/engagement-metrics",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "trackingPeriods": "={{ $json.testScenarios.engagementMetrics.trackingPeriods }}",
+          "engagementIndicators": "={{ $json.testScenarios.engagementMetrics.engagementIndicators }}",
+          "satisfactionMeasures": "={{ $json.testScenarios.engagementMetrics.satisfactionMeasures }}",
+          "testCohorts": [\n            {\n              "cohort": "new_players",\n              "size": 100,\n              "tracking_period": "first_30_days",\n              "expected_retention": 60\n            },\n            {\n              "cohort": "returning_players",\n              "size": 200,\n              "tracking_period": "30_90_days",\n              "expected_retention": 80\n            },\n            {\n              "cohort": "veteran_players",\n              "size": 150,\n              "tracking_period": "90_plus_days",\n              "expected_retention": 90\n            }\n          ],\n          "engagementBenchmarks": {\n            "sessionDuration": {\n              "target": 45,\n              "minimum": 20,\n              "maximum": 180\n            },\n            "returnFrequency": {\n              "target": 3.5,\n              "unit": "times_per_week"\n            },\n            "featureAdoption": {\n              "target": 75,\n              "timeframe": "30_days"\n            }\n          },\n          "satisfactionThreshold": "={{ $json.thresholds.overallSatisfaction }}"\n        },
+        "options": {
+          "timeout": 600000\n        }\n      },
+      "id": "engagement-metrics-test",
+      "name": "Overall Engagement Metrics Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ux/accessibility-testing",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "accessibilityAspects": [\n            "visual_accessibility",\n            "auditory_accessibility",\n            "motor_accessibility",\n            "cognitive_accessibility",\n            "technical_accessibility"\n          ],\n          "testScenarios": [\n            {\n              "scenario": "color_blind_friendly",\n              "tests": ["color_contrast", "alternative_indicators", "pattern_recognition"]\n            },\n            {\n              "scenario": "screen_reader_compatible",\n              "tests": ["text_alternatives", "navigation_structure", "content_readability"]\n            },\n            {\n              "scenario": "motor_impairment_friendly",\n              "tests": ["keyboard_navigation", "click_targets", "gesture_alternatives"]\n            }\n          ],\n          "complianceStandards": ["WCAG_2.1_AA", "Section_508"],\n          "usabilityMetrics": [\n            "task_completion_rate",\n            "error_frequency",\n            "time_on_task",\n            "satisfaction_rating"\n          ]\n        },
+        "options": {
+          "timeout": 300000\n        }\n      },
+      "id": "accessibility-testing",
+      "name": "Accessibility Testing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ux/responsiveness-testing",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "deviceTypes": [\n            "desktop_large",\n            "desktop_standard",\n            "tablet",\n            "smartphone_large",\n            "smartphone_standard"\n          ],\n          "screenResolutions": [\n            "1920x1080",\n            "1366x768",\n            "768x1024",\n            "414x896",\n            "375x667"\n          ],\n          "testFeatures": [\n            "character_creation",\n            "combat_interface",\n            "inventory_management",\n            "chat_system",\n            "map_navigation"\n          ],\n          "responsivenessMetrics": [\n            "layout_adaptation",\n            "touch_target_size",\n            "readability",\n            "navigation_ease",\n            "feature_accessibility"\n          ]\n        },
+        "options": {
+          "timeout": 300000\n        }
+      },
+      "id": "responsiveness-testing",
+      "name": "Cross-Device Responsiveness Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ux/load-performance",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "performanceScenarios": [\n            "initial_load",\n            "scene_transition",\n            "combat_start",\n            "inventory_access",\n            "chat_loading"\n          ],\n          "connectionTypes": [\n            "high_speed",\n            "standard_broadband",\n            "mobile_4g",\n            "mobile_3g",\n            "slow_connection"\n          ],\n          "performanceMetrics": [\n            "load_time",\n            "time_to_interactive",\n            "frame_rate",\n            "memory_usage",\n            "network_usage"\n          ],\n          "performanceThresholds": {\n            "initial_load": 3.0,\n            "scene_transition": 1.5,\n            "combat_start": 2.0,\n            "inventory_access": 0.5,\n            "chat_loading": 1.0\n          }\n        },
+        "options": {
+          "timeout": 300000\n        }
+      },
+      "id": "load-performance-test",
+      "name": "Load Performance Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyze User Experience test results and generate comprehensive report\nconst uxTestResults = {\n  testId: $json.testId,\n  testSuite: 'user_experience',\n  startTime: $json.startTime,\n  endTime: new Date().toISOString(),\n  totalDuration: Date.now() - new Date($json.startTime).getTime(),\n  tests: [\n    {\n      name: 'new_player_onboarding',\n      status: $json.onboardingResults ? 'passed' : 'failed',\n      completionRate: $json.onboardingCompletionRate || 0,\n      averageTimeToComplete: $json.onboardingAvgTime || 0,\n      errorRate: $json.onboardingErrorRate || 0,\n      satisfactionScore: $json.onboardingSatisfaction || 0,\n      retentionIndicators: $json.onboardingRetention || 0,\n      threshold: $json.thresholds.onboardingCompletion,\n      details: $json.onboardingDetails || {}\n    },\n    {\n      name: 'character_progression_satisfaction',\n      status: $json.progressionResults ? 'passed' : 'failed',\n      satisfactionScore: $json.progressionSatisfaction || 0,\n      meaningfulChoicesScore: $json.meaningfulChoicesScore || 0,\n      visibleProgressScore: $json.visibleProgressScore || 0,\n      achievementAdequacyScore: $json.achievementAdequacyScore || 0,\n      challengeAppropriatenessScore: $json.challengeAppropriatenessScore || 0,\n      threshold: $json.thresholds.progressionSatisfaction,\n      details: $json.progressionDetails || {}\n    },\n    {\n      name: 'combat_mechanics_accuracy',\n      status: $json.combatResults ? 'passed' : 'failed',\n      ruleAdherenceScore: $json.ruleAdherenceScore || 0,\n      calculationCorrectnessScore: $json.calculationCorrectnessScore || 0,\n      timingPrecisionScore: $json.timingPrecisionScore || 0,\n      effectConsistencyScore: $json.effectConsistencyScore || 0,\n      balanceAppropriatenessScore: $json.balanceAppropriatenessScore || 0,\n      threshold: $json.thresholds.combatAccuracy,\n      details: $json.combatDetails || {}\n    },\n    {\n      name: 'social_interaction_quality',\n      status: $json.socialResults ? 'passed' : 'failed',\n      engagementDepthScore: $json.engagementDepthScore || 0,\n      conversationSatisfactionScore: $json.conversationSatisfactionScore || 0,\n      relationshipBuildingScore: $json.relationshipBuildingScore || 0,\n      immersionLevelScore: $json.immersionLevelScore || 0,\n      socialRetentionScore: $json.socialRetentionScore || 0,\n      threshold: $json.thresholds.socialEngagement,\n      details: $json.socialDetails || {}\n    },\n    {\n      name: 'engagement_metrics',\n      status: $json.engagementResults ? 'passed' : 'failed',\n      overallSatisfactionScore: $json.overallSatisfactionScore || 0,\n      sessionDurationScore: $json.sessionDurationScore || 0,\n      returnFrequencyScore: $json.returnFrequencyScore || 0,\n      featureAdoptionScore: $json.featureAdoptionScore || 0,\n      contentConsumptionScore: $json.contentConsumptionScore || 0,\n      threshold: $json.thresholds.overallSatisfaction,\n      details: $json.engagementDetails || {}\n    },\n    {\n      name: 'accessibility_testing',\n      status: $json.accessibilityResults ? 'passed' : 'failed',\n      complianceScore: $json.accessibilityComplianceScore || 0,\n      usabilityScore: $json.accessibilityUsabilityScore || 0,\n      taskCompletionRate: $json.accessibilityTaskCompletion || 0,\n      errorFrequency: $json.accessibilityErrorFrequency || 0,\n      details: $json.accessibilityDetails || {}\n    },\n    {\n      name: 'responsiveness_testing',\n      status: $json.responsivenessResults ? 'passed' : 'failed',\n      layoutAdaptationScore: $json.layoutAdaptationScore || 0,\n      touchTargetScore: $json.touchTargetScore || 0,\n      readabilityScore: $json.readabilityScore || 0,\n      navigationEaseScore: $json.navigationEaseScore || 0,\n      deviceCompatibility: $json.deviceCompatibility || 0,\n      details: $json.responsivenessDetails || {}\n    },\n    {\n      name: 'load_performance',\n      status: $json.loadPerformanceResults ? 'passed' : 'failed',\n      averageLoadTime: $json.avgLoadTime || 0,\n      timeToInteractive: $json.timeToInteractive || 0,\n      frameRateScore: $json.frameRateScore || 0,\n      memoryUsageScore: $json.memoryUsageScore || 0,\n      networkUsageScore: $json.networkUsageScore || 0,\n      details: $json.loadPerformanceDetails || {}\n    }\n  ],\n  playerPersonas: $json.playerPersonas || [],\n  overallMetrics: {\n    averageSatisfaction: 0,\n    totalUXScore: 0,\n    accessibilityScore: 0,\n    performanceScore: 0,\n    usabilityScore: 0\n  }\n};\n\n// Calculate UX summary\nconst passedTests = uxTestResults.tests.filter(t => t.status === 'passed').length;\nconst totalTests = uxTestResults.tests.length;\nconst successRate = (passedTests / totalTests * 100).toFixed(1);\n\n// Calculate overall metrics\nconst satisfactionScores = uxTestResults.tests.map(t => t.satisfactionScore || t.overallSatisfactionScore || 0).filter(s => s > 0);\nuxTestResults.overallMetrics.averageSatisfaction = \n  satisfactionScores.length > 0 ? satisfactionScores.reduce((sum, score) => sum + score, 0) / satisfactionScores.length : 0;\n\n// Calculate component scores\nconst accessibilityTest = uxTestResults.tests.find(t => t.name === 'accessibility_testing');\nconst performanceTest = uxTestResults.tests.find(t => t.name === 'load_performance');\nconst usabilityTests = uxTestResults.tests.filter(t => \n  ['new_player_onboarding', 'combat_mechanics_accuracy', 'responsiveness_testing'].includes(t.name)\n);\n\nuxTestResults.overallMetrics.accessibilityScore = accessibilityTest ? (accessibilityTest.complianceScore + accessibilityTest.usabilityScore) / 2 : 0;\nuxTestResults.overallMetrics.performanceScore = performanceTest ? \n  (performanceTest.averageLoadTime > 0 ? 100 - (performanceTest.averageLoadTime * 10) : 0) : 0;\nuxTestResults.overallMetrics.usabilityScore = usabilityTests.length > 0 ? \n  usabilityTests.reduce((sum, test) => sum + (test.satisfactionScore || 0), 0) / usabilityTests.length : 0;\n\nuxTestResults.overallMetrics.totalUXScore = (\n  uxTestResults.overallMetrics.averageSatisfaction * 0.4 +\n  uxTestResults.overallMetrics.accessibilityScore * 0.2 +\n  uxTestResults.overallMetrics.performanceScore * 0.2 +\n  uxTestResults.overallMetrics.usabilityScore * 0.2\n);\n\n// Determine UX quality rating\nlet uxQualityRating = 'excellent';\nif (uxTestResults.overallMetrics.totalUXScore < 60) {\n  uxQualityRating = 'poor';\n} else if (uxTestResults.overallMetrics.totalUXScore < 75) {\n  uxQualityRating = 'fair';\n} else if (uxTestResults.overallMetrics.totalUXScore < 90) {\n  uxQualityRating = 'good';\n}\n\n// Identify UX strengths and weaknesses\nconst strengths = [];\nconst weaknesses = [];\nconst criticalIssues = [];\n\nuxTestResults.tests.forEach(test => {\n  const score = test.satisfactionScore || test.overallSatisfactionScore || test.complianceScore || 0;\n  const threshold = test.threshold || 80;\n  \n  if (score >= 90) {\n    strengths.push(test.name.replace(/_/g, ' '));\n  } else if (score < threshold) {\n    if (score < 60) {\n      criticalIssues.push(`${test.name.replace(/_/g, ' ')} (${score.toFixed(1)}%)`);\n    } else {\n      weaknesses.push(test.name.replace(/_/g, ' '));\n    }\n  }\n});\n\n// Player journey analysis\nconst journeyAnalysis = {\n  onboardingExperience: uxTestResults.tests.find(t => t.name === 'new_player_onboarding'),\n  progressionExperience: uxTestResults.tests.find(t => t.name === 'character_progression_satisfaction'),\n  engagementRetention: uxTestResults.tests.find(t => t.name === 'engagement_metrics')\n};\n\nconst summary = {\n  totalTests,\n  passedTests,\n  failedTests: totalTests - passedTests,\n  successRate: parseFloat(successRate),\n  overallStatus: criticalIssues.length > 0 ? 'failed' : successRate >= 85 ? 'passed' : 'warning',\n  uxQualityRating,\n  overallMetrics: uxTestResults.overallMetrics,\n  strengths,\n  weaknesses,\n  criticalIssues,\n  journeyAnalysis\n};\n\nreturn [{\n  json: {\n    testSuite: 'user_experience',\n    ...uxTestResults,\n    summary,\n    status: summary.overallStatus,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "analyze-ux-results",
+      "name": "Analyze UX Test Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ux/test/results",
+        "jsonParameters": true,
+        "json": "={{ $json }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "save-ux-results",
+      "name": "Save UX Test Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "return-ux-report",
+      "name": "Return UX Test Report",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate UX improvement recommendations and player insights\nconst recommendations = [];\nconst playerInsights = [];\nconst painPoints = [];\n\n// Analyze each UX test for specific recommendations\n$json.tests.forEach(test => {\n  const score = test.satisfactionScore || test.overallSatisfactionScore || test.complianceScore || 0;\n  const threshold = test.threshold || 80;\n  \n  if (test.name === 'new_player_onboarding' && score < threshold) {\n    recommendations.push({\n      category: 'onboarding',\n      priority: 'high',\n      issue: 'New player onboarding completion rate below target',\n      suggestion: 'Simplify tutorial flow, provide clearer guidance, and reduce cognitive overload'\n    });\n    painPoints.push('Confusing initial experience for new players');\n  }\n  \n  if (test.name === 'character_progression_satisfaction' && score < threshold) {\n    recommendations.push({\n      category: 'progression',\n      priority: 'high',\n      issue: 'Character progression satisfaction below expectations',\n      suggestion: 'Enhance meaningful choices, improve visible progress indicators, and balance challenge scaling'\n    });\n    painPoints.push('Lack of meaningful character advancement');\n  }\n  \n  if (test.name === 'combat_mechanics_accuracy' && score < threshold) {\n    recommendations.push({\n      category: 'combat',\n      priority: 'critical',\n      issue: 'Combat mechanics accuracy issues detected',\n      suggestion: 'Review rule implementation, improve calculation accuracy, and enhance feedback systems'\n    });\n    painPoints.push('Combat system reliability problems');\n  }\n  \n  if (test.name === 'social_interaction_quality' && score < threshold) {\n    recommendations.push({\n      category: 'social',\n      priority: 'medium',\n      issue: 'Social interaction quality needs improvement',\n      suggestion: 'Enhance NPC dialogue variety, improve relationship mechanics, and deepen social consequences'\n    });\n    painPoints.push('Limited social engagement opportunities');\n  }\n  \n  if (test.name === 'engagement_metrics' && score < threshold) {\n    recommendations.push({\n      category: 'engagement',\n      priority: 'high',\n      issue: 'Player engagement below target levels',\n      suggestion: 'Analyze player behavior patterns, introduce compelling content, and improve retention mechanisms'\n    });\n    painPoints.push 'Difficulty maintaining player interest';\n  }\n});\n\n// Generate player insights based on persona analysis\n$json.playerPersonas.forEach(persona => {\n  const relevantTests = $json.tests.filter(test => {\n    // Map tests to persona concerns\n    if (persona.type === 'new_player') {\n      return ['new_player_onboarding', 'accessibility_testing', 'load_performance'].includes(test.name);\n    } else if (persona.type === 'experienced_player') {\n      return ['character_progression_satisfaction', 'combat_mechanics_accuracy', 'social_interaction_quality'].includes(test.name);\n    } else if (persona.type === 'casual_player') {\n      return ['social_interaction_quality', 'engagement_metrics', 'accessibility_testing'].includes(test.name);\n    } else if (persona.type === 'power_gamer') {\n      return ['combat_mechanics_accuracy', 'character_progression_satisfaction', 'load_performance'].includes(test.name);\n    }\n    return false;\n  });\n  \n  const avgScore = relevantTests.reduce((sum, test) => {\n    const score = test.satisfactionScore || test.overallSatisfactionScore || test.complianceScore || 0;\n    return sum + score;\n  }, 0) / relevantTests.length;\n  \n  playerInsights.push({\n    persona: persona.type,\n    experience: persona.experience,\n    satisfactionScore: avgScore,\n    primaryConcerns: persona.painPoints,\n    keyRecommendations: relevantTests.filter(t => {\n      const score = t.satisfactionScore || t.overallSatisfactionScore || t.complianceScore || 0;\n      return score < (t.threshold || 80);\n    }).map(t => t.name.replace(/_/g, ' '))\n  });\n});\n\n// Generate overall player journey insights\nconst journeyBottlenecks = [];\nif ($json.summary.journeyAnalysis.onboardingExperience && \n    $json.summary.journeyAnalysis.onboardingExperience.completionRate < 90) {\n  journeyBottlenecks.push('Onboarding drop-off - players struggle to get started');\n}\n\nif ($json.summary.journeyAnalysis.progressionExperience && \n    $json.summary.journeyAnalysis.progressionExperience.satisfactionScore < 80) {\n  journeyBottlenecks.push('Progression frustration - players feel stuck or under-rewarded');\n}\n\nif ($json.summary.journeyAnalysis.engagementRetention && \n    $json.summary.journeyAnalysis.engagementRetention.returnFrequencyScore < 70) {\n  journeyBottlenecks.push('Retention issues - players not returning regularly');\n}\n\n// UX quality improvement roadmap\nconst improvementRoadmap = {\n  immediate_fixes: recommendations.filter(r => r.priority === 'critical'),\n  short_term_improvements: recommendations.filter(r => r.priority === 'high'),\n  long_term_enhancements: recommendations.filter(r => r.priority === 'medium')\n};\n\nreturn [{\n  json: {\n    testId: $json.testId,\n    recommendations,\n    playerInsights,\n    painPoints,\n    journeyBottlenecks,\n    improvementRoadmap,\n    summary: {\n      totalRecommendations: recommendations.length,\n      criticalFixes: recommendations.filter(r => r.priority === 'critical').length,\n      highPriorityIssues: recommendations.filter(r => r.priority === 'high').length,\n      mediumPriorityIssues: recommendations.filter(r => r.priority === 'medium').length,\n      identifiedPainPoints: painPoints.length,\n      journeyBottlenecks: journeyBottlenecks.length\n    },\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "generate-ux-recommendations",
+      "name": "Generate UX Recommendations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ux/recommendations",
+        "jsonParameters": true,
+        "json": "={{ $json }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "save-ux-recommendations",
+      "name": "Save UX Recommendations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2000, 500]
+    }
+  ],
+  "connections": {
+    "Start UX Test": {
+      "main": [
+        [
+          {
+            "node": "Initialize UX Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize UX Test": {
+      "main": [
+        [
+          {
+            "node": "Route UX Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route UX Test": {
+      "main": [
+        [
+          {
+            "node": "New Player Onboarding Test",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Overall Engagement Metrics Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New Player Onboarding Test": {
+      "main": [
+        [
+          {
+            "node": "Character Progression Satisfaction Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Character Progression Satisfaction Test": {
+      "main": [
+        [
+          {
+            "node": "Combat Mechanics Accuracy Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combat Mechanics Accuracy Test": {
+      "main": [
+        [
+          {
+            "node": "Social Interaction Quality Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Social Interaction Quality Test": {
+      "main": [
+        [
+          {
+            "node": "Analyze UX Test Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Overall Engagement Metrics Test": {
+      "main": [
+        [
+          {
+            "node": "Accessibility Testing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accessibility Testing": {
+      "main": [
+        [
+          {
+            "node": "Cross-Device Responsiveness Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cross-Device Responsiveness Test": {
+      "main": [
+        [
+          {
+            "node": "Load Performance Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Performance Test": {
+      "main": [
+        [
+          {
+            "node": "Analyze UX Test Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze UX Test Results": {
+      "main": [
+        [
+          {
+            "node": "Save UX Test Results",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate UX Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save UX Test Results": {
+      "main": [
+        [
+          {
+            "node": "Return UX Test Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate UX Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Save UX Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T17:00:00.000Z",
+      "updatedAt": "2024-10-23T17:00:00.000Z",
+      "id": "tag-ux-testing",
+      "name": "UX Testing"
+    },
+    {
+      "createdAt": "2024-10-23T17:00:00.000Z",
+      "updatedAt": "2024-10-23T17:00:00.000Z",
+      "id": "tag-player-experience",
+      "name": "Player Experience"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T17:00:00.000Z",
+  "versionId": "1"
+}

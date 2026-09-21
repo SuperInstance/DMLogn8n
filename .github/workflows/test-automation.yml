@@ -1,0 +1,420 @@
+name: DMLog CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  release:
+    types: [ published ]
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "18"
+
+jobs:
+  # Code Quality and Security
+  code-quality:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r tests/requirements.txt
+        pip install flake8 black isort mypy bandit safety
+
+    - name: Code formatting check (Black)
+      run: black --check --diff source_code/
+
+    - name: Import sorting check (isort)
+      run: isort --check-only --diff source_code/
+
+    - name: Linting (flake8)
+      run: flake8 source_code/ --max-line-length=100 --ignore=E203,W503
+
+    - name: Type checking (mypy)
+      run: mypy source_code/ --ignore-missing-imports --no-strict-optional
+
+    - name: Security scan (bandit)
+      run: bandit -r source_code/ -f json -o bandit-report.json || true
+
+    - name: Dependency vulnerability scan (safety)
+      run: safety check --json --output safety-report.json || true
+
+    - name: Upload security reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-reports
+        path: |
+          bandit-report.json
+          safety-report.json
+
+  # Backend Testing
+  backend-tests:
+    runs-on: ubuntu-latest
+    needs: code-quality
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: test_user
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r tests/requirements.txt
+        pip install -e source_code/
+
+    - name: Set up test environment
+      run: |
+        cp tests/fixtures/.env.test .env
+        python tests/utils/setup_test_db.py
+
+    - name: Run unit tests
+      run: |
+        pytest tests/unit/ -v \
+          --cov=source_code \
+          --cov-report=xml \
+          --cov-report=html \
+          --cov-report=term-missing \
+          --junitxml=test-results/unit-tests.xml
+
+    - name: Run integration tests
+      run: |
+        pytest tests/integration/ -v \
+          --cov=source_code \
+          --cov-append \
+          --cov-report=xml \
+          --junitxml=test-results/integration-tests.xml
+
+    - name: Run security tests
+      run: |
+        pytest tests/security/ -v \
+          --junitxml=test-results/security-tests.xml
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: backend-test-results
+        path: |
+          test-results/
+          htmlcov/
+          coverage.xml
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: backend
+        name: backend-coverage
+
+  # Frontend Testing
+  frontend-tests:
+    runs-on: ubuntu-latest
+    needs: code-quality
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: source_code/frontend/package-lock.json
+
+    - name: Install frontend dependencies
+      working-directory: source_code/frontend
+      run: npm ci
+
+    - name: Run frontend unit tests
+      working-directory: source_code/frontend
+      run: |
+        npm run test:coverage \
+          -- --coverage-reporters=text-lcov \
+          -- --coverageReporters=lcov \
+          -- --reporter=junit \
+          -- --outputFile=../../test-results/frontend-tests.xml
+
+    - name: Run E2E tests
+      working-directory: source_code/frontend
+      run: |
+        npm run build
+        npm run test:e2e:headless
+      env:
+        CYPRESS_baseUrl: http://localhost:3000
+
+    - name: Upload frontend test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: frontend-test-results
+        path: |
+          test-results/
+          coverage/
+          cypress/videos/
+          cypress/screenshots/
+
+  # Load Testing
+  load-tests:
+    runs-on: ubuntu-latest
+    needs: backend-tests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install locust
+
+    - name: Start application for load testing
+      run: |
+        cd source_code
+        python -m uvicorn main:app --host 0.0.0.0 --port 8000 &
+        sleep 10  # Wait for app to start
+
+    - name: Run load tests
+      run: |
+        cd tests/load
+        python locustfile.py moderate_load
+
+    - name: Upload load test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: load-test-results
+        path: tests/load/reports/
+
+  # Cross-Browser Testing
+  cross-browser-tests:
+    runs-on: ubuntu-latest
+    needs: frontend-tests
+    if: github.event_name == 'pull_request'
+
+    strategy:
+      matrix:
+        browser: [chromium, firefox, webkit]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Install dependencies
+      working-directory: source_code/frontend
+      run: npm ci
+
+    - name: Install Playwright
+      run: npx playwright install --with-deps
+
+    - name: Run E2E tests on ${{ matrix.browser }}
+      working-directory: source_code/frontend
+      run: npx playwright test --project=${{ matrix.browser }}
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: cross-browser-results-${{ matrix.browser }}
+        path: |
+          playwright-report/
+          test-results/
+
+  # Build and Deploy
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push backend image
+      uses: docker/build-push-action@v5
+      with:
+        context: source_code
+        file: source_code/Dockerfile
+        push: true
+        tags: |
+          ghcr.io/${{ github.repository }}/backend:latest
+          ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
+
+    - name: Build and push frontend image
+      uses: docker/build-push-action@v5
+      with:
+        context: source_code/frontend
+        file: source_code/frontend/Dockerfile
+        push: true
+        tags: |
+          ghcr.io/${{ github.repository }}/frontend:latest
+          ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}
+
+    - name: Deploy to staging
+      if: github.ref == 'refs/heads/develop'
+      run: |
+        echo "Deploying to staging environment"
+        # Add deployment commands here
+
+    - name: Deploy to production
+      if: github.ref == 'refs/heads/main'
+      run: |
+        echo "Deploying to production environment"
+        # Add deployment commands here
+
+  # Performance Monitoring
+  performance-tests:
+    runs-on: ubuntu-latest
+    needs: build-and-deploy
+    if: github.event_name == 'release'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Install Lighthouse CI
+      run: npm install -g @lhci/cli@0.12.x
+
+    - name: Run Lighthouse CI
+      run: |
+        lhci autorun
+      env:
+        LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+
+    - name: Performance regression check
+      run: |
+        echo "Checking for performance regressions"
+        # Add performance regression logic here
+
+  # Notification
+  notify:
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests, security-tests]
+    if: always()
+
+    steps:
+    - name: Notify on success
+      if: ${{ needs.backend-tests.result == 'success' && needs.frontend-tests.result == 'success' }}
+      run: |
+        echo "✅ All tests passed successfully!"
+        # Add Slack/Discord notification here
+
+    - name: Notify on failure
+      if: ${{ needs.backend-tests.result == 'failure' || needs.frontend-tests.result == 'failure' }}
+      run: |
+        echo "❌ Some tests failed!"
+        # Add Slack/Discord notification here
+
+  # Scheduled Tests
+  scheduled-tests:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r tests/requirements.txt
+
+    - name: Run smoke tests
+      run: pytest tests/smoke/ -v
+
+    - name: Run health checks
+      run: |
+        curl -f http://your-staging-url.com/api/health || exit 1
+        curl -f http://your-staging-url.com/api/ready || exit 1
+
+    - name: Run security scan
+      run: |
+        bandit -r source_code/ -f json -o scheduled-scan.json
+        safety check
+
+    - name: Upload scheduled test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: scheduled-test-results
+        path: |
+          scheduled-scan.json
+          test-results/

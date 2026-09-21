@@ -1,0 +1,468 @@
+# Rate Limiting Configuration
+# DMLogn8n Security System
+
+# Global Rate Limiting Settings
+global:
+  enabled: true
+  default_requests_per_minute: 60
+  default_burst_size: 10
+  cleanup_interval: 300  # seconds
+  storage_backend: "redis"  # redis, memory
+
+# Rate Limiting Rules
+rules:
+  # API endpoints
+  - name: "api_general"
+    enabled: true
+    paths:
+      - "/api/*"
+    requests_per_minute: 120
+    burst_size: 20
+    window_size: 60  # seconds
+    scope: "ip"  # ip, user, global
+
+  - name: "api_auth"
+    enabled: true
+    paths:
+      - "/api/auth/*"
+      - "/api/login"
+      - "/api/logout"
+      - "/api/refresh"
+    requests_per_minute: 10
+    burst_size: 5
+    window_size: 60
+    scope: "ip"
+
+  - name: "api_registration"
+    enabled: true
+    paths:
+      - "/api/register"
+      - "/api/signup"
+    requests_per_minute: 3
+    burst_size: 1
+    window_size: 300  # 5 minutes
+    scope: "ip"
+
+  - name: "api_password_reset"
+    enabled: true
+    paths:
+      - "/api/password/reset"
+      - "/api/password/forgot"
+    requests_per_minute: 3
+    burst_size: 1
+    window_size: 900  # 15 minutes
+    scope: "ip"
+
+  - name: "api_file_upload"
+    enabled: true
+    paths:
+      - "/api/upload/*"
+      - "/api/files/*"
+    requests_per_minute: 20
+    burst_size: 5
+    window_size: 60
+    scope: "user"
+
+  - name: "api_search"
+    enabled: true
+    paths:
+      - "/api/search"
+      - "/api/query"
+    requests_per_minute: 60
+    burst_size: 10
+    window_size: 60
+    scope: "user"
+
+  # Admin endpoints
+  - name: "admin_general"
+    enabled: true
+    paths:
+      - "/admin/*"
+      - "/api/admin/*"
+    requests_per_minute: 30
+    burst_size: 10
+    window_size: 60
+    scope: "user"
+
+  - name: "admin_sensitive"
+    enabled: true
+    paths:
+      - "/admin/users"
+      - "/admin/permissions"
+      - "/admin/security"
+      - "/api/admin/users"
+      - "/api/admin/permissions"
+      - "/api/admin/security"
+    requests_per_minute: 10
+    burst_size: 3
+    window_size: 60
+    scope: "user"
+
+  # Authentication endpoints
+  - name: "auth_login"
+    enabled: true
+    paths:
+      - "/login"
+      - "/auth/login"
+      - "/signin"
+    requests_per_minute: 5
+    burst_size: 2
+    window_size: 300  # 5 minutes
+    scope: "ip"
+
+  - name: "auth_register"
+    enabled: true
+    paths:
+      - "/register"
+      - "/auth/register"
+      - "/signup"
+    requests_per_minute: 3
+    burst_size: 1
+    window_size: 900  # 15 minutes
+    scope: "ip"
+
+  - name: "auth_password"
+    enabled: true
+    paths:
+      - "/forgot-password"
+      - "/reset-password"
+      - "/auth/forgot"
+      - "/auth/reset"
+    requests_per_minute: 3
+    burst_size: 1
+    window_size: 900  # 15 minutes
+    scope: "ip"
+
+  - name: "auth_mfa"
+    enabled: true
+    paths:
+      - "/auth/mfa"
+      - "/auth/2fa"
+      - "/mfa/verify"
+    requests_per_minute: 10
+    burst_size: 3
+    window_size: 60
+    scope: "user"
+
+  # Web application endpoints
+  - name: "web_general"
+    enabled: true
+    paths:
+      - "/*"
+    requests_per_minute: 100
+    burst_size: 20
+    window_size: 60
+    scope: "ip"
+
+  - name: "web_forms"
+    enabled: true
+    paths:
+      - "/contact"
+      - "/feedback"
+      - "/submit"
+    requests_per_minute: 10
+    burst_size: 3
+    window_size: 300  # 5 minutes
+    scope: "ip"
+
+  # File serving endpoints
+  - name: "file_serving"
+    enabled: true
+    paths:
+      - "/files/*"
+      - "/uploads/*"
+      - "/static/*"
+      - "/assets/*"
+    requests_per_minute: 200
+    burst_size: 50
+    window_size: 60
+    scope: "ip"
+
+  # Special endpoints
+  - name: "webhook_endpoints"
+    enabled: true
+    paths:
+      - "/webhook/*"
+      - "/hooks/*"
+      - "/callback/*"
+    requests_per_minute: 1000
+    burst_size: 100
+    window_size: 60
+    scope: "global"
+
+  - name: "health_checks"
+    enabled: true
+    paths:
+      - "/health"
+      - "/ping"
+      - "/status"
+      - "/metrics"
+    requests_per_minute: 1000
+    burst_size: 100
+    window_size: 60
+    scope: "global"
+
+# Advanced Rate Limiting Rules
+advanced_rules:
+  # Progressive rate limiting
+  - name: "progressive_api_limit"
+    enabled: true
+    paths:
+      - "/api/*"
+    algorithm: "token_bucket"  # token_bucket, sliding_window, fixed_window
+    progressive_limits:
+      - threshold: 100  # requests
+        limit: 120  # requests per minute
+      - threshold: 500
+        limit: 60
+      - threshold: 1000
+        limit: 30
+      - threshold: 2000
+        limit: 10
+    scope: "ip"
+
+  # Time-based rate limiting
+  - name: "business_hours_limit"
+    enabled: false
+    paths:
+      - "/api/sensitive/*"
+    business_hours:
+      start: "09:00"
+      end: "17:00"
+      timezone: "UTC"
+      weekday_limit: 100
+      weekend_limit: 20
+    scope: "user"
+
+  # Geographic rate limiting
+  - name: "geo_based_limits"
+    enabled: false
+    algorithm: "sliding_window"
+    geographic_limits:
+      US: 100  # requests per minute
+      EU: 80
+      AS: 60
+      default: 40
+    scope: "country"
+
+# IP Whitelisting
+whitelist:
+  enabled: true
+  ips:
+    - "127.0.0.1"
+    - "::1"
+    - "192.168.1.0/24"
+    - "10.0.0.0/8"
+  networks:
+    - "172.16.0.0/12"
+  bypass_all_limits: false
+  bypass_specific_rules:
+    - "health_checks"
+
+# IP Blacklisting
+blacklist:
+  enabled: true
+  ips:
+    - "192.168.1.100"
+    - "10.0.0.50"
+  networks:
+    - "192.168.100.0/24"
+  permanent_blocks:
+    - "203.0.113.0/24"  # Example malicious network
+
+# User-based Rate Limiting
+user_limits:
+  enabled: true
+  default_user_limit: 200  # requests per minute
+  premium_user_limit: 500
+  admin_user_limit: 1000
+
+  # User tier limits
+  tiers:
+    - name: "free"
+      limit: 100
+      burst: 20
+    - name: "basic"
+      limit: 200
+      burst: 40
+    - name: "premium"
+      limit: 500
+      burst: 100
+    - name: "enterprise"
+      limit: 1000
+      burst: 200
+
+# Burst Protection
+burst_protection:
+  enabled: true
+  default_burst_multiplier: 2
+  max_burst_size: 1000
+  burst_decay_time: 60  # seconds
+
+# Rate Limiting Algorithms
+algorithms:
+  token_bucket:
+    refill_rate: 1.0  # tokens per second
+    bucket_size: 10
+    max_tokens: 100
+
+  sliding_window:
+    window_size: 60  # seconds
+    precision: 10    # seconds
+
+  fixed_window:
+    window_size: 60  # seconds
+    reset_behavior: "strict"  # strict, lenient
+
+# Response Settings
+responses:
+  # HTTP status codes
+  rate_limit_exceeded: 429
+  user_blocked: 403
+  ip_blocked: 403
+
+  # Response headers
+  add_rate_limit_headers: true
+  headers:
+    - "X-RateLimit-Limit"
+    - "X-RateLimit-Remaining"
+    - "X-RateLimit-Reset"
+    - "Retry-After"
+
+  # Response body
+  json_response: true
+  error_message: "Rate limit exceeded. Please try again later."
+
+# Penalties and Escalation
+penalties:
+  enabled: true
+
+  # Progressive penalties
+  violations:
+    - threshold: 5   # violations
+      penalty: "increase_limit_duration"
+      duration: 300   # 5 minutes
+    - threshold: 10
+      penalty: "reduce_limit"
+      reduction: 0.5  # 50% reduction
+      duration: 900   # 15 minutes
+    - threshold: 20
+      penalty: "temporary_block"
+      duration: 3600  # 1 hour
+    - threshold: 50
+      penalty: "permanent_block"
+
+  # Reset penalties after
+  reset_after: 86400  # 24 hours
+
+# Monitoring and Alerts
+monitoring:
+  enabled: true
+
+  # Metrics to track
+  metrics:
+    - "total_requests"
+    - "blocked_requests"
+    - "rate_limited_requests"
+    - "top_violators"
+    - "rule_hits"
+
+  # Alerting thresholds
+  alerts:
+    - metric: "blocked_requests"
+      threshold: 1000  # per hour
+      severity: "warning"
+    - metric: "rate_limited_requests"
+      threshold: 500   # per hour
+      severity: "info"
+    - metric: "unique_violators"
+      threshold: 100   # per hour
+      severity: "critical"
+
+# Redis Configuration (if using Redis backend)
+redis:
+  host: "localhost"
+  port: 6379
+  db: 0
+  password: null
+  ssl: false
+  connection_pool_size: 10
+  key_prefix: "rate_limit:"
+  ttl: 3600  # 1 hour
+
+# Distributed Rate Limiting
+distributed:
+  enabled: false
+  sync_interval: 5  # seconds
+  consistency_level: "eventual"  # eventual, strong
+  node_id: "node1"
+
+# Caching
+cache:
+  enabled: true
+  cache_size: 10000
+  ttl: 60  # seconds
+  cleanup_interval: 300  # seconds
+
+# Custom Headers
+custom_headers:
+  # Headers to add to responses
+  response_headers:
+    "X-RateLimit-Service": "DMLogn8n Security"
+    "X-RateLimit-Version": "1.0"
+
+  # Headers to check for custom limits
+  request_headers:
+    - "X-RateLimit-Key"
+    - "X-API-Key"
+    - "X-Client-ID"
+
+# Integration with Other Systems
+integrations:
+  # WAF integration
+  waf:
+    enabled: true
+    share_violation_data: true
+    automatic_ip_blocking: true
+
+  # SIEM integration
+  siem:
+    enabled: false
+    endpoint: ""
+    api_key: ""
+    event_types:
+      - "rate_limit_exceeded"
+      - "ip_blocked"
+      - "user_blocked"
+
+  # Alert integration
+  alerts:
+    enabled: false
+    webhook_url: ""
+    slack_channel: ""
+    email_recipients: []
+
+# Testing and Debugging
+debug:
+  enabled: false
+  log_all_requests: false
+  log_violations: true
+  detailed_headers: true
+  mock_mode: false
+
+# Performance Settings
+performance:
+  max_concurrent_checks: 1000
+  check_timeout: 0.001  # 1ms
+  async_processing: true
+  batch_size: 100
+
+# Compatibility
+compatibility:
+  support_ipv6: true
+  support_cloudflare: true
+  support_proxies: true
+  proxy_headers:
+    - "X-Forwarded-For"
+    - "X-Real-IP"
+    - "CF-Connecting-IP"

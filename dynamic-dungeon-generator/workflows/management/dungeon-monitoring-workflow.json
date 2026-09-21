@@ -1,0 +1,444 @@
+{
+  "name": "Dungeon Monitoring & Management Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "schedule-1",
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3001/api/dungeons",
+        "options": {}
+      },
+      "id": "get-dungeons-1",
+      "name": "Get All Dungeons",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{$node[\"Get All Dungeons\"].json[\"dungeons\"].length}}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-dungeons-exist-1",
+      "name": "Dungeons Exist?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyze dungeon statistics and identify issues\nconst dungeons = $node[\"Get All Dungeons\"].json.dungeons;\n\nconst analysis = {\n  totalDungeons: dungeons.length,\n  averageDifficulty: 0,\n  mostComplexDungeon: null,\n  oldestDungeon: null,\n  generationIssues: [],\n  performanceMetrics: {\n    averageGenerationTime: 0,\n    slowestGeneration: null\n  }\n};\n\n// Calculate metrics\nif (dungeons.length > 0) {\n  // Average difficulty\n  const totalDifficulty = dungeons.reduce((sum, d) => sum + (d.statistics?.difficultyRating || 1), 0);\n  analysis.averageDifficulty = Math.round((totalDifficulty / dungeons.length) * 10) / 10;\n  \n  // Most complex dungeon\n  analysis.mostComplexDungeon = dungeons.reduce((most, current) => \n    (current.statistics?.totalRooms || 0) > (most.statistics?.totalRooms || 0) ? current : most\n  , dungeons[0]);\n  \n  // Oldest dungeon\n  analysis.oldestDungeon = dungeons.reduce((oldest, current) => \n    new Date(current.timestamp || 0) < new Date(oldest.timestamp || Date.now()) ? current : oldest\n  , dungeons[0]);\n  \n  // Performance metrics\n  const generationTimes = dungeons.map(d => d.generationTime || 0).filter(t => t > 0);\n  if (generationTimes.length > 0) {\n    analysis.performanceMetrics.averageGenerationTime = Math.round(\n      generationTimes.reduce((sum, time) => sum + time, 0) / generationTimes.length\n    );\n    \n    const maxTime = Math.max(...generationTimes);\n    analysis.performanceMetrics.slowestGeneration = dungeons.find(d => d.generationTime === maxTime);\n  }\n  \n  // Check for issues\n  dungeons.forEach((dungeon, index) => {\n    if (dungeon.statistics?.difficultyRating > 8) {\n      analysis.generationIssues.push({\n        type: 'high_difficulty',\n        dungeonId: dungeon.id,\n        difficulty: dungeon.statistics.difficultyRating,\n        message: `Very high difficulty rating: ${dungeon.statistics.difficultyRating}/10`\n      });\n    }\n    \n    if (dungeon.generationTime && dungeon.generationTime > 30000) {\n      analysis.generationIssues.push({\n        type: 'slow_generation',\n        dungeonId: dungeon.id,\n        generationTime: dungeon.generationTime,\n        message: `Slow generation: ${dungeon.generationTime}ms`\n      });\n    }\n    \n    if (dungeon.statistics?.totalRooms === 0) {\n      analysis.generationIssues.push({\n        type: 'no_rooms',\n        dungeonId: dungeon.id,\n        message: 'Dungeon has no rooms'\n      });\n    }\n  });\n}\n\nreturn { json: analysis };"
+      },
+      "id": "analyze-dungeons-1",
+      "name": "Analyze Dungeon Statistics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check if any critical issues need attention\nconst analysis = $node[\"Analyze Dungeon Statistics\"].json;\n\nconst alerts = [];\n\n// Check for critical issues\nif (analysis.generationIssues.length > 0) {\n  const criticalIssues = analysis.generationIssues.filter(issue => \n    issue.type === 'no_rooms' || \n    issue.type === 'slow_generation'\n  );\n  \n  if (criticalIssues.length > 0) {\n    alerts.push({\n      level: 'critical',\n      title: 'Critical Dungeon Generation Issues',\n      message: `${criticalIssues.length} critical issues detected`,\n      details: criticalIssues\n    });\n  }\n}\n\n// Check performance warnings\nif (analysis.performanceMetrics.averageGenerationTime > 20000) {\n  alerts.push({\n    level: 'warning',\n    title: 'Slow Generation Performance',\n    message: `Average generation time: ${analysis.performanceMetrics.averageGenerationTime}ms`,\n    details: {\n      averageTime: analysis.performanceMetrics.averageGenerationTime,\n      slowestGeneration: analysis.performanceMetrics.slowestGeneration\n    }\n  });\n}\n\n// Check for high average difficulty\nif (analysis.averageDifficulty > 7) {\n  alerts.push({\n    level: 'info',\n    title: 'High Average Difficulty',\n    message: `Average difficulty rating: ${analysis.averageDifficulty}/10`,\n    details: {\n      averageDifficulty: analysis.averageDifficulty,\n      recommendation: 'Consider adjusting difficulty parameters'\n    }\n  });\n}\n\nreturn { json: { alerts, analysis } };"
+      },
+      "id": "check-alerts-1",
+      "name": "Check for Alerts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1060, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{$node[\"Check for Alerts\"].json[\"alerts\"].length}}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-alerts-1",
+      "name": "Has Alerts?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1260, 200]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "timestamp",
+              "value": "={{new Date().toISOString()}}"
+            },
+            {
+              "name": "totalDungeons",
+              "value": "={{$node[\"Check for Alerts\"].json[\"analysis\"].totalDungeons}}"
+            },
+            {
+              "name": "averageDifficulty",
+              "value": "={{$node[\"Check for Alerts\"].json[\"analysis\"].averageDifficulty}}"
+            },
+            {
+              "name": "averageGenerationTime",
+              "value": "={{$node[\"Check for Alerts\"].json[\"analysis\"].performanceMetrics.averageGenerationTime}}"
+            },
+            {
+              "name": "alertsCount",
+              "value": "={{$node[\"Check for Alerts\"].json[\"alerts\"].length}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prepare-log-data-1",
+      "name": "Prepare Log Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1460, 200]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "fileId": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+        "sheetName": "DungeonMonitoring",
+        "data": "={{$node[\"Prepare Log Data\"].json}}"
+      },
+      "id": "log-monitoring-data-1",
+      "name": "Log Monitoring Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 3,
+      "position": [1660, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Send alerts for each issue found\nconst alerts = $node[\"Check for Alerts\"].json.alerts;\nconst alertMessages = [];\n\nalerts.forEach(alert => {\n  let message = `🚨 ${alert.title}\\n`;\n  message += `Level: ${alert.level}\\n`;\n  message += `Message: ${alert.message}\\n`;\n  \n  if (alert.details) {\n    message += `Details: ${JSON.stringify(alert.details, null, 2)}`;\n  }\n  \n  alertMessages.push({\n    message,\n    level: alert.level,\n    timestamp: new Date().toISOString()\n  });\n});\n\nreturn { json: alertMessages };"
+      },
+      "id": "format-alerts-1",
+      "name": "Format Alert Messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1460, 100]
+    },
+    {
+      "parameters": {
+        "chatId": "-1001234567890",
+        "text": "={{$json.message}}",
+        "additionalFields": {
+          "parseMode": "Markdown"
+        }
+      },
+      "id": "send-telegram-alert-1",
+      "name": "Send Telegram Alert",
+      "type": "n8n-nodes-base.telegramBot",
+      "typeVersion": 1,
+      "position": [1660, 100]
+    },
+    {
+      "parameters": {
+        "fromEmail": "dungeon-monitor@example.com",
+        "toEmail": "admin@example.com",
+        "subject": "={{$json.level === 'critical' ? '🚨 Critical' : $json.level === 'warning' ? '⚠️ Warning' : 'ℹ️ Info'}} Dungeon Generator Alert",
+        "text": "={{$json.message}}",
+        "options": {}
+      },
+      "id": "send-email-alert-1",
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [1860, 100]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3001/api/health",
+        "options": {}
+      },
+      "id": "health-check-1",
+      "name": "Health Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [460, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{$node[\"Health Check\"].json[\"status\"]}}",
+              "rightValue": "healthy",
+              "operator": {
+                "type": "string",
+                "operation": "notEqual"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "service-down-1",
+      "name": "Service Down?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [660, 100]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "message",
+              "value": "🚨 Dungeon Generator Service is DOWN!\\n\\nStatus: {{ $node[\"Health Check\"].json.status }}\\nTimestamp: {{ new Date().toISOString() }}"
+            },
+            {
+              "name": "level",
+              "value": "critical"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{new Date().toISOString()}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prepare-service-alert-1",
+      "name": "Prepare Service Alert",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [860, 100]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3001/api/dungeons/cleanup",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"olderThan\": \"24h\",\n  \"keepCount\": 50\n}",
+        "options": {}
+      },
+      "id": "cleanup-old-dungeons-1",
+      "name": "Cleanup Old Dungeons",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [860, 400]
+    }
+  ],
+  "connections": {
+    "Every 15 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Get All Dungeons",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Health Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Dungeons": {
+      "main": [
+        [
+          {
+            "node": "Dungeons Exist?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dungeons Exist?": {
+      "main": [
+        [
+          {
+            "node": "Analyze Dungeon Statistics",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cleanup Old Dungeons",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Dungeon Statistics": {
+      "main": [
+        [
+          {
+            "node": "Check for Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Alerts": {
+      "main": [
+        [
+          {
+            "node": "Has Alerts?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Alerts?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Log Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Format Alert Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Log Data": {
+      "main": [
+        [
+          {
+            "node": "Log Monitoring Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Alert Messages": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health Check": {
+      "main": [
+        [
+          {
+            "node": "Service Down?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Service Down?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Service Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Service Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "createdAt": "2024-01-01T00:00:00.000Z",
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "1.0.0",
+  "triggerCount": 0,
+  "tags": [
+    {
+      "id": "tag-1",
+      "name": "Monitoring"
+    }
+  ]
+}

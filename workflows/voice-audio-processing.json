@@ -1,0 +1,533 @@
+{
+  "name": "Voice Chat Integration - Audio Processing & Transcription",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voice/audio-process",
+        "responseMode": "responseNode",
+        "options": {
+          "multipart": true
+        }
+      },
+      "id": "audio-webhook",
+      "name": "Audio Processing Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "voice-audio-process"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process audio upload and prepare for processing\nconst data = $input.first().json;\nconst binaryData = $input.first().binary;\n\n// Validate audio file\nif (!binaryData || !binaryData.audio) {\n  throw new Error('No audio file provided');\n}\n\nconst audioFile = binaryData.audio;\nconst { sessionId, userId, characterId, language = 'en' } = data;\n\n// Validate required fields\nif (!sessionId || !userId || !characterId) {\n  throw new Error('Missing required fields: sessionId, userId, characterId');\n}\n\n// Process audio metadata\nconst audioMetadata = {\n  sessionId,\n  userId,\n  characterId,\n  language,\n  filename: audioFile.filename,\n  mimeType: audioFile.mimeType,\n  size: audioFile.size,\n  timestamp: new Date().toISOString()\n};\n\n// Supported audio formats\nconst supportedFormats = ['audio/webm', 'audio/ogg', 'audio/wav', 'audio/mp3', 'audio/m4a'];\nif (!supportedFormats.includes(audioFile.mimeType)) {\n  throw new Error(`Unsupported audio format: ${audioFile.mimeType}`);\n}\n\n// Size validation (max 25MB)\nif (audioFile.size > 25 * 1024 * 1024) {\n  throw new Error('Audio file too large (max 25MB)');\n}\n\nreturn { \n  json: audioMetadata,\n  binary: {\n    audio: audioFile\n  }\n};"
+      },
+      "id": "validate-audio",
+      "name": "Validate Audio Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "size-check",
+              "leftValue": "={{ $json.size }}",
+              "rightValue": "5242880",
+              "operator": {
+                "type": "number",
+                "operation": "smaller"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-audio-size",
+      "name": "Check Audio Size",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compress large audio files using FFmpeg\nconst audioData = $input.first().json;\nconst audioBinary = $input.first().binary.audio;\n\n// Calculate compression ratio needed\nconst targetSize = 5 * 1024 * 1024; // 5MB\nconst compressionRatio = Math.min(1, targetSize / audioData.size);\n\n// FFmpeg compression settings\nconst ffmpegCommand = [\n  'ffmpeg',\n  '-i', 'pipe:0',\n  '-ar', '16000', // Sample rate: 16kHz\n  '-ac', '1', // Mono\n  '-b:a', '64k', // Bitrate: 64kbps\n  '-f', 'webm',\n  '-c:a', 'libopus',\n  'pipe:1'\n].join(' ');\n\nreturn {\n  json: {\n    ...audioData,\n    compressionRatio,\n    ffmpegCommand,\n    needsCompression: true\n  },\n  binary: {\n    audio: audioBinary\n  }\n};"
+      },
+      "id": "prepare-compression",
+      "name": "Prepare Audio Compression",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 180]
+    },
+    {
+      "parameters": {
+        "command": "ffmpeg",
+        "arguments": "={{ $json.ffmpegCommand }}",
+        "inputMode": "fromInput",
+        "options": {
+n          "timeout": 30000
+        }
+      },
+      "id": "compress-audio",
+      "name": "Compress Audio",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1140, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Detect voice activity and prepare for transcription\nconst audioData = $input.first().json;\n\n// Voice activity detection parameters\nconst vadConfig = {\n  aggressiveness: 3,\n  frameDuration: 30,\n  paddingDuration: 300,\n  triggerLevel: 0.5,\n  triggerLevelMedian: 0.5,\n  triggerLevelMean: 0.5,\n  pre VadThresholdMedian: 0.5,\n  pre VadThresholdMean: 0.5,\n  postVadThresholdMedian: 0.5,\n  postVadThresholdMean: 0.5\n};\n\n// Character voice profile for speaker identification\nconst characterVoiceProfile = {\n  characterId: audioData.characterId,\n  sessionId: audioData.sessionId,\n  voiceFeatures: {\n    pitch: null, // To be extracted\n    formants: null, // To be extracted\n    mfcc: null, // To be extracted\n    spectralCentroid: null // To be extracted\n  }\n};\n\nreturn {\n  json: {\n    ...audioData,\n    vadConfig,\n    characterVoiceProfile,\n    processingStage: 'vad-detection'\n  }\n};"
+      },
+      "id": "voice-activity-detection",
+      "name": "Voice Activity Detection",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 420]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/vad/detect",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-API-Key",
+              "value": "={{ $credentials.voiceProcessingApi.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,\        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "config",
+              "value": "={{ $json.vadConfig }}"
+            },
+            {
+              "name": "sessionId",
+              "value": "={{ $json.sessionId }}"
+            },
+            {
+              "name": "characterId",
+              "value": "={{ $json.characterId }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "detect-voice-activity",
+      "name": "Detect Voice Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [920, 420]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "speech-detected",
+              "leftValue": "={{ $json.hasSpeech }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-speech-detected",
+      "name": "Check Speech Detected",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1140, 420]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare transcription request with character context\nconst audioData = $input.first().json;\nconst vadResult = $input.first().json;\n\n// Get character context for better transcription\nconst characterContext = {\n  characterId: audioData.characterId,\n  sessionId: audioData.sessionId,\n  language: audioData.language,\n  gameContext: {\n    characterName: '', // Will be fetched from DB\n    characterRace: '',\n    characterClass: '',\n    currentScene: '',\n    knownVocabulary: [] // Character-specific terms\n  }\n};\n\n// Transcription configuration\nconst transcriptionConfig = {\n  model: 'whisper-1',\n  language: audioData.language,\n  temperature: 0.0,\n  response_format: 'verbose_json',\n  timestamp_granularities: ['word', 'segment'],\n  prompt: generateTranscriptionPrompt(characterContext)\n};\n\nfunction generateTranscriptionPrompt(context) {\n  return `D&D game session. Character: ${context.characterName}, Race: ${context.characterRace}, Class: ${context.characterClass}. Current scene: ${context.currentScene}. Listen for fantasy terms, character names, and game mechanics.`;\n}\n\nreturn {\n  json: {\n    ...audioData,\n    transcriptionConfig,\n    characterContext,\n    speechSegments: vadResult.speechSegments || []\n  }\n};"
+      },
+      "id": "prepare-transcription",
+      "name": "Prepare Transcription",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 340]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+n              "value": "Bearer {{ $credentials.openaiApi.apiKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "multipart/form-data"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "file",
+              "value": "={{ $binary.audio }}"
+            },
+            {
+              "name": "model",
+              "value": "={{ $json.transcriptionConfig.model }}"
+            },
+            {
+              "name": "language",
+              "value": "={{ $json.transcriptionConfig.language }}"
+            },
+            {
+              "name": "temperature",
+              "value": "={{ $json.transcriptionConfig.temperature }}"
+            },
+            {
+              "name": "response_format",
+              "value": "={{ $json.transcriptionConfig.response_format }}"
+            },
+            {
+              "name": "prompt",
+              "value": "={{ $json.transcriptionConfig.prompt }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "transcribe-audio",
+      "name": "Transcribe Audio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1580, 340]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process transcription results and apply character voice effects\nconst transcriptionResult = $input.first().json;\nconst audioData = $input.first().json;\n\n// Extract transcription data\nconst transcription = {\n  text: transcriptionResult.text,\n  words: transcriptionResult.words || [],\n  segments: transcriptionResult.segments || [],\n  duration: transcriptionResult.duration,\n  language: transcriptionResult.language\n};\n\n// Speaker identification and confidence\nconst speakerAnalysis = {\n  identifiedCharacter: audioData.characterId,\n  confidence: 0.95,\n  voiceFeatures: extractVoiceFeatures(transcription.words)\n};\n\nfunction extractVoiceFeatures(words) {\n  // Extract voice characteristics from word timings\n  const features = {\n    averageWordDuration: 0,\n    speechRate: 0,\n    pausePattern: [],\n    pitchVariation: null // Would need additional audio analysis\n  };\n  \n  if (words && words.length > 1) {\n    const totalDuration = words[words.length - 1].end - words[0].start;\n    features.averageWordDuration = totalDuration / words.length;\n    features.speechRate = words.length / totalDuration * 60; // words per minute\n    \n    // Extract pause patterns\n    for (let i = 1; i < words.length; i++) {\n      const pause = words[i].start - words[i - 1].end;\n      if (pause > 0.1) { // Significant pause\n        features.pausePattern.push(pause);\n      }\n    }\n  }\n  \n  return features;\n}\n\n// Character voice modulation settings\nconst voiceModulation = {\n  characterId: audioData.characterId,\n  voiceProfile: {\n    pitch: 1.0,\n    rate: 1.0,\n    volume: 1.0,\n    echo: 0.0,\n    reverb: 0.0,\n    distortion: 0.0\n  },\n  effects: []\n};\n\nreturn {\n  json: {\n    sessionId: audioData.sessionId,\n    userId: audioData.userId,\n    characterId: audioData.characterId,\n    timestamp: new Date().toISOString(),\n    transcription,\n    speakerAnalysis,\n    voiceModulation,\n    audioMetadata: {\n      originalSize: audioData.size,\n      duration: transcription.duration,\n      language: transcription.language\n    }\n  }\n};"
+      },
+      "id": "process-transcription",
+      "name": "Process Transcription Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+n      "position": [1800, 340]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "documentId": "={{ $json.sessionId + '_' + $json.timestamp }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "sessionId",
+              "fieldValue": "={{ $json.sessionId }}"
+            },
+            {
+              "fieldName": "userId",
+              "fieldValue": "={{ $json.userId }}"
+            },
+            {
+              "fieldName": "characterId",
+              "fieldValue": "={{ $json.characterId }}"
+            },
+            {
+              "fieldName": "timestamp",
+              "fieldValue": "={{ $json.timestamp }}"
+            },
+            {
+              "fieldName": "transcription",
+              "fieldValue": "={{ $json.transcription }}"
+            },
+            {
+              "fieldName": "speakerAnalysis",
+              "fieldValue": "={{ $json.speakerAnalysis }}"
+            },
+            {
+              "fieldName": "voiceModulation",
+              "fieldValue": "={{ $json.voiceModulation }}"
+            },
+            {
+              "fieldName": "audioMetadata",
+              "fieldValue": "={{ $json.audioMetadata }}"
+            }
+          ]
+        }
+      },
+      "id": "save-transcription",
+      "name": "Save Transcription",
+      "type": "n8n-nodes-base.googleFirestore",
+      "typeVersion": 1,
+      "position": [2020, 340]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/voice/character/update",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-API-Key",
+              "value": "={{ $credentials.voiceProcessingApi.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "characterId",
+              "value": "={{ $json.characterId }}"
+            },
+            {
+              "name": "voiceFeatures",
+              "value": "={{ $json.speakerAnalysis.voiceFeatures }}"
+            },
+            {
+              "name": "transcription",
+              "value": "={{ $json.transcription.text }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "update-character-voice-profile",
+      "name": "Update Character Voice Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2240, 340]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, transcription: $json.transcription, speaker: $json.speakerAnalysis, timestamp: $json.timestamp } }}"
+      },
+      "id": "respond-to-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2460, 340]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'No speech detected', sessionId: $json.sessionId, timestamp: new Date().toISOString() } }}"
+      },
+      "id": "no-speech-response",
+      "name": "No Speech Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1360, 500]
+    }
+  ],
+  "connections": {
+    "Audio Processing Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Audio Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Audio Input": {
+      "main": [
+        [
+          {
+            "node": "Check Audio Size",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Audio Size": {
+      "main": [
+        [
+          {
+            "node": "Voice Activity Detection",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audio Compression",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audio Compression": {
+      "main": [
+        [
+          {
+            "node": "Compress Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compress Audio": {
+      "main": [
+        [
+          {
+            "node": "Voice Activity Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice Activity Detection": {
+      "main": [
+        [
+          {
+            "node": "Detect Voice Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Voice Activity": {
+      "main": [
+        [
+          {
+            "node": "Check Speech Detected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Speech Detected": {
+      "main": [
+        [
+          {
+            "node": "Prepare Transcription",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Speech Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Transcription": {
+      "main": [
+        [
+          {
+            "node": "Transcribe Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe Audio": {
+      "main": [
+        [
+          {
+            "node": "Process Transcription Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Transcription Results": {
+      "main": [
+        [
+          {
+            "node": "Save Transcription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Transcription": {
+      "main": [
+        [
+          {
+            "node": "Update Character Voice Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Character Voice Profile": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "America/New_York",
+    "saveManualExecutions": true,
+    "callerPolicyDefaultOption": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "id": "voice-chat",
+      "name": "Voice Chat"
+    },
+    {
+      "id": "audio-processing",
+      "name": "Audio Processing"
+    },
+    {
+      "id": "transcription",
+      "name": "Transcription"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-23T10:00:00.000Z",
+  "versionId": "1"
+}

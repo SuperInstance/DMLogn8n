@@ -1,0 +1,150 @@
+{
+  "name": "dmlogn8n-companion-pet-system",
+  "version": "1.0.0",
+  "description": "Advanced AI-driven companion pet system for DMlogn8n with evolution mechanics, combat, and care automation",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:integration": "jest --testPathPattern=integration",
+    "test:e2e": "jest --testPathPattern=e2e",
+    "lint": "eslint src/**/*.js",
+    "lint:fix": "eslint src/**/*.js --fix",
+    "docs": "jsdoc -c jsdoc.conf.json",
+    "build": "npm run lint && npm run test && npm run docs",
+    "setup": "node scripts/setup.js",
+    "migrate": "node scripts/migrate.js",
+    "seed": "node scripts/seed.js"
+  },
+  "keywords": [
+    "dnd",
+    "rpg",
+    "pet",
+    "companion",
+    "ai",
+    "evolution",
+    "automation",
+    "n8n",
+    "dmlogn8n"
+  ],
+  "author": "DMlogn8n Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/dmlogn8n-companion-pet-system.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/dmlogn8n-companion-pet-system/issues"
+  },
+  "homepage": "https://github.com/your-org/dmlogn8n-companion-pet-system#readme",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "compression": "^1.7.4",
+    "dotenv": "^16.3.1",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^9.0.1",
+    "lodash": "^4.17.21",
+    "moment": "^2.29.4",
+    "axios": "^1.6.2",
+    "sqlite3": "^5.1.6",
+    "node-cron": "^3.0.3",
+    "winston": "^3.11.0",
+    "joi": "^17.11.0",
+    "express-rate-limit": "^7.1.5",
+    "express-validator": "^7.0.1",
+    "multer": "^1.4.5-lts.1",
+    "sharp": "^0.33.1",
+    "socket.io": "^4.7.4",
+    "redis": "^4.6.11",
+    "bull": "^4.12.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3",
+    "eslint": "^8.56.0",
+    "eslint-config-standard": "^17.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^6.1.1",
+    "jsdoc": "^4.0.2",
+    "jsdoc-to-markdown": "^8.0.0",
+    "nyc": "^15.1.0",
+    "@types/jest": "^29.5.11",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/index.js",
+      "!src/config/**",
+      "!**/node_modules/**"
+    ],
+    "coverageDirectory": "coverage",
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ],
+    "testMatch": [
+      "**/tests/**/*.test.js",
+      "**/__tests__/**/*.js"
+    ]
+  },
+  "eslintConfig": {
+    "extends": [
+      "standard"
+    ],
+    "env": {
+      "node": true,
+      "es2021": true,
+      "jest": true
+    },
+    "parserOptions": {
+      "ecmaVersion": 2021,
+      "sourceType": "module"
+    },
+    "rules": {
+      "no-console": "warn",
+      "prefer-const": "error",
+      "no-var": "error"
+    }
+  },
+  "lint-staged": {
+    "*.js": [
+      "eslint --fix",
+      "jest --bail --passWithNoTests --findRelatedTests"
+    ]
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged",
+      "pre-push": "npm test",
+      "commit-msg": "commitlint -E HUSKY_GIT_PARAMS"
+    }
+  },
+  "nyc": {
+    "exclude": [
+      "**/tests/**",
+      "**/node_modules/**",
+      "src/index.js"
+    ],
+    "reporter": [
+      "text",
+      "html"
+    ]
+  }
+}

@@ -1,0 +1,424 @@
+{
+  "name": "Advanced Trading - Auction Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "auction-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "auction-webhook",
+      "name": "Auction Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "auction-processing-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.event_type}}",
+              "operation": "equal",
+              "value2": "auction_created"
+            }
+          ]
+        }
+      },
+      "id": "event-router",
+      "name": "Event Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process auction creation\nconst auctionData = $input.first().json;\nconst auction = auctionData.auction;\n\n// Log auction creation\nconsole.log(`New auction created: ${auction.id} for item ${auction.item_id}`);\n\n// Calculate suggested listing price based on market data\nconst suggestedPrice = calculateSuggestedPrice(auction.item_id, auction.region_id);\n\n// Check for similar auctions\nconst similarAuctions = await findSimilarAuctions(auction.item_id, auction.region_id, auction.quantity);\n\n// Prepare notification data\nconst notificationData = {\n  auctionId: auction.id,\n  itemId: auction.item_id,\n  sellerId: auction.seller_id,\n  startingPrice: auction.starting_price,\n  suggestedPrice: suggestedPrice,\n  competitionCount: similarAuctions.length,\n  regionId: auction.region_id\n};\n\nreturn [{\n  json: {\n    event: 'auction_created_processed',\n    data: notificationData\n  }\n}];\n\nfunction calculateSuggestedPrice(itemId, regionId) {\n  // This would integrate with the economic engine\n  return Math.floor(Math.random() * 1000) + 100;\n}\n\nasync function findSimilarAuctions(itemId, regionId, quantity) {\n  // This would query the database for similar auctions\n  return [];\n}"
+      },
+      "id": "process-auction-creation",
+      "name": "Process Auction Creation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process bid placement\nconst bidData = $input.first().json;\nconst bid = bidData.bid;\nconst auction = bidData.auction;\n\nconsole.log(`New bid placed: ${bid.amount} on auction ${auction.id}`);\n\n// Check for bid anomalies\nconst bidAnalysis = analyzeBid(bid, auction);\n\n// Update auction analytics\nawait updateAuctionAnalytics(auction.id, bid);\n\n// Check if this meets reserve price\nconst meetsReserve = auction.reserve_price && parseFloat(bid.amount) >= parseFloat(auction.reserve_price);\n\n// Prepare outbid notification if needed\nconst outbidNotification = bid.outbid ? {\n  previousBidderId: await getPreviousBidder(auction.id),\n  auctionId: auction.id,\n  newBidAmount: bid.amount,\n  itemId: auction.item_id\n} : null;\n\nreturn [{\n  json: {\n    event: 'bid_processed',\n    bidAnalysis: bidAnalysis,\n    meetsReserve: meetsReserve,\n    outbidNotification: outbidNotification,\n    auctionId: auction.id,\n    bidderId: bid.bidder_id\n  }\n}];\n\nfunction analyzeBid(bid, auction) {\n  const bidAmount = parseFloat(bid.amount);\n  const currentBid = parseFloat(auction.current_bid);\n  const minIncrement = currentBid * 0.05; // 5% minimum\n  \n  return {\n    amount: bidAmount,\n    isAboveMinimum: bidAmount >= (currentBid + minIncrement),\n    percentageIncrease: ((bidAmount - currentBid) / currentBid) * 100,\n    timestamp: bid.timestamp\n  };\n}\n\nasync function updateAuctionAnalytics(auctionId, bid) {\n  // Update auction analytics in database\n  console.log(`Updating analytics for auction ${auctionId}`);\n}\n\nasync function getPreviousBidder(auctionId) {\n  // Get the previous bidder ID from database\n  return null;\n}"
+      },
+      "id": "process-bid-placement",
+      "name": "Process Bid Placement",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process auction completion (sold or expired)\nconst auctionData = $input.first().json;\nconst auction = auctionData.auction;\nconst buyerId = auctionData.buyerId;\nconst isSold = auction.status === 'sold';\n\nconsole.log(`Auction ${auction.id} ${isSold ? 'sold' : 'expired'}`);\n\n// Process payment and item transfer\nif (isSold && buyerId) {\n  await processPayment(auction.seller_id, buyerId, auction.current_bid, 'auction');\n  await transferItems(auction.seller_id, buyerId, auction.item_id, auction.quantity);\n  \n  // Update reputation\n  await updateReputation(auction.seller_id, 'successful_sale');\n  await updateReputation(buyerId, 'successful_purchase');\n}\n\n// Update market data\nawait updateMarketData(auction);\n\n// Generate completion report\nconst completionReport = {\n  auctionId: auction.id,\n  sellerId: auction.seller_id,\n  buyerId: buyerId,\n  finalPrice: isSold ? auction.current_bid : null,\n  status: auction.status,\n  totalBids: auction.bid_count,\n  duration: calculateAuctionDuration(auction.start_time, auction.end_time),\n  isSold: isSold\n};\n\n// Send notifications\nawait sendCompletionNotifications(completionReport);\n\nreturn [{\n  json: {\n    event: 'auction_completed',\n    report: completionReport\n  }\n}];\n\nasync function processPayment(sellerId, buyerId, amount, type) {\n  console.log(`Processing payment: ${amount} from ${buyerId} to ${sellerId}`);\n}\n\nasync function transferItems(sellerId, buyerId, itemId, quantity) {\n  console.log(`Transferring ${quantity}x ${itemId} from ${sellerId} to ${buyerId}`);\n}\n\nasync function updateReputation(playerId, action) {\n  console.log(`Updating reputation for ${playerId}: ${action}`);\n}\n\nasync function updateMarketData(auction) {\n  console.log(`Updating market data for auction ${auction.id}`);\n}\n\nfunction calculateAuctionDuration(startTime, endTime) {\n  return Math.floor((new Date(endTime) - new Date(startTime)) / 1000 / 60); // minutes\n}\n\nasync function sendCompletionNotifications(report) {\n  console.log('Sending auction completion notifications:', report);\n}"
+      },
+      "id": "process-auction-completion",
+      "name": "Process Auction Completion",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [680, 600]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.DMLOGN8N_API_URL}}/notifications",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "recipientId",
+              "value": "={{$json.data.sellerId}}"
+            },
+            {
+              "name": "type",
+              "value": "auction_created"
+            },
+            {
+              "name": "data",
+              "value": "={{$json.data}}"
+            }
+          ]
+        }
+      },
+      "id": "notify-seller",
+      "name": "Notify Seller",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.DMLOGN8N_API_URL}}/notifications",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "recipientId",
+              "value": "={{$json.outbidNotification.previousBidderId}}"
+            },
+            {
+              "name": "type",
+              "value": "outbid"
+            },
+            {
+              "name": "data",
+              "value": "={{$json.outbidNotification}}"
+            }
+          ]
+        }
+      },
+      "id": "notify-outbid",
+      "name": "Notify Outbid Player",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.DMLOGN8N_API_URL}}/analytics/auction-events",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "eventType",
+              "value": "={{$json.event}}"
+            },
+            {
+              "name": "data",
+              "value": "={{$json.report || $json.data || $json.bidAnalysis}}"
+            }
+          ]
+        }
+      },
+      "id": "update-analytics",
+      "name": "Update Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.event_type}}",
+              "operation": "equal",
+              "value2": "bid_placed"
+            }
+          ]
+        }
+      },
+      "id": "bid-router",
+      "name": "Bid Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.event_type}}",
+              "operation": "equal",
+              "value2": "auction_sold"
+            }
+          ]
+        }
+      },
+      "id": "completion-router",
+      "name": "Completion Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Check for suspicious bidding patterns\nconst bidData = $input.first().json;\nconst bidAnalysis = bidData.bidAnalysis;\nconst auctionId = bidData.auctionId;\n\nconst suspiciousPatterns = [];\n\n// Check for unusually high bid increases\nif (bidAnalysis.percentageIncrease > 50) {\n  suspiciousPatterns.push({\n    type: 'high_bid_increase',\n    severity: 'medium',\n    details: `Bid increased by ${bidAnalysis.percentageIncrease.toFixed(2)}%`\n  });\n}\n\n// Check for rapid bidding (would need historical data)\n// This is a placeholder for more complex analysis\n\n// Check for bid timing patterns\nconst bidTime = new Date(bidAnalysis.timestamp);\nconst hour = bidTime.getHours();\nif (hour < 6 || hour > 23) {\n  suspiciousPatterns.push({\n    type: 'unusual_timing',\n    severity: 'low',\n    details: `Bid placed at unusual hour: ${hour}:00`\n  });\n}\n\nreturn [{\n  json: {\n    ...bidData,\n    suspiciousPatterns: suspiciousPatterns,\n    requiresInvestigation: suspiciousPatterns.length > 0\n  }\n}];"
+      },
+      "id": "check-suspicious-bids",
+      "name": "Check Suspicious Bids",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.DMLOGN8N_API_URL}}/security/investigate",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "suspiciousActivity",
+              "value": "={{$json.suspiciousPatterns}}"
+            },
+            {
+              "name": "auctionId",
+              "value": "={{$json.auctionId}}"
+            },
+            {
+              "name": "bidderId",
+              "value": "={{$json.bidderId}}"
+            }
+          ]
+        }
+      },
+      "id": "report-suspicious-activity",
+      "name": "Report Suspicious Activity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1120, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.requiresInvestigation}}",
+              "operation": "equal",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "id": "suspicious-check",
+      "name": "Suspicious Check",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{{\"status\": \"processed\", \"event\": \"$json.event\", \"timestamp\": \"$now\"}}}"
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 400]
+    }
+  ],
+  "connections": {
+    "auction-webhook": {
+      "main": [
+        [
+          {
+            "node": "event-router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "event-router": {
+      "main": [
+        [
+          {
+            "node": "process-auction-creation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "bid-router",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "completion-router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "process-auction-creation": {
+      "main": [
+        [
+          {
+            "node": "notify-seller",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "process-bid-placement": {
+      "main": [
+        [
+          {
+            "node": "check-suspicious-bids",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "process-auction-completion": {
+      "main": [
+        [
+          {
+            "node": "update-analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "bid-router": {
+      "main": [
+        [
+          {
+            "node": "process-bid-placement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "completion-router": {
+      "main": [
+        [
+          {
+            "node": "process-auction-completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-suspicious-bids": {
+      "main": [
+        [
+          {
+            "node": "suspicious-check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "suspicious-check": {
+      "main": [
+        [
+          {
+            "node": "report-suspicious-activity",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "notify-outbid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "notify-seller": {
+      "main": [
+        [
+          {
+            "node": "webhook-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "notify-outbid": {
+      "main": [
+        [
+          {
+            "node": "webhook-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update-analytics": {
+      "main": [
+        [
+          {
+            "node": "webhook-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "report-suspicious-activity": {
+      "main": [
+        [
+          {
+            "node": "webhook-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "createdAt": "2024-01-15T10:00:00.000Z",
+  "updatedAt": "2024-01-15T10:00:00.000Z"
+}

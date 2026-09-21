@@ -1,0 +1,345 @@
+{
+  "name": "Comprehensive Campaign Management - Advanced Campaign Lifecycle System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "campaign/manage",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "campaign-management-webhook",
+      "name": "Campaign Management Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "campaign-manage"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process comprehensive campaign management request\nconst campaignData = $input.first().json;\nconst { \n  action, // 'create', 'update', 'get', 'delete', 'recruit', 'schedule', 'archive', 'duplicate'\n  campaignId,\n  campaignInfo = {},\n  playerData = [],\n  sessionSchedule = {},\n  worldBuildingData = {},\n  progressMilestones = [],\n  recruitmentData = {}\n} = campaignData;\n\n// Validate required fields\nif (!action) {\n  throw new Error('Missing required field: action');\n}\n\nif (action !== 'create' && !campaignId) {\n  throw new Error('Missing required field: campaignId for action ' + action);\n}\n\n// Prepare operation data\nconst operationData = {\n  action,\n  campaignId: campaignId || `campaign_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n  timestamp: new Date().toISOString(),\n  campaignInfo,\n  playerData,\n  sessionSchedule,\n  worldBuildingData,\n  progressMilestones,\n  recruitmentData,\n  metadata: {\n    processedBy: 'comprehensive-campaign-management',\n    version: '2.0',\n    requestId: `req_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`\n  }\n};\n\nreturn { json: operationData };"
+      },
+      "id": "process-campaign-request",
+      "name": "Process Campaign Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "action-condition",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "create",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "route-campaign-action",
+      "name": "Route Campaign Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Campaign creation with comprehensive world building\nconst campaignData = $input.first().json;\nconst { campaignId, campaignInfo, worldBuildingData } = campaignData;\n\n// Campaign creation template with comprehensive world building\nconst newCampaign = {\n  id: campaignId,\n  name: campaignInfo.name || 'Untitled Campaign',\n  description: campaignInfo.description || '',\n  type: campaignInfo.type || 'fantasy', // fantasy, scifi, horror, modern, etc.\n  difficulty: campaignInfo.difficulty || 'medium', // easy, medium, hard, legendary\n  maxPlayers: campaignInfo.maxPlayers || 4,\n  minPlayers: campaignInfo.minPlayers || 1,\n  levelRange: campaignInfo.levelRange || { min: 1, max: 5 },\n  setting: campaignInfo.setting || 'Custom World',\n  theme: campaignInfo.theme || 'Adventure',\n  estimatedDuration: campaignInfo.estimatedDuration || 'Medium (10-20 sessions)',\n  \n  // Campaign Status and Management\n  status: 'recruiting', // recruiting, active, paused, completed, archived\n  visibility: campaignInfo.visibility || 'public', // public, private, invite_only\n  dmId: campaignInfo.dmId || null,\n  \n  // Player Management\n  players: [],\n  waitingList: [],\n  playerApplications: [],\n  partyComposition: {\n    roles: [], // tank, healer, damage, support, utility, etc.\n    balance: 0.0, // 0.0-1.0 score of party balance\n    diversity: 0.0, // 0.0-1.0 score of class/race diversity\n  },\n  \n  // Session Management\n  sessionSchedule: {\n    frequency: campaignInfo.sessionFrequency || 'weekly', // weekly, biweekly, monthly\n    preferredDays: campaignInfo.preferredDays || ['Saturday'],\n    preferredTime: campaignInfo.preferredTime || '19:00',\n    timezone: campaignInfo.timezone || 'UTC',\n    duration: campaignInfo.sessionDuration || 4, // hours\n    nextSession: null,\n    lastSession: null\n  },\n  \n  // World Building Data\n  worldBuilding: {\n    worldName: worldBuildingData.worldName || campaignInfo.setting || 'Unknown World',\n    worldType: worldBuildingData.worldType || campaignInfo.type || 'fantasy',\n    geography: {\n      continents: worldBuildingData.geography?.continents || [],\n      regions: worldBuildingData.geography?.regions || [],\n      cities: worldBuildingData.geography?.cities || [],\n      dungeons: worldBuildingData.geography?.dungeons || [],\n      pointsOfInterest: worldBuildingData.geography?.pointsOfInterest || []\n    },\n    politics: {\n      kingdoms: worldBuildingData.politics?.kingdoms || [],\n      factions: worldBuildingData.politics?.factions || [],\n      governments: worldBuildingData.politics?.governments || [],\n      relationships: worldBuildingData.politics?.relationships || {}\n    },\n    history: {\n      ancientEvents: worldBuildingData.history?.ancientEvents || [],\n      recentHistory: worldBuildingData.history?.recentHistory || [],\n      prophecies: worldBuildingData.history?.prophecies || [],\n      timelines: worldBuildingData.history?.timelines || []\n    },\n    culture: {\n      races: worldBuildingData.culture?.races || [],\n      religions: worldBuildingData.culture?.religions || [],\n      traditions: worldBuildingData.culture?.traditions || [],\n      languages: worldBuildingData.culture?.languages || []\n    },\n    economy: {\n      currencies: worldBuildingData.economy?.currencies || [],\n      tradeRoutes: worldBuildingData.economy?.tradeRoutes || [],\n      resources: worldBuildingData.economy?.resources || [],\n      markets: worldBuildingData.economy?.markets || []\n    },\n    magic: {\n      systems: worldBuildingData.magic?.systems || [],\n      restrictions: worldBuildingData.magic?.restrictions || [],\n      artifacts: worldBuildingData.magic?.artifacts || [],\n      sources: worldBuildingData.magic?.sources || []\n    }\n  },\n  \n  // Progress Tracking\n  progressMilestones: campaignData.progressMilestones || [\n    {\n      id: 'milestone_start',\n      name: 'Campaign Beginning',\n      description: 'The start of the adventure',\n      completed: false,\n      completedDate: null,\n      rewards: { experience: 0, gold: 0, items: [] }\n    }\n  ],\n  currentMilestone: 0,\n  overallProgress: 0.0, // 0.0-1.0\n  \n  // Story and Narrative\n  mainQuestline: {\n    name: campaignInfo.mainQuestName || 'The Main Adventure',\n    description: campaignInfo.mainQuestDescription || 'An epic journey awaits',\n    objectives: [],\n    currentObjective: 0,\n    completedObjectives: []\n  },\n  sideQuests: [],\n  completedQuests: [],\n  \n  // Campaign Statistics\n  statistics: {\n    totalSessions: 0,\n    totalPlaytime: 0, // in hours\n    averageSessionLength: 0,\n    playerRetentionRate: 1.0,\n    questCompletionRate: 0.0,\n    combatEncounters: 0,\n    roleplaySessions: 0,\n    explorationSessions: 0,\n    puzzlesSolved: 0,\n    itemsDiscovered: 0,\n    enemiesDefeated: 0\n  },\n  \n  // Metadata\n  createdAt: new Date().toISOString(),\n  createdBy: campaignInfo.createdBy || 'system',\n  lastUpdated: new Date().toISOString(),\n  tags: campaignInfo.tags || [],\n  notes: campaignInfo.notes || '',\n  \n  // Configuration\n  settings: {\n    allowPlayerCreation: campaignInfo.allowPlayerCreation !== false,\n    requireCharacterApproval: campaignInfo.requireCharacterApproval !== false,\n    enableDeathSavingThrows: campaignInfo.enableDeathSavingThrows !== false,\n    levelingSystem: campaignInfo.levelingSystem || 'standard',\n    restingRules: campaignInfo.restingRules || 'standard',\n    inventoryManagement: campaignInfo.inventoryManagement || 'manual'\n  }\n};\n\nreturn { json: newCampaign };"
+      },
+      "id": "create-campaign-world",
+      "name": "Create Campaign World",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 200]
+    },
+    {
+      "parameters": {
+        "operation": "lookup",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_CAMPAIGN_SHEET_ID }}",
+        "range": "Campaigns!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-get-campaign",
+      "name": "Google Sheets - Get Campaign",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [920, 400],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_CAMPAIGN_SHEET_ID }}",
+        "range": "Campaigns!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-update-campaign",
+      "name": "Google Sheets - Update Campaign",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1140, 400],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_CAMPAIGN_SHEET_ID }}",
+        "range": "Campaigns!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-create-campaign",
+      "name": "Google Sheets - Create Campaign",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1140, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Player recruitment and party management system\nconst campaignData = $input.first().json;\nconst { campaignId, playerData, recruitmentData } = campaignData;\n\n// Get current campaign state\nlet currentCampaign = null;\nif ($input.length > 1 && $input[1].json && $input[1].json.values) {\n  const dataRow = $input[1].json.values.find(row => row[0] === campaignId);\n  if (dataRow) {\n    currentCampaign = {\n      id: dataRow[0],\n      name: dataRow[1],\n      status: dataRow[2],\n      players: JSON.parse(dataRow[3] || '[]'),\n      waitingList: JSON.parse(dataRow[4] || '[]'),\n      playerApplications: JSON.parse(dataRow[5] || '[]'),\n      partyComposition: JSON.parse(dataRow[6] || '{}'),\n      maxPlayers: parseInt(dataRow[7]) || 4,\n      minPlayers: parseInt(dataRow[8]) || 1,\n      settings: JSON.parse(dataRow[9] || '{}'),\n      lastUpdated: dataRow[10] || new Date().toISOString()\n    };\n  }\n}\n\nif (!currentCampaign) {\n  throw new Error('Campaign not found: ' + campaignId);\n}\n\n// Process player recruitment\nlet updatedPlayers = [...currentCampaign.players];\nlet updatedWaitingList = [...currentCampaign.waitingList];\nlet updatedApplications = [...currentCampaign.playerApplications];\n\nplayerData.forEach(player => {\n  const { playerId, action: playerAction, data } = player;\n  \n  if (playerAction === 'apply') {\n    // New player application\n    const application = {\n      id: `app_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,\n      playerId,\n      playerName: data.playerName,\n      playerEmail: data.playerEmail,\n      experience: data.experience || 'beginner',\n      preferredRole: data.preferredRole || 'damage',\n      characterConcept: data.characterConcept || '',\n      availability: data.availability || {},\n      message: data.message || '',\n      appliedAt: new Date().toISOString(),\n      status: 'pending' // pending, approved, rejected, waitlisted\n    };\n    \n    updatedApplications.push(application);\n    \n  } else if (playerAction === 'approve') {\n    // Approve player application\n    const appIndex = updatedApplications.findIndex(app => \n      app.id === data.applicationId || app.playerId === playerId\n    );\n    \n    if (appIndex >= 0) {\n      const application = updatedApplications[appIndex];\n      \n      if (updatedPlayers.length < currentCampaign.maxPlayers) {\n        // Add to active players\n        const playerInfo = {\n          id: application.playerId,\n          name: application.playerName,\n          email: application.playerEmail,\n          experience: application.experience,\n          role: application.preferredRole,\n          character: data.character || null,\n          joinedAt: new Date().toISOString(),\n          status: 'active', // active, inactive, away\n          attendance: {\n            sessionsAttended: 0,\n            sessionsMissed: 0,\n            lastAttendance: null\n          },\n          contributions: {\n            roleplayMoments: 0,\n            combatHighlights: 0,\n            puzzleSolutions: 0,\n            creativeSolutions: 0\n          }\n        };\n        \n        updatedPlayers.push(playerInfo);\n        application.status = 'approved';\n        updatedApplications[appIndex] = application;\n        \n      } else {\n        // Add to waiting list\n        application.status = 'waitlisted';\n        updatedApplications[appIndex] = application;\n        \n        updatedWaitingList.push({\n          id: application.playerId,\n          name: application.playerName,\n          email: application.playerEmail,\n          role: application.preferredRole,\n          waitlistedAt: new Date().toISOString(),\n          priority: updatedWaitingList.length + 1\n        });\n      }\n    }\n    \n  } else if (playerAction === 'remove') {\n    // Remove player from campaign\n    const playerIndex = updatedPlayers.findIndex(p => p.id === playerId);\n    if (playerIndex >= 0) {\n      const removedPlayer = updatedPlayers[playerIndex];\n      removedPlayer.status = 'removed';\n      removedPlayer.removedAt = new Date().toISOString();\n      removedPlayer.reason = data.reason || 'Left campaign';\n      \n      // Move from active to historical or remove completely\n      updatedPlayers.splice(playerIndex, 1);\n      \n      // If there's someone on the waiting list, offer them the spot\n      if (updatedWaitingList.length > 0) {\n        const nextPlayer = updatedWaitingList.shift();\n        updatedApplications = updatedApplications.map(app => {\n          if (app.playerId === nextPlayer.id) {\n            return { ...app, status: 'offered', offeredAt: new Date().toISOString() };\n          }\n          return app;\n        });\n      }\n    }\n    \n  } else if (playerAction === 'update') {\n    // Update player information\n    const playerIndex = updatedPlayers.findIndex(p => p.id === playerId);\n    if (playerIndex >= 0) {\n      updatedPlayers[playerIndex] = {\n        ...updatedPlayers[playerIndex],\n        ...data,\n        lastUpdated: new Date().toISOString()\n      };\n    }\n  }\n});\n\n// Calculate party composition balance\nconst roleDistribution = updatedPlayers.reduce((acc, player) => {\n  acc[player.role] = (acc[player.role] || 0) + 1;\n  return acc;\n}, {});\n\nconst idealDistribution = {\n  tank: updatedPlayers.length > 2 ? 1 : 0.3,\n  healer: updatedPlayers.length > 2 ? 1 : 0.3,\n  damage: updatedPlayers.length * 0.4,\n  support: updatedPlayers.length * 0.2,\n  utility: updatedPlayers.length * 0.1\n};\n\n// Calculate balance score (0.0-1.0)\nlet balanceScore = 0.0;\nlet totalRoles = 0;\n\nObject.keys(idealDistribution).forEach(role => {\n  const actual = roleDistribution[role] || 0;\n  const ideal = idealDistribution[role];\n  const diff = Math.abs(actual - ideal);\n  const roleScore = Math.max(0, 1 - (diff / Math.max(actual, ideal, 1)));\n  balanceScore += roleScore;\n  totalRoles++;\n});\n\nif (totalRoles > 0) {\n  balanceScore = balanceScore / totalRoles;\n}\n\n// Update campaign status based on player count\nlet newStatus = currentCampaign.status;\nif (updatedPlayers.length >= currentCampaign.minPlayers && currentCampaign.status === 'recruiting') {\n  newStatus = 'ready';\n} else if (updatedPlayers.length < currentCampaign.minPlayers && currentCampaign.status === 'ready') {\n  newStatus = 'recruiting';\n}\n\nconst updatedCampaign = {\n  ...currentCampaign,\n  players: updatedPlayers,\n  waitingList: updatedWaitingList,\n  playerApplications: updatedApplications,\n  partyComposition: {\n    roles: roleDistribution,\n    balance: Math.round(balanceScore * 100) / 100,\n    diversity: calculateDiversityScore(updatedPlayers)\n  },\n  status: newStatus,\n  lastUpdated: new Date().toISOString(),\n  metadata: {\n    playersAdded: updatedPlayers.length - currentCampaign.players.length,\n    playersRemoved: currentCampaign.players.length - updatedPlayers.length,\n    applicationsProcessed: playerData.length\n  }\n};\n\nreturn { json: updatedCampaign };\n\n// Helper function to calculate party diversity\nfunction calculateDiversityScore(players) {\n  if (players.length <= 1) return 1.0;\n  \n  const races = new Set();\n  const classes = new Set();\n  const roles = new Set();\n  \n  players.forEach(player => {\n    if (player.character) {\n      if (player.character.race) races.add(player.character.race);\n      if (player.character.class) classes.add(player.character.class);\n    }\n    roles.add(player.role);\n  });\n  \n  const diversityFactors = [\n    races.size / players.length,\n    classes.size / players.length,\n    roles.size / players.length\n  ];\n  \n  return diversityFactors.reduce((sum, factor) => sum + factor, 0) / diversityFactors.length;\n}"
+      },
+      "id": "process-player-recruitment",
+      "name": "Process Player Recruitment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Session scheduling and organization system\nconst campaignData = $input.first().json;\nconst { campaignId, sessionSchedule } = campaignData;\n\n// Get current campaign state\nlet currentCampaign = null;\nif ($input.length > 1 && $input[1].json && $input[1].json.values) {\n  const dataRow = $input[1].json.values.find(row => row[0] === campaignId);\n  if (dataRow) {\n    currentCampaign = {\n      id: dataRow[0],\n      name: dataRow[1],\n      sessionSchedule: JSON.parse(dataRow[2] || '{}'),\n      players: JSON.parse(dataRow[3] || '[]'),\n      lastUpdated: dataRow[4] || new Date().toISOString()\n    };\n  }\n}\n\nif (!currentCampaign) {\n  throw new Error('Campaign not found: ' + campaignId);\n}\n\n// Process session scheduling\nlet updatedSchedule = { ...currentCampaign.sessionSchedule };\nlet sessionEvents = [];\n\nif (sessionSchedule.action === 'schedule') {\n  const { sessionData } = sessionSchedule;\n  \n  // Create new session\n  const newSession = {\n    id: `session_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,\n    campaignId,\n    scheduledFor: sessionData.scheduledFor,\n    duration: sessionData.duration || updatedSchedule.duration || 4,\n    timezone: sessionData.timezone || updatedSchedule.timezone || 'UTC',\n    location: sessionData.location || 'Online',\n    type: sessionData.type || 'regular', // regular, special, one_shot, finale\n    status: 'scheduled', // scheduled, in_progress, completed, cancelled\n    \n    // Session content planning\n    plannedContent: {\n      mainPlot: sessionData.mainPlot || '',\n      subplots: sessionData.subplots || [],\n      encounters: sessionData.encounters || [],\n      locations: sessionData.locations || [],\n      npcs: sessionData.npcs || [],\n      rewards: sessionData.rewards || {}\n    },\n    \n    // Player availability\n    playerAvailability: {},\n    attendanceConfirmed: [],\n    attendanceDeclined: [],\n    attendancePending: currentCampaign.players.map(p => p.id),\n    \n    // Session tracking\n    createdAt: new Date().toISOString(),\n    createdBy: sessionSchedule.createdBy || 'dm',\n    lastUpdated: new Date().toISOString()\n  };\n  \n  // Initialize player availability\n  currentCampaign.players.forEach(player => {\n    newSession.playerAvailability[player.id] = {\n      available: null, // null = unknown, true = available, false = unavailable\n      respondedAt: null,\n      notes: ''\n    };\n  });\n  \n  // Add to session schedule\n  if (!updatedSchedule.upcomingSessions) {\n    updatedSchedule.upcomingSessions = [];\n  }\n  updatedSchedule.upcomingSessions.push(newSession);\n  updatedSchedule.nextSession = newSession;\n  \n  sessionEvents.push({\n    type: 'session_scheduled',\n    sessionId: newSession.id,\n    scheduledFor: newSession.scheduledFor,\n    playersNotified: currentCampaign.players.map(p => p.id)\n  });\n  \n} else if (sessionSchedule.action === 'reschedule') {\n  const { sessionId, newTime, reason } = sessionSchedule;\n  \n  if (updatedSchedule.upcomingSessions) {\n    const sessionIndex = updatedSchedule.upcomingSessions.findIndex(s => s.id === sessionId);\n    if (sessionIndex >= 0) {\n      const session = updatedSchedule.upcomingSessions[sessionIndex];\n      session.previousTime = session.scheduledFor;\n      session.scheduledFor = newTime;\n      session.rescheduleReason = reason;\n      session.lastUpdated = new Date().toISOString();\n      \n      // Reset attendance responses\n      session.attendanceConfirmed = [];\n      session.attendanceDeclined = [];\n      session.attendancePending = currentCampaign.players.map(p => p.id);\n      \n      Object.keys(session.playerAvailability).forEach(playerId => {\n        session.playerAvailability[playerId] = {\n          available: null,\n          respondedAt: null,\n          notes: ''\n        };\n      });\n      \n      sessionEvents.push({\n        type: 'session_rescheduled',\n        sessionId,\n        previousTime: session.previousTime,\n        newTime,\n        reason\n      });\n    }\n  }\n  \n} else if (sessionSchedule.action === 'cancel') {\n  const { sessionId, reason } = sessionSchedule;\n  \n  if (updatedSchedule.upcomingSessions) {\n    const sessionIndex = updatedSchedule.upcomingSessions.findIndex(s => s.id === sessionId);\n    if (sessionIndex >= 0) {\n      const session = updatedSchedule.upcomingSessions[sessionIndex];\n      session.status = 'cancelled';\n      session.cancelledAt = new Date().toISOString();\n      session.cancelReason = reason;\n      \n      // Update next session if needed\n      if (updatedSchedule.nextSession && updatedSchedule.nextSession.id === sessionId) {\n        updatedSchedule.nextSession = updatedSchedule.upcomingSessions\n          .filter(s => s.status === 'scheduled')\n          .sort((a, b) => new Date(a.scheduledFor) - new Date(b.scheduledFor))[0] || null;\n      }\n      \n      sessionEvents.push({\n        type: 'session_cancelled',\n        sessionId,\n        reason\n      });\n    }\n  }\n  \n} else if (sessionSchedule.action === 'confirm_attendance') {\n  const { sessionId, playerId, available, notes } = sessionSchedule;\n  \n  if (updatedSchedule.upcomingSessions) {\n    const session = updatedSchedule.upcomingSessions.find(s => s.id === sessionId);\n    if (session && session.playerAvailability[playerId]) {\n      session.playerAvailability[playerId] = {\n        available,\n        respondedAt: new Date().toISOString(),\n        notes: notes || ''\n      };\n      \n      // Update attendance lists\n      session.attendancePending = session.attendancePending.filter(id => id !== playerId);\n      \n      if (available) {\n        session.attendanceConfirmed.push(playerId);\n      } else {\n        session.attendanceDeclined.push(playerId);\n      }\n      \n      session.lastUpdated = new Date().toISOString();\n      \n      sessionEvents.push({\n        type: 'attendance_confirmed',\n        sessionId,\n        playerId,\n        available\n      });\n    }\n  }\n}\n\n// Update campaign schedule settings\nif (sessionSchedule.settings) {\n  updatedSchedule = {\n    ...updatedSchedule,\n    ...sessionSchedule.settings,\n    lastUpdated: new Date().toISOString()\n  };\n}\n\nconst updatedCampaign = {\n  ...currentCampaign,\n  sessionSchedule: updatedSchedule,\n  lastUpdated: new Date().toISOString(),\n  metadata: {\n    scheduleEvents: sessionEvents,\n    upcomingSessionCount: updatedSchedule.upcomingSessions?.filter(s => s.status === 'scheduled').length || 0\n  }\n};\n\nreturn { json: updatedCampaign };"
+      },
+      "id": "process-session-scheduling",
+      "name": "Process Session Scheduling",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Campaign progress tracking and milestone management\nconst campaignData = $input.first().json;\nconst { campaignId, progressMilestones } = campaignData;\n\n// Get current campaign state\nlet currentCampaign = null;\nif ($input.length > 1 && $input[1].json && $input[1].json.values) {\n  const dataRow = $input[1].json.values.find(row => row[0] === campaignId);\n  if (dataRow) {\n    currentCampaign = {\n      id: dataRow[0],\n      name: dataRow[1],\n      progressMilestones: JSON.parse(dataRow[2] || '[]'),\n      currentMilestone: parseInt(dataRow[3]) || 0,\n      overallProgress: parseFloat(dataRow[4]) || 0.0,\n      mainQuestline: JSON.parse(dataRow[5] || '{}'),\n      completedQuests: JSON.parse(dataRow[6] || '[]'),\n      statistics: JSON.parse(dataRow[7] || '{}'),\n      lastUpdated: dataRow[8] || new Date().toISOString()\n    };\n  }\n}\n\nif (!currentCampaign) {\n  throw new Error('Campaign not found: ' + campaignId);\n}\n\n// Process milestone updates\nlet updatedMilestones = [...currentCampaign.progressMilestones];\nlet updatedCurrentMilestone = currentCampaign.currentMilestone;\nlet milestoneCompletions = [];\n\nprogressMilestones.forEach(milestoneUpdate => {\n  const { milestoneId, action: milestoneAction, data } = milestoneUpdate;\n  \n  if (milestoneAction === 'complete') {\n    const milestoneIndex = updatedMilestones.findIndex(m => m.id === milestoneId);\n    if (milestoneIndex >= 0) {\n      const milestone = updatedMilestones[milestoneIndex];\n      if (!milestone.completed) {\n        milestone.completed = true;\n        milestone.completedDate = new Date().toISOString();\n        milestone.completedBy = data.completedBy || 'party';\n        milestone.completionNotes = data.notes || '';\n        \n        // Award milestone rewards\n        if (data.awardRewards !== false && milestone.rewards) {\n          // This would integrate with character system to award XP, gold, items\n          milestoneCompletions.push({\n            type: 'milestone_completed',\n            milestoneId,\n            milestoneName: milestone.name,\n            rewards: milestone.rewards\n          });\n        }\n        \n        updatedMilestones[milestoneIndex] = milestone;\n        \n        // Check if this was the current milestone and advance\n        if (milestoneIndex === updatedCurrentMilestone) {\n          updatedCurrentMilestone = milestoneIndex + 1;\n        }\n      }\n    }\n    \n  } else if (milestoneAction === 'add') {\n    const newMilestone = {\n      id: milestoneId,\n      name: data.name || 'New Milestone',\n      description: data.description || '',\n      prerequisites: data.prerequisites || [],\n      objectives: data.objectives || [],\n      rewards: data.rewards || { experience: 0, gold: 0, items: [] },\n      completed: false,\n      completedDate: null,\n      completedBy: null,\n      completionNotes: '',\n      createdAt: new Date().toISOString(),\n      category: data.category || 'story', // story, combat, exploration, social\n      difficulty: data.difficulty || 'normal',\n      estimatedTime: data.estimatedTime || '1 session'\n    };\n    \n    updatedMilestones.push(newMilestone);\n    \n  } else if (milestoneAction === 'update') {\n    const milestoneIndex = updatedMilestones.findIndex(m => m.id === milestoneId);\n    if (milestoneIndex >= 0) {\n      updatedMilestones[milestoneIndex] = {\n        ...updatedMilestones[milestoneIndex],\n        ...data,\n        lastModified: new Date().toISOString()\n      };\n    }\n  }\n});\n\n// Calculate overall campaign progress\nconst completedMilestones = updatedMilestones.filter(m => m.completed).length;\nconst totalMilestones = updatedMilestones.length;\nconst overallProgress = totalMilestones > 0 ? Math.round((completedMilestones / totalMilestones) * 100) / 100 : 0.0;\n\n// Update campaign statistics\nconst updatedStatistics = {\n  ...currentCampaign.statistics,\n  milestonesCompleted: completedMilestones,\n  totalMilestones,\n  campaignProgress: overallProgress,\n  lastMilestoneCompleted: milestoneCompletions.length > 0 ? \n    milestoneCompletions[milestoneCompletions.length - 1].milestoneName : null\n};\n\n// Check for campaign completion\nlet campaignStatus = currentCampaign.status;\nif (overallProgress >= 1.0 && campaignStatus !== 'completed') {\n  campaignStatus = 'completed';\n  milestoneCompletions.push({\n    type: 'campaign_completed',\n    completedAt: new Date().toISOString(),\n    totalMilestones,\n    finalProgress: overallProgress\n  });\n}\n\nconst updatedCampaign = {\n  ...currentCampaign,\n  progressMilestones: updatedMilestones,\n  currentMilestone: updatedCurrentMilestone,\n  overallProgress,\n  statistics: updatedStatistics,\n  status: campaignStatus,\n  lastUpdated: new Date().toISOString(),\n  metadata: {\n    milestoneCompletions,\n    progressChange: overallProgress - currentCampaign.overallProgress\n  }\n};\n\nreturn { json: updatedCampaign };"
+      },
+      "id": "process-progress-tracking",
+      "name": "Process Progress Tracking",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format campaign data for Google Sheets storage\nconst campaignData = $input.first().json;\n\n// Prepare row data in the correct order for Google Sheets\nconst rowData = [\n  campaignData.id,\n  campaignData.name,\n  campaignData.description,\n  campaignData.type,\n  campaignData.difficulty,\n  campaignData.status,\n  campaignData.visibility,\n  campaignData.dmId,\n  campaignData.maxPlayers,\n  campaignData.minPlayers,\n  JSON.stringify(campaignData.players),\n  JSON.stringify(campaignData.waitingList),\n  JSON.stringify(campaignData.playerApplications),\n  JSON.stringify(campaignData.partyComposition),\n  JSON.stringify(campaignData.sessionSchedule),\n  JSON.stringify(campaignData.worldBuilding),\n  JSON.stringify(campaignData.progressMilestones),\n  campaignData.currentMilestone,\n  campaignData.overallProgress,\n  JSON.stringify(campaignData.mainQuestline),\n  JSON.stringify(campaignData.completedQuests),\n  JSON.stringify(campaignData.statistics),\n  JSON.stringify(campaignData.settings),\n  campaignData.createdAt,\n  campaignData.lastUpdated,\n  JSON.stringify(campaignData.tags),\n  campaignData.notes\n];\n\nreturn {\n  json: {\n    range: 'Campaigns!A:Z',\n    values: [rowData]\n  }\n};"
+      },
+      "id": "format-campaign-for-sheets",
+      "name": "Format Campaign for Sheets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Send campaign updates to connected systems\nconst campaignData = $input.first().json;\nconst { campaignId, metadata } = campaignData;\n\n// Prepare WebSocket broadcast payload\nconst broadcastPayload = {\n  type: 'campaign_update',\n  data: {\n    campaignId,\n    name: campaignData.name,\n    status: campaignData.status,\n    playerCount: campaignData.players.length,\n    maxPlayers: campaignData.maxPlayers,\n    overallProgress: campaignData.overallProgress,\n    nextSession: campaignData.sessionSchedule?.nextSession?.scheduledFor || null,\n    partyBalance: campaignData.partyComposition?.balance || 0.0\n  },\n  channels: [`campaign_${campaignId}`, 'campaign_updates', 'dm_updates'],\n  timestamp: new Date().toISOString()\n};\n\n// Send to WebSocket system\nfetch('http://localhost:5678/webhook/websocket/broadcast', {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json'\n  },\n  body: JSON.stringify(broadcastPayload)\n}).catch(error => {\n  console.error('Failed to broadcast campaign update:', error);\n});\n\n// Send notifications for specific events\nif (metadata?.milestoneCompletions?.length > 0) {\n  metadata.milestoneCompletions.forEach(completion => {\n    const notificationPayload = {\n      type: 'milestone_completion',\n      data: {\n        campaignId,\n        campaignName: campaignData.name,\n        ...completion\n      },\n      channels: [`campaign_${campaignId}`, 'milestone_updates'],\n      timestamp: new Date().toISOString()\n    };\n    \n    fetch('http://localhost:5678/webhook/websocket/broadcast', {\n      method: 'POST',\n      headers: {\n        'Content-Type': 'application/json'\n      },\n      body: JSON.stringify(notificationPayload)\n    }).catch(error => {\n      console.error('Failed to broadcast milestone completion:', error);\n    });\n  });\n}\n\nif (metadata?.scheduleEvents?.length > 0) {\n  metadata.scheduleEvents.forEach(event => {\n    const notificationPayload = {\n      type: 'schedule_update',\n      data: {\n        campaignId,\n        campaignName: campaignData.name,\n        ...event\n      },\n      channels: [`campaign_${campaignId}`, 'schedule_updates'],\n      timestamp: new Date().toISOString()\n    };\n    \n    fetch('http://localhost:5678/webhook/websocket/broadcast', {\n      method: 'POST',\n      headers: {\n        'Content-Type': 'application/json'\n      },\n      body: JSON.stringify(notificationPayload)\n    }).catch(error => {\n      console.error('Failed to broadcast schedule update:', error);\n    });\n  });\n}\n\nreturn { json: { broadcast: 'sent', campaignId, events: metadata } };"
+      },
+      "id": "broadcast-campaign-updates",
+      "name": "Broadcast Campaign Updates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1580, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: true,\n  campaignId: $json.id || $json.campaignId,\n  name: $json.name,\n  status: $json.status,\n  playerCount: $json.players?.length || 0,\n  overallProgress: $json.overallProgress || 0.0,\n  lastUpdated: $json.lastUpdated,\n  metadata: $json.metadata\n} }}"
+      },
+      "id": "campaign-success-response",
+      "name": "Campaign Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1800, 400]
+    }
+  ],
+  "connections": {
+    "Campaign Management Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Campaign Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Campaign Request": {
+      "main": [
+        [
+          {
+            "node": "Route Campaign Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Campaign Action": {
+      "main": [
+        [
+          {
+            "node": "Create Campaign World",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Google Sheets - Get Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Campaign World": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Create Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Get Campaign": {
+      "main": [
+        [
+          {
+            "node": "Process Player Recruitment",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Process Session Scheduling",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Process Progress Tracking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Player Recruitment": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Update Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Session Scheduling": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Update Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Progress Tracking": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Update Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Update Campaign": {
+      "main": [
+        [
+          {
+            "node": "Format Campaign for Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Create Campaign": {
+      "main": [
+        [
+          {
+            "node": "Format Campaign for Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Campaign for Sheets": {
+      "main": [
+        [
+          {
+            "node": "Broadcast Campaign Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Broadcast Campaign Updates": {
+      "main": [
+        [
+          {
+            "node": "Campaign Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-23T11:00:00.000Z",
+  "versionId": "1.0.0"
+}

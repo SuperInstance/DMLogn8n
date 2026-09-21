@@ -1,0 +1,68 @@
+{
+  "simulation": {
+    "time_step_minutes": 15,
+    "stability_factor": 0.7,
+    "transition_smoothness": 0.8,
+    "extreme_event_frequency": 0.05,
+    "magical_event_frequency": 0.02
+  },
+  "climate": {
+    "seasonal_variation": 0.3,
+    "diurnal_variation": 0.15,
+    "altitude_effect": 0.0065,
+    "regional_modifiers": true
+  },
+  "events": {
+    "enabled": true,
+    "extreme_weather_probability": 0.1,
+    "magical_phenomena_probability": 0.05,
+    "max_concurrent_events": 3
+  },
+  "particles": {
+    "enabled": true,
+    "max_particles": 10000,
+    "physics_accuracy": "high",
+    "render_distance": 500
+  },
+  "wind": {
+    "complexity": "medium",
+    "turbulence_enabled": true,
+    "thermal_effects": true,
+    "orographic_effects": true
+  },
+  "rendering": {
+    "sky_boxes": true,
+    "dynamic_lighting": true,
+    "real_time_shadows": true,
+    "particle_effects": true,
+    "sound_environment": true
+  },
+  "prediction": {
+    "short_range_hours": 24,
+    "medium_range_hours": 72,
+    "long_range_hours": 168,
+    "accuracy_decay_rate": 0.05,
+    "npc_forecasting": true,
+    "magical_divination": true
+  },
+  "environmental": {
+    "movement_effects": true,
+    "combat_modifiers": true,
+    "spell_effects": true,
+    "creature_behavior": true,
+    "terrain_interactions": true
+  },
+  "world_integration": {
+    "regional_patterns": true,
+    "altitude_effects": true,
+    "biome_systems": true,
+    "magical_areas": true,
+    "player_control": true
+  },
+  "performance": {
+    "update_frequency": 4,
+    "max_history_hours": 168,
+    "cache_size": 1000,
+    "lod_enabled": true
+  }
+}

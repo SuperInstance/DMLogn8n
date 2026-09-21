@@ -1,0 +1,394 @@
+{
+  "name": "Monitoring and Health Check System",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "type": "number",
+              "value": 5
+            }
+          ]
+        }
+      },
+      "id": "health-check-schedule",
+      "name": "Health Check Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get all active sessions for health monitoring\nconst now = new Date();\nconst fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);\n\n// Query active sessions\nconst activeSessions = await queryActiveSessions();\n\nasync function queryActiveSessions() {\n  // This would query Firestore for active sessions\n  // Return mock data for now\n  return [\n    {\n      sessionId: 'session_001',\n      status: 'active',\n      lastActivity: new Date().toISOString(),\n      participantCount: 4\n    },\n    {\n      sessionId: 'session_002', \n      status: 'active',\n      lastActivity: new Date(Date.now() - 2 * 60 * 1000).toISOString(),\n      participantCount: 2\n    }\n  ];\n}\n\nreturn activeSessions.map(session => ({ json: session }));"
+      },
+      "id": "get-active-sessions",
+      "name": "Get Active Sessions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check connection health for each session\nconst sessionData = $input.first().json;\nconst { sessionId } = sessionData;\n\n// Get WebSocket connections for this session\nconst connections = await getWebSocketConnections(sessionId);\n\n// Check connection health\nconst connectionHealth = {\n  sessionId,\n  totalConnections: connections.length,\n  activeConnections: connections.filter(c => c.status === 'connected').length,\n  staleConnections: connections.filter(c => {\n    const lastActivity = new Date(c.lastActivity);\n    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);\n    return lastActivity < fiveMinutesAgo;\n  }).length,\n  averageLatency: calculateAverageLatency(connections),\n  healthScore: calculateHealthScore(connections)\n};\n\nasync function getWebSocketConnections(sessionId) {\n  // Get WebSocket connections from database\n  return [\n    {\n      connectionId: 'conn_001',\n      userId: 'user_001',\n      status: 'connected',\n      lastActivity: new Date().toISOString(),\n      latency: 45\n    },\n    {\n      connectionId: 'conn_002',\n      userId: 'user_002', \n      status: 'connected',\n      lastActivity: new Date(Date.now() - 30 * 1000).toISOString(),\n      latency: 52\n    }\n  ];\n}\n\nfunction calculateAverageLatency(connections) {\n  const latencies = connections\n    .filter(c => c.status === 'connected' && c.latency)\n    .map(c => c.latency);\n  \n  if (latencies.length === 0) return 0;\n  return Math.round(latencies.reduce((sum, lat) => sum + lat, 0) / latencies.length);\n}\n\nfunction calculateHealthScore(connections) {\n  const activeConnections = connections.filter(c => c.status === 'connected').length;\n  const totalConnections = connections.length;\n  const avgLatency = calculateAverageLatency(connections);\n  \n  let score = 100;\n  \n  // Penalize disconnected connections\n  score -= ((totalConnections - activeConnections) / totalConnections) * 30;\n  \n  // Penalize high latency\n  if (avgLatency > 1000) score -= 30;\n  else if (avgLatency > 500) score -= 15;\n  else if (avgLatency > 200) score -= 5;\n  \n  return Math.max(0, Math.round(score));\n}\n\nreturn { json: connectionHealth };"
+      },
+      "id": "check-connection-health",
+      "name": "Check Connection Health",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check resource usage for sessions\nconst healthData = $input.first().json;\nconst { sessionId } = healthData;\n\n// Get resource allocation and usage\nconst resourceData = await getResourceUsage(sessionId);\n\nconst resourceHealth = {\n  ...healthData,\n  resources: {\n    memory: {\n      allocated: resourceData.memory.allocated,\n      used: resourceData.memory.used,\n      percentage: (parseFloat(resourceData.memory.used) / parseFloat(resourceData.memory.allocated)) * 100\n    },\n    cpu: {\n      allocated: resourceData.cpu.allocated,\n      current: resourceData.cpu.current,\n      percentage: (parseFloat(resourceData.cpu.current) / parseFloat(resourceData.cpu.allocated)) * 100\n    },\n    bandwidth: {\n      allocated: resourceData.bandwidth.allocated,\n      current: resourceData.bandwidth.current,\n      percentage: calculateBandwidthPercentage(resourceData.bandwidth.current, resourceData.bandwidth.allocated)\n    },\n    aiAgents: {\n      allocated: resourceData.aiAgents.allocated,\n      active: resourceData.aiAgents.active\n    }\n  },\n  resourceScore: calculateResourceScore(resourceData)\n};\n\nasync function getResourceUsage(sessionId) {\n  // Get resource usage from monitoring system\n  return {\n    memory: {\n      allocated: '512MB',\n      used: '384MB'\n    },\n    cpu: {\n      allocated: '0.5',\n      current: '0.3'\n    },\n    bandwidth: {\n      allocated: '1Mbps',\n      current: '750kbps'\n    },\n    aiAgents: {\n      allocated: 2,\n      active: 1\n    }\n  };\n}\n\nfunction calculateBandwidthPercentage(current, allocated) {\n  const currentBps = parseBandwidth(current);\n  const allocatedBps = parseBandwidth(allocated);\n  return (currentBps / allocatedBps) * 100;\n}\n\nfunction parseBandwidth(bandwidth) {\n  const value = parseInt(bandwidth);\n  if (bandwidth.includes('Mbps')) return value * 1000000;\n  if (bandwidth.includes('kbps')) return value * 1000;\n  if (bandwidth.includes('bps')) return value;\n  return 0;\n}\n\nfunction calculateResourceScore(resourceData) {\n  let score = 100;\n  \n  // Memory usage\n  const memoryUsage = (parseFloat(resourceData.memory.used) / parseFloat(resourceData.memory.allocated)) * 100;\n  if (memoryUsage > 90) score -= 30;\n  else if (memoryUsage > 75) score -= 15;\n  \n  // CPU usage\n  const cpuUsage = (parseFloat(resourceData.cpu.current) / parseFloat(resourceData.cpu.allocated)) * 100;\n  if (cpuUsage > 80) score -= 20;\n  \n  // Bandwidth usage\n  const bandwidthUsage = calculateBandwidthPercentage(resourceData.bandwidth.current, resourceData.bandwidth.allocated);\n  if (bandwidthUsage > 90) score -= 15;\n  \n  return Math.max(0, Math.round(score));\n}\n\nreturn { json: resourceHealth };"
+      },
+      "id": "check-resource-usage",
+      "name": "Check Resource Usage",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check service health\nconst resourceData = $input.first().json;\nconst { sessionId } = resourceData;\n\n// Check health of dependent services\nconst serviceChecks = await Promise.all([\n  checkServiceHealth('voice-service', sessionId),\n  checkServiceHealth('ai-service', sessionId),\n  checkServiceHealth('event-bus', sessionId),\n  checkServiceHealth('database', sessionId)\n]);\n\nconst serviceHealth = {\n  ...resourceData,\n  services: serviceChecks.reduce((acc, service) => {\n    acc[service.name] = {\n      status: service.status,\n      responseTime: service.responseTime,\n      lastCheck: service.lastCheck,\n      error: service.error\n    };\n    return acc;\n  }, {}),\n  serviceScore: calculateServiceScore(serviceChecks)\n};\n\nasync function checkServiceHealth(serviceName, sessionId) {\n  const startTime = Date.now();\n  \n  try {\n    // Make health check request to service\n    const response = await makeHealthCheckRequest(serviceName, sessionId);\n    const responseTime = Date.now() - startTime;\n    \n    return {\n      name: serviceName,\n      status: 'healthy',\n      responseTime,\n      lastCheck: new Date().toISOString(),\n      error: null\n    };\n  } catch (error) {\n    const responseTime = Date.now() - startTime;\n    \n    return {\n      name: serviceName,\n      status: 'unhealthy',\n      responseTime,\n      lastCheck: new Date().toISOString(),\n      error: error.message\n    };\n  }\n}\n\nasync function makeHealthCheckRequest(serviceName, sessionId) {\n  // Make actual health check request\n  // For now, simulate responses\n  const responses = {\n    'voice-service': { status: 'ok', latency: 23 },\n    'ai-service': { status: 'ok', latency: 145 },\n    'event-bus': { status: 'ok', latency: 12 },\n    'database': { status: 'ok', latency: 5 }\n  };\n  \n  const response = responses[serviceName];\n  if (!response || response.latency > 5000) {\n    throw new Error(`Service ${serviceName} is not responding`);\n  }\n  \n  return response;\n}\n\nfunction calculateServiceScore(serviceChecks) {\n  const healthyServices = serviceChecks.filter(s => s.status === 'healthy').length;\n  const totalServices = serviceChecks.length;\n  \n  return Math.round((healthyServices / totalServices) * 100);\n}\n\nreturn { json: serviceHealth };"
+      },
+      "id": "check-service-health",
+      "name": "Check Service Health",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "overall-health",
+              "leftValue": "={{ (($json.healthScore || 0) + ($json.resourceScore || 0) + ($json.serviceScore || 0)) / 3 }}",
+              "rightValue": 80,\n              "operator": {\n                "type": "number",\n                "operation": "smaller"\n              }\n            }\n          ],\n          "combinator": "and"\        }
+      },
+      "id": "check-overall-health",
+      "name": "Check Overall Health",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate overall health score and prepare health report\nconst healthData = $input.first().json;\nconst { sessionId } = healthData;\n\nconst overallHealthScore = Math.round(\n  ((healthData.healthScore || 0) + \n   (healthData.resourceScore || 0) + \n   (healthData.serviceScore || 0)) / 3\n);\n\nconst healthReport = {\n  sessionId,\n  timestamp: new Date().toISOString(),\n  overallHealthScore,\n  status: overallHealthScore >= 80 ? 'healthy' : \n          overallHealthScore >= 60 ? 'warning' : 'critical',\n  details: {\n    connections: {\n      total: healthData.totalConnections,\n      active: healthData.activeConnections,\n      stale: healthData.staleConnections,\n      averageLatency: healthData.averageLatency,\n      score: healthData.healthScore\n    },\n    resources: healthData.resources,\n    services: healthData.services\n  },\n  alerts: generateAlerts(healthData)\n};\n\nfunction generateAlerts(healthData) {\n  const alerts = [];\n  \n  // Connection alerts\n  if (healthData.staleConnections > 0) {\n    alerts.push({\n      type: 'stale_connections',\n      severity: 'warning',\n      message: `${healthData.staleConnections} stale connections detected`,\n      count: healthData.staleConnections\n    });\n  }\n  \n  // Resource alerts\n  if (healthData.resources.memory.percentage > 90) {\n    alerts.push({\n      type: 'high_memory_usage',\n      severity: 'critical',\n      message: `Memory usage at ${Math.round(healthData.resources.memory.percentage)}%`,\n      value: healthData.resources.memory.percentage\n    });\n  }\n  \n  if (healthData.resources.cpu.percentage > 80) {\n    alerts.push({\n      type: 'high_cpu_usage',\n      severity: 'warning',\n      message: `CPU usage at ${Math.round(healthData.resources.cpu.percentage)}%`,\n      value: healthData.resources.cpu.percentage\n    });\n  }\n  \n  // Service alerts\n  Object.entries(healthData.services).forEach(([serviceName, service]) => {\n    if (service.status === 'unhealthy') {\n      alerts.push({\n        type: 'service_down',\n        severity: 'critical',\n        message: `Service ${serviceName} is down`,\n        service: serviceName,\n        error: service.error\n      });\n    }\n  });\n  \n  return alerts;\n}\n\nreturn { json: healthReport };"
+      },
+      "id": "prepare-health-report",
+      "name": "Prepare Health Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "documentId": "={{ $json.sessionId + '_' + new Date().toISOString() }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "sessionId",
+              "fieldValue": "={{ $json.sessionId }}"
+            },
+            {
+              "fieldName": "timestamp",
+              "fieldValue": "={{ $json.timestamp }}"
+            },
+            {
+              "fieldName": "overallHealthScore",
+              "fieldValue": "={{ $json.overallHealthScore }}"
+            },
+            {
+              "fieldName": "status",
+              "fieldValue": "={{ $json.status }}"
+            },
+            {
+              "fieldName": "details",
+              "fieldValue": "={{ $json.details }}"
+            },
+            {
+              "fieldName": "alerts",
+              "fieldValue": "={{ $json.alerts }}"
+            }
+          ]
+        }
+      },
+      "id": "store-health-report",
+      "name": "Store Health Report",
+      "type": "n8n-nodes-base.googleFirestore",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,\n            "leftValue": "",\n            "typeValidation": "strict"\n          },
+          "conditions": [
+            {
+              "id": "has-alerts",
+              "leftValue": "={{ $json.alerts.length }}",
+              "rightValue": 0,
+              "operator": {\n                "type": "number",\n                "operation": "larger"\n              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-alerts",
+      "name": "Check for Alerts",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "🚨 Health Alert for Session {{ $json.sessionId }}"
+            },
+            {
+              "name": "attachments",
+              "value": "={{ JSON.stringify([{ color: $json.status === 'critical' ? 'danger' : $json.status === 'warning' ? 'warning' : 'good', fields: [{ title: 'Health Score', value: $json.overallHealthScore + '%', short: true }, { title: 'Active Connections', value: $json.details.connections.active, short: true }, { title: 'Memory Usage', value: Math.round($json.details.resources.memory.percentage) + '%', short: true }, { title: 'Alerts', value: $json.alerts.map(a => a.message).join('\\n'), short: false }] }]) }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "send-slack-alert",
+      "name": "Send Slack Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2220, 220]
+    },
+    {
+      "parameters": {
+        "url": "={{ $credentials.emailService.apiUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.emailService.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "admin@dmlogn8n.com"
+            },
+            {
+              "name": "subject",
+              "value": "Critical Health Alert - Session {{ $json.sessionId }}"
+            },
+            {
+              "name": "html",
+              "value": "<h2>🚨 Critical Health Alert</h2><p><strong>Session:</strong> {{ $json.sessionId }}</p><p><strong>Health Score:</strong> {{ $json.overallHealthScore }}%</p><p><strong>Status:</strong> {{ $json.status }}</p><h3>Alerts:</h3><ul>{{ $json.alerts.map(a => '<li><strong>' + a.type + ':</strong> ' + a.message + '</li>').join('') }}</ul><p><em>Generated at: {{ $json.timestamp }}</em></p>"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "send-email-alert",
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2220, 380]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, message: 'Health check completed', sessionId: $json.sessionId, healthScore: $json.overallHealthScore, alertsSent: $json.alerts.length } }}"
+      },
+      "id": "respond-health-complete",
+      "name": "Respond Health Complete",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2440, 300]
+    }
+  ],
+  "connections": {
+    "Health Check Schedule": {
+      "main": [
+        [
+          {
+            "node": "Get Active Sessions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Sessions": {
+      "main": [
+        [
+          {
+            "node": "Check Connection Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Connection Health": {
+      "main": [
+        [
+          {
+            "node": "Check Resource Usage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Resource Usage": {
+      "main": [
+        [
+          {
+            "node": "Check Service Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Service Health": {
+      "main": [
+        [
+          {
+            "node": "Check Overall Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Overall Health": {
+      "main": [
+        [
+          {
+            "node": "Prepare Health Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Health Report": {
+      "main": [
+        [
+          {
+            "node": "Store Health Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Health Report": {
+      "main": [
+        [
+          {
+            "node": "Check for Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Slack Alert": {
+      "main": [
+        [
+          {
+            "node": "Respond Health Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Alert": {
+      "main": [
+        [
+          {
+            "node": "Respond Health Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "America/New_York",
+    "saveManualExecutions": true,
+    "callerPolicyDefaultOption": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "id": "monitoring",
+      "name": "Monitoring"
+    },
+    {
+      "id": "health-check",
+      "name": "Health Check"
+    },
+    {
+      "id": "alerts",
+      "name": "Alerts"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-23T10:00:00.000Z",
+  "versionId": "1"
+}

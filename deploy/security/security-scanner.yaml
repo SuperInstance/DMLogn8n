@@ -1,0 +1,225 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: trivy-security-scanner
+  namespace: dmlog
+  labels:
+    app: trivy-scanner
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: security-scanner
+          restartPolicy: OnFailure
+          containers:
+          - name: trivy-scanner
+            image: aquasec/trivy:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting security scan at $(date)"
+
+              # Scan all images in the cluster
+              kubectl get pods -n dmlog -o jsonpath='{range .items[*]}{.spec.containers[*].image}{"\n"}{end}' | sort -u > /tmp/images.txt
+
+              while read image; do
+                echo "Scanning image: $image"
+                trivy image --format json --output "/tmp/results/$(echo $image | tr '/' '-' | tr ':' '-').json" "$image" || true
+              done < /tmp/images.txt
+
+              # Upload results to S3
+              aws s3 sync /tmp/results/ s3://dmlog-security-scans/$(date +%Y-%m-%d)/ --region us-west-2
+
+              # Generate report
+              echo "Security scan completed at $(date)"
+              find /tmp/results -name "*.json" -exec basename {} \; | sort > /tmp/scan-summary.txt
+
+              # Send to Slack if vulnerabilities found
+              critical_count=$(find /tmp/results -name "*.json" -exec jq '.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL") | .VulnerabilityID' {} \; | wc -l)
+              if [ $critical_count -gt 0 ]; then
+                curl -X POST -H 'Content-type: application/json' --data "{\"text\":\"🚨 Critical vulnerabilities found: $critical_count\"}" "$SLACK_WEBHOOK_URL"
+              fi
+            env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: scanner-secrets
+                  key: aws-access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: scanner-secrets
+                  key: aws-secret-access-key
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: scanner-secrets
+                  key: slack-webhook-url
+            volumeMounts:
+            - name: scan-results
+              mountPath: /tmp/results
+            resources:
+              requests:
+                cpu: 500m
+                memory: 512Mi
+              limits:
+                cpu: 2000m
+                memory: 2Gi
+          volumes:
+          - name: scan-results
+            emptyDir: {}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: kube-bench-scanner
+  namespace: dmlog
+  labels:
+    app: kube-bench-scanner
+spec:
+  schedule: "0 3 * * 0"  # Weekly on Sunday at 3 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: security-scanner
+          hostPID: true
+          restartPolicy: OnFailure
+          containers:
+          - name: kube-bench
+            image: aquasec/kube-bench:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting CIS Kubernetes Benchmark scan at $(date)"
+
+              # Run kube-bench on all nodes
+              kubectl get nodes -o name | while read node; do
+                node_name=$(echo $node | cut -d'/' -f2)
+                echo "Scanning node: $node_name"
+
+                kubectl label node $node_name security-scan=true --overwrite
+
+                kubectl create job --from=cronjob/kube-bench-node-scan kube-bench-$node_name-$(date +%s) \
+                  -n dmlog --dry-run=client -o yaml | \
+                  sed "s/NODE_NAME/$node_name/g" | kubectl apply -f -
+              done
+
+              echo "CIS Kubernetes Benchmark scan initiated at $(date)"
+            env:
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: scanner-secrets
+                  key: slack-webhook-url
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 500m
+                memory: 256Mi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: falco-monitor
+  namespace: dmlog
+  labels:
+    app: falco-monitor
+spec:
+  schedule: "*/5 * * * *"  # Every 5 minutes
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: security-scanner
+          restartPolicy: OnFailure
+          containers:
+          - name: falco-monitor
+            image: falcosecurity/falco:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Checking Falco alerts at $(date)"
+
+              # Check for recent critical alerts
+              critical_alerts=$(kubectl logs -n falco daemonset/falco --since=5m | grep "Critical" | wc -l)
+
+              if [ $critical_alerts -gt 0 ]; then
+                echo "Found $critical_alerts critical security alerts in the last 5 minutes"
+
+                # Get sample alerts
+                kubectl logs -n falco daemonset/falco --since=5m | grep "Critical" | head -5 > /tmp/alerts.txt
+
+                # Send to Slack
+                curl -X POST -H 'Content-type: application/json' \
+                  --data "{\"text\":\"🚨 Critical security alerts detected:\n$(cat /tmp/alerts.txt | sed 's/"/\\"/g' | tr '\n' '\\n')\"}" \
+                  "$SLACK_WEBHOOK_URL"
+              fi
+            env:
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: scanner-secrets
+                  key: slack-webhook-url
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 200m
+                memory: 256Mi
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ServiceAccount
+metadata:
+  name: security-scanner
+  namespace: dmlog
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: security-scanner
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "label", "update"]
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["create", "get", "list"]
+- apiGroups: ["apps"]
+  resources: ["daemonsets"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: security-scanner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: security-scanner
+subjects:
+- kind: ServiceAccount
+  name: security-scanner
+  namespace: dmlog
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: scanner-secrets
+  namespace: dmlog
+type: Opaque
+data:
+  aws-access-key-id: <BASE64_ENCODED_AWS_ACCESS_KEY_ID>
+  aws-secret-access-key: <BASE64_ENCODED_AWS_SECRET_ACCESS_KEY>
+  slack-webhook-url: <BASE64_ENCODED_SLACK_WEBHOOK_URL>

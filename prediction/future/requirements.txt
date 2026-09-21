@@ -1,0 +1,45 @@
+# Core Dependencies
+numpy>=1.21.0
+pandas>=1.3.0
+scipy>=1.7.0
+scikit-learn>=1.0.0
+
+# Time Series Analysis
+statsmodels>=0.12.0
+
+# Network Analysis
+networkx>=2.6.0
+
+# Data Visualization (optional but recommended)
+matplotlib>=3.4.0
+seaborn>=0.11.0
+
+# Async Support
+aiofiles>=0.7.0
+aiohttp>=3.7.0
+
+# Machine Learning Extensions
+xgboost>=1.5.0
+lightgbm>=3.3.0
+
+# Statistical Analysis
+pymc3>=3.11.0  # For Bayesian analysis
+
+# Utilities
+python-dateutil>=2.8.0
+pytz>=2021.1
+
+# Development and Testing
+pytest>=6.2.0
+pytest-asyncio>=0.15.0
+black>=21.0.0
+flake8>=3.9.0
+
+# Performance Optimization
+numba>=0.54.0
+cython>=0.29.0
+
+# Optional: Deep Learning (for advanced models)
+# tensorflow>=2.6.0
+# torch>=1.9.0
+# transformers>=4.11.0

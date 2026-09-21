@@ -1,0 +1,147 @@
+{
+  "datacenter": "dc1",
+  "data_dir": "/opt/consul/data",
+  "log_level": "INFO",
+  "server": true,
+  "bootstrap_expect": 3,
+  "ui": {
+    "enabled": true,
+    "content_path": "/ui/",
+    "url": "https://consui.dmlogn8n.local"
+  },
+  "connect": {
+    "enabled": true,
+    "ca_provider": "consul"
+  },
+  "ports": {
+    "dns": 8600,
+    "http": 8500,
+    "https": -1,
+    "serf_lan": 8301,
+    "serf_wan": 8302,
+    "server": 8300,
+    "grpc": 8502,
+    "grpc_tls": 8503
+  },
+  "addresses": {
+    "http": "0.0.0.0",
+    "https": "0.0.0.0",
+    "grpc": "0.0.0.0"
+  },
+  "retry_join": [
+    "consul1.dmlogn8n.local",
+    "consul2.dmlogn8n.local",
+    "consul3.dmlogn8n.local"
+  ],
+  "retry_join_wan": [
+    "dc2.consul.dmlogn8n.local",
+    "dc3.consul.dmlogn8n.local"
+  ],
+  "acl": {
+    "enabled": true,
+    "default_policy": "deny",
+    "enable_token_persistence": true,
+    "down_policy": "extend-cache",
+    "tokens": {
+      "master": "consul-master-token-placeholder",
+      "agent": "consul-agent-token-placeholder"
+    }
+  },
+  "acl_replication": {
+    "enabled": true,
+    "token": "consul-replication-token-placeholder"
+  },
+  "autopilot": {
+    "cleanup_dead_servers": true,
+    "last_contact_threshold": "200ms",
+    "max_trailing_logs": 250,
+    "server_stabilization_time": "10s",
+    "redundancy_zone_tag": "az",
+    "disable_upgrade_migration": false,
+    "upgrade_version_tag": "consul-version"
+  },
+  "telemetry": {
+    "disable_hostname": true,
+    "enable_service_metrics": true,
+    "enable_agent_metrics": true,
+    "prometheus_retention_time": "24h",
+    "disable_compat_mode": true,
+    "statsd_address": "127.0.0.1:8125"
+  },
+  "leave_on_terminate": true,
+  "skip_leave_on_interrupt": false,
+  "performance": {
+    "raft_multiplier": 1
+  },
+  "recursors": [
+    "8.8.8.8",
+    "8.8.4.4"
+  ],
+  "dns_config": {
+    "allow_stale": true,
+    "max_stale": "5s",
+    "node_ttl": "30s",
+    "service_ttl": {
+      "*": "30s"
+    },
+    "enable_truncate": true,
+    "only_passing": false,
+    "recursor_timeout": "2s",
+    "udp_answer_limit": 3,
+    "compress_query_response": true,
+    "disable_compression": false
+  },
+  "service_mesh": {
+    "enabled": true,
+    "default_protocol": "http",
+    "default_mode": "transparent",
+    "transparent_proxy": {
+      "inbound_port": 20000,
+      "outbound_port": 21000
+    }
+  },
+  "catalog_sync": {
+    "enabled": true,
+    "sync_interval": "5m"
+  },
+  "event_handler": {
+    "enabled": true,
+    "buffer_size": 1000
+  },
+  "enable_agent_tls_for_checks": true,
+  "tls": {
+    "http": true,
+    "https": true,
+    "ca_file": "/etc/consul/tls/ca.pem",
+    "cert_file": "/etc/consul/tls/consul.pem",
+    "key_file": "/etc/consul/tls/consul-key.pem",
+    "verify_incoming": true,
+    "verify_outgoing": true,
+    "verify_server_hostname": true,
+    "internal_rpc": {
+      "verify_incoming": true,
+      "verify_outgoing": true,
+      "verify_server_hostname": true
+    }
+  },
+  "gossip": {
+    "encryption": {
+      "key": "consul-gossip-key-placeholder"
+    }
+  },
+  "http_config": {
+    "response_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers": "X-Requested-With, Content-Type, Authorization"
+    }
+  },
+  "discovery_max_stale": "1m",
+  "disable_remote_exec": false,
+  "disable_update_check": false,
+  "disable_anonymous_signature": false,
+  "server_name": "dmlogn8n-consul-server",
+  "verify_incoming": true,
+  "verify_outgoing": true,
+  "verify_server_hostname": true
+}

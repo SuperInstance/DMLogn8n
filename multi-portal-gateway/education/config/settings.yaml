@@ -1,0 +1,271 @@
+# DMLogn8n Educational Platform Configuration
+# Comprehensive configuration for all educational components
+
+# Database Configuration
+database:
+  type: "sqlite"
+  host: "localhost"
+  port: 5432
+  name: "dmlogn8n_education"
+  username: "dmlogn8n_user"
+  password: "secure_password"
+  pool_size: 20
+  max_overflow: 30
+  echo: false
+
+# Redis Configuration
+redis:
+  host: "localhost"
+  port: 6379
+  db: 0
+  password: null
+  max_connections: 100
+  connection_timeout: 5
+
+# File Storage Configuration
+storage:
+  base_dir: "/home/activeloguser/DMLogn8n/education_data"
+  uploads_dir: "uploads"
+  processed_dir: "processed"
+  temp_dir: "temp"
+  certificates_dir: "certificates"
+  research_papers_dir: "research_papers"
+  video_storage_dir: "videos"
+  max_file_size_mb: 100
+
+# Security Configuration
+security:
+  jwt_secret_key: "your-super-secret-jwt-key-change-in-production"
+  jwt_algorithm: "HS256"
+  jwt_expiration_hours: 24
+  password_hash_rounds: 12
+  enable_csrf_protection: true
+  allowed_origins: ["http://localhost:3000", "https://dmlogn8n.com"]
+
+# Learning Platform Configuration
+learning_platform:
+  course_completion_threshold: 0.8
+  auto_save_interval_seconds: 30
+  max_attempts_per_quiz: 3
+  session_timeout_minutes: 120
+  enable_progress_tracking: true
+  enable_achievements: true
+  max_enrollments_per_user: 50
+
+# Documentation Generator Configuration
+documentation_generator:
+  source_path: "/home/activeloguser/DMLogn8n"
+  output_dir: "generated_docs"
+  template_dir: "templates/documentation"
+  auto_generation_interval_hours: 24
+  include_api_docs: true
+  include_user_guides: true
+  include_tutorials: true
+  supported_formats: ["html", "markdown", "pdf"]
+  enable_version_control: true
+
+# Tutorial System Configuration
+tutorial_system:
+  max_concurrent_sessions: 100
+  session_timeout_minutes: 60
+  code_execution_timeout_seconds: 30
+  max_code_length: 5000
+  enable_hints: true
+  enable_progress_saving: true
+  max_attempts_per_step: 5
+
+# Knowledge Base Configuration
+knowledge_base:
+  search_index_dir: "search_index"
+  wiki_repo: "wiki_repo"
+  auto_save_interval_seconds: 60
+  max_revisions_per_article: 100
+  enable_collaborative_editing: true
+  enable_real_time_preview: true
+  supported_file_formats: [".md", ".txt", ".html"]
+
+# Video Platform Configuration
+video_platform:
+  upload_dir: "uploads"
+  processed_dir: "processed"
+  recordings_dir: "recordings"
+  temp_dir: "temp"
+  ffmpeg_path: "ffmpeg"
+  ffprobe_path: "ffprobe"
+  max_file_size_mb: 2048
+  supported_formats: [".mp4", ".mov", ".avi", ".mkv", ".webm"]
+  thumbnail_quality: 85
+  enable_transcoding: true
+  enable_streaming: true
+  max_concurrent_streams: 50
+
+# Certification System Configuration
+certification_system:
+  template_dir: "templates/certificates"
+  output_dir: "certificates"
+  blockchain_enabled: false
+  blockchain_network: "ethereum"
+  certificate_prefix: "DMLOG"
+  qr_code_enabled: true
+  digital_signature: true
+  validity_default_months: 24
+  max_attempts_per_exam: 3
+  passing_score_default: 70
+
+# Community Learning Configuration
+community_learning:
+  max_posts_per_day: 10
+  max_reply_length: 2000
+  enable_real_time_chat: true
+  enable_content_moderation: true
+  auto_moderation_enabled: true
+  toxicity_threshold: 0.7
+  spam_threshold: 0.8
+  max_file_attachments: 5
+  supported_image_formats: [".jpg", ".jpeg", ".png", ".gif"]
+  max_group_members: 100
+
+# Research Library Configuration
+research_library:
+  storage_dir: "research_papers"
+  max_file_size_mb: 50
+  supported_formats: [".pdf", ".doc", ".docx", ".txt"]
+  auto_extract_metadata: true
+  generate_summaries: true
+  extract_references: true
+  similarity_threshold: 0.7
+  enable_citation_tracking: true
+  max_citations_per_paper: 200
+  bibtex_export_enabled: true
+
+# Email Configuration
+email:
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 587
+  smtp_username: "notifications@dmlogn8n.com"
+  smtp_password: "your-email-password"
+  use_tls: true
+  from_address: "DMLogn8n Education <notifications@dmlogn8n.com>"
+  reply_to: "support@dmlogn8n.com"
+
+# Analytics Configuration
+analytics:
+  enabled: true
+  tracking_interval_minutes: 5
+  data_retention_days: 365
+  enable_user_analytics: true
+  enable_content_analytics: true
+  enable_engagement_tracking: true
+  anonymize_data: true
+
+# Integration Configuration
+integrations:
+  n8n:
+    enabled: true
+    webhook_url: "https://n8n.dmlogn8n.com/webhook"
+    api_key: "your-n8n-api-key"
+
+  arch_gateway:
+    enabled: true
+    base_url: "https://api.dmlogn8n.com"
+    api_key: "your-arch-gateway-api-key"
+
+  github:
+    enabled: true
+    client_id: "your-github-client-id"
+    client_secret: "your-github-client-secret"
+    webhook_secret: "your-github-webhook-secret"
+
+# Performance Configuration
+performance:
+  enable_caching: true
+  cache_ttl_seconds: 3600
+  enable_compression: true
+  minify_html: true
+  minify_css: true
+  minify_js: true
+  enable_cdn: false
+  cdn_url: "https://cdn.dmlogn8n.com"
+
+# Monitoring Configuration
+monitoring:
+  enable_health_checks: true
+  enable_performance_monitoring: true
+  log_level: "INFO"
+  log_retention_days: 30
+  enable_error_tracking: true
+  error_tracking_service: "sentry"
+  sentry_dsn: "your-sentry-dsn"
+
+# Development Configuration
+development:
+  debug_mode: false
+  enable_swagger_ui: true
+  enable_reloading: false
+  mock_external_apis: false
+  test_mode: false
+  demo_mode: false
+
+# Feature Flags
+features:
+  # Core Features
+  learning_paths: true
+  interactive_tutorials: true
+  video_streaming: true
+  certifications: true
+  community_features: true
+  research_library: true
+
+  # Advanced Features
+  ai_recommendations: true
+  personalized_learning: true
+  collaborative_editing: true
+  real_time_collaboration: true
+  blockchains_certificates: false
+  advanced_analytics: true
+
+  # Experimental Features
+  gamification: false
+  social_learning: false
+  mentorship_program: false
+  peer_review_system: false
+  automated_grading: true
+
+# Localization Configuration
+localization:
+  default_language: "en"
+  supported_languages: ["en", "es", "fr", "de", "zh", "ja"]
+  enable_multi_language: true
+  auto_detect_language: true
+  fallback_language: "en"
+
+# API Configuration
+api:
+  version: "v1"
+  base_path: "/api/v1"
+  enable_rate_limiting: true
+  rate_limit_per_minute: 100
+  enable_api_keys: true
+  enable_cors: true
+  enable_pagination: true
+  default_page_size: 20
+  max_page_size: 100
+
+# Content Configuration
+content:
+  default_language_level: "intermediate"
+  enable_content_moderation: true
+  require_approval_for_content: false
+  enable_version_control: true
+  max_content_length: 100000
+  enable_content_analytics: true
+
+# User Configuration
+users:
+  enable_registration: true
+  require_email_verification: true
+  enable_social_login: false
+  supported_providers: ["google", "github", "microsoft"]
+  enable_profile_customization: true
+  enable_user_analytics: true
+  default_skill_level: "beginner"

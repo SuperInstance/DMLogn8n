@@ -1,0 +1,462 @@
+{
+  "name": "Character Action Event Router",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "character-action-webhook",
+        "options": {}
+      },
+      "id": "action-webhook",
+      "name": "Character Action Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse and validate the character action event\nconst eventData = $json;\n\n// Extract event details\nconst event = {\n  event_id: eventData.id || `evt_${Date.now()}`,\n  character_id: eventData.character_id,\n  action_type: eventData.action_type,\n  action_data: eventData.data || {},\n  source_portal: eventData.source_portal,\n  timestamp: eventData.timestamp || new Date().toISOString(),\n  processed: false\n};\n\n// Validate required fields\nif (!event.character_id || !event.action_type) {\n  throw new Error('Missing required fields: character_id and action_type');\n}\n\nreturn { json: event };"
+      },
+      "id": "parse-action-event",
+      "name": "Parse Action Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "combat-action",
+              "leftValue": "={{ $json.action_type }}",
+              "rightValue": "attack",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        }
+      },
+      "id": "route-combat",
+      "name": "Route Combat Actions",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "social-action",
+              "leftValue": "={{ $json.action_type }}",
+              "rightValue": "talk",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "persuade-action",
+              "leftValue": "={{ $json.action_type }}",
+              "rightValue": "persuade",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        }
+      },
+      "id": "route-social",
+      "name": "Route Social Actions",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "movement-action",
+              "leftValue": "={{ $json.action_type }}",
+              "rightValue": "move",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "route-movement",
+      "name": "Route Movement Actions",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 600]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:9501/encounters/{{ $json.action_data.encounter_id }}/process_action",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "actor_id",
+              "value": "={{ $json.character_id }}"
+            },
+            {
+              "name": "action",
+              "value": "={{ $json.action_data }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "process-combat",
+      "name": "Process Combat Action",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/bridge/broadcast",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event_type",
+              "value": "combat_action_processed"
+            },
+            {
+              "name": "target_portals",
+              "value": "={{ ['dm', 'character'] }}"
+            },
+            {
+              "name": "data",
+              "value": "={{ { character_id: $json.character_id, action: $json.action_data, result: $json.data } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "broadcast-combat-result",
+      "name": "Broadcast Combat Result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/bridge/broadcast",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event_type",
+              "value": "social_action"
+            },
+            {
+              "name": "target_portals",
+              "value": "={{ ['dm', 'character'] }}"
+            },
+            {
+              "name": "data",
+              "value": "={{ { character_id: $json.character_id, action: $json.action_type, content: $json.action_data.message } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "process-social",
+      "name": "Process Social Action",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/bridge/broadcast",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event_type",
+              "value": "character_moved"
+            },
+            {
+              "name": "target_portals",
+              "value": "={{ ['dm', 'character'] }}"
+            },
+            {
+              "name": "data",
+              "value": "={{ { character_id: $json.character_id, destination: $json.action_data.destination } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "process-movement",
+      "name": "Process Movement Action",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/portals/{{ $json.character_id }}/character/action",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "action",
+              "value": "={{ { type: $json.action_type, data: $json.action_data } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "default-action-handler",
+      "name": "Default Action Handler",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 800]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "event_id",
+              "value": "={{ $json.event_id }}"
+            },
+            {
+              "name": "character_id",
+              "value": "={{ $json.character_id }}"
+            },
+            {
+              "name": "action_type",
+              "value": "={{ $json.action_type }}"
+            },
+            {
+              "name": "processed_at",
+              "value": "={{ new Date().toISOString() }}"
+            },
+            {
+              "name": "status",
+              "value": "processed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action-processed",
+      "name": "Log Action Processed",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1340, 400]
+    }
+  ],
+  "connections": {
+    "Character Action Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Action Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Action Event": {
+      "main": [
+        [
+          {
+            "node": "Route Combat Actions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Social Actions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Movement Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Combat Actions": {
+      "main": [
+        [
+          {
+            "node": "Process Combat Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Social Actions": {
+      "main": [
+        [
+          {
+            "node": "Process Social Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Movement Actions": {
+      "main": [
+        [
+          {
+            "node": "Process Movement Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Combat Action": {
+      "main": [
+        [
+          {
+            "node": "Broadcast Combat Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Social Action": {
+      "main": [
+        [
+          {
+            "node": "Log Action Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Movement Action": {
+      "main": [
+        [
+          {
+            "node": "Log Action Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Action Handler": {
+      "main": [
+        [
+          {
+            "node": "Log Action Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Broadcast Combat Result": {
+      "main": [
+        [
+          {
+            "node": "Log Action Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "1"
+}

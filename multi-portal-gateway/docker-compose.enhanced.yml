@@ -1,0 +1,269 @@
+# =============================================================================
+# Enhanced Multi-Portal D&D System - Production Docker Compose
+# =============================================================================
+version: '3.8'
+
+services:
+  # =============================================================================
+  # Enhanced Gateway - Main orchestrator
+  # =============================================================================
+  enhanced-gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile.enhanced
+    ports:
+      - "8001:8001"  # WebSocket router
+    environment:
+      - PYTHONPATH=/app
+      - LOG_LEVEL=INFO
+      - GATEWAY_MODE=enhanced
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - NEO4J_HOST=neo4j
+      - QDRANT_HOST=qdrant
+      - GLM4_HOST=localhost:11434
+      - GLM4_API_KEY=${GLM4_API_KEY}
+    depends_on:
+      - postgres
+      - redis
+      - neo4j
+      - qdrant
+    networks:
+      - dmlogn8n-internal
+      - dmlogn8n-external
+
+  # =============================================================================
+  # Character Portals (9000-9500)
+  # =============================================================================
+  character-portal-9000:
+    build: ./character-terminal
+    environment:
+      - CHARACTER_ID=character_9000
+      - PORT=9000
+      - GATEWAY_URL=ws://localhost:8001/ws/characters/
+      - TERMINAL_THEME=fantasy
+    depends_on:
+      - enhanced-gateway
+    networks:
+      - dmlogn8n-internal
+
+  character-portal-9001:
+    build: ./character-terminal
+    environment:
+      - CHARACTER_ID=character_9001
+      - PORT=9001
+      - GATEWAY_URL=ws://localhost:8001/ws/characters/
+      - TERMINAL_THEME=fantasy
+    depends_on:
+      - enhanced-gateway
+    networks:
+      - dmlogn8n-internal
+
+  # ... Repeat for ports 9002-9500
+  character-portal-9500:
+    build: ./character-terminal
+    environment:
+      - CHARACTER_ID=character_9500
+      - PORT=9500
+      - GATEWAY_URL=ws://localhost:8001/ws/characters/
+      - TERMINAL_THEME=fantasy
+    depends_on:
+      - enhanced-gateway
+    networks:
+      - dmlogn8n-internal
+
+  # =============================================================================
+  # DM Portal (9501)
+  # =============================================================================
+  dm-portal:
+    build: ./dm-interface
+    environment:
+      - PORT=9501
+      - GATEWAY_URL=ws://localhost:8001/ws/dm/
+      - WORLD_EDITOR=true
+      - ENCOUNTER_CONTROL=true
+      - PLAYER_MANAGEMENT=true
+    depends_on:
+      - enhanced-gateway
+    networks:
+      - dmlogn8n-internal
+
+  # =============================================================================
+  # Coder Bot Service
+  # =============================================================================
+  coder-bot:
+    build: ./coder-service
+    environment:
+      - GLM4_ENDPOINT=${GLM4_ENDPOINT:-http://localhost:11434/api/generate}
+      - GLM4_API_KEY=${GLM4_API_KEY}
+      - MODEL_NAME=glm4
+      - SAFETY_VALIDATION=true
+      - CODE_REVIEW=true
+    ports:
+      - "7900:7900"  # Coder bot API
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - dmlogn8n-internal
+
+  # =============================================================================
+  # Player Dashboard (3000)
+  # =============================================================================
+  player-dashboard:
+    build: ./player-interface
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_URL=http://localhost:8001
+      - WEBSOCKET_URL=ws://localhost:8001/ws/players/
+      - AI_TRANSPARENCY=true
+      - OBSERVABLE_AI=true
+    depends_on:
+      - enhanced-gateway
+    networks:
+      - dmlogn8n-internal
+
+  # =============================================================================
+  # AI Transparency Dashboard (3001)
+  # =============================================================================
+  ai-transparency:
+    build: ./ai-transparency-interface
+    ports:
+      - "3001:3001"
+    environment:
+      - WEBSOCKET_URL=ws://localhost:8001/ws/ai-thoughts/
+      - REFRESH_RATE=1000
+      - HISTORY_LIMIT=100
+    depends_on:
+      - enhanced-gateway
+    networks:
+      - dmlogn8n-internal
+
+  # =============================================================================
+  # Monitoring Stack
+  # =============================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb-path=/prometheus/tsdb'
+      - '--web.enable-lifecycle'
+      - '--storage.path=/prometheus'
+    networks:
+      - dmlogn8n-internal
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3002"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123456
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=true
+      - GF_DASHBOARDS_JSON_PATH=/etc/grafana/provisioning/dashboards
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+    depends_on:
+      - prometheus
+    networks:
+      - dmlogn8n-internal
+
+  # =============================================================================
+  # Vector Database for Memories
+  # =============================================================================
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    environment:
+      - QDRANT__SERVICE__HTTP__PORT=6333
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - dmlogn8n-internal
+
+  # =============================================================================
+  # Neo4j Knowledge Graph
+  # =============================================================================
+  neo4j:
+    image: neo4j:5-community
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/password
+      - NEO4J_PLUGINS=["apoc", "graph-data-science"]
+      - NEO4J_dbms_security__allow__csv_import__from__file__urls=true
+      - NEO4J_dbms_security__allow__file__urls=true
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+      - neo4j_plugins:/plugins
+    networks:
+      - dmlogn8n-internal
+
+  # =============================================================================
+  # PostgreSQL Main Database
+  # =============================================================================
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=dmlogn8n_enhanced
+      - POSTGRES_USER=dmlogn8n_user
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --locale=C
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    networks:
+      - dmlogn8n-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dmlogn8n_user -d dmlogn8n"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # Redis for Caching
+  # =============================================================================
+  redis:
+    image: redis:7-alpine
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD}
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - dmlogn8n-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  dmlogn8n-internal:
+    driver: bridge
+  dmlogn8n-external:
+    driver: bridge
+
+# =============================================================================
+# Persistent Volumes
+# =============================================================================
+volumes:
+  postgres_data:
+  neo4j_data:
+  qdrant_data:
+  redis_data:
+  grafana_data:
+  prometheus_data:

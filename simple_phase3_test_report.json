@@ -1,0 +1,149 @@
+{
+  "test_run": "2025-10-23T02:11:16.313415",
+  "summary": {
+    "total": 23,
+    "passed": 23,
+    "failed": 0,
+    "success_rate": 100.0
+  },
+  "results": [
+    {
+      "test": "Basic d20 roll",
+      "status": "PASS",
+      "message": "Rolled 16",
+      "timestamp": "2025-10-23T02:11:16.313200"
+    },
+    {
+      "test": "Multiple dice roll",
+      "status": "PASS",
+      "message": "2d6 = [1, 2] = 3",
+      "timestamp": "2025-10-23T02:11:16.313235"
+    },
+    {
+      "test": "Advantage roll",
+      "status": "PASS",
+      "message": "Rolls: 5, 8 -> 8",
+      "timestamp": "2025-10-23T02:11:16.313240"
+    },
+    {
+      "test": "Disadvantage roll",
+      "status": "PASS",
+      "message": "Rolls: 4, 5 -> 4",
+      "timestamp": "2025-10-23T02:11:16.313243"
+    },
+    {
+      "test": "Critical detection",
+      "status": "PASS",
+      "message": "Roll 15: Crit=False, Fumble=False",
+      "timestamp": "2025-10-23T02:11:16.313249"
+    },
+    {
+      "test": "Ability modifier calculation",
+      "status": "PASS",
+      "message": "All modifiers correct",
+      "timestamp": "2025-10-23T02:11:16.313254"
+    },
+    {
+      "test": "Proficiency bonus progression",
+      "status": "PASS",
+      "message": "Valid 5e progression",
+      "timestamp": "2025-10-23T02:11:16.313261"
+    },
+    {
+      "test": "CR to XP mapping",
+      "status": "PASS",
+      "message": "Valid XP values",
+      "timestamp": "2025-10-23T02:11:16.313265"
+    },
+    {
+      "test": "Armor class bounds",
+      "status": "PASS",
+      "message": "Valid AC range",
+      "timestamp": "2025-10-23T02:11:16.313266"
+    },
+    {
+      "test": "Hit points",
+      "status": "PASS",
+      "message": "Valid HP values",
+      "timestamp": "2025-10-23T02:11:16.313268"
+    },
+    {
+      "test": "Initiative ordering",
+      "status": "PASS",
+      "message": "Order: ['Fighter', 'Wizard', 'Cleric', 'Goblin']",
+      "timestamp": "2025-10-23T02:11:16.313279"
+    },
+    {
+      "test": "Damage calculation",
+      "status": "PASS",
+      "message": "25 HP - 8 damage = 17 HP",
+      "timestamp": "2025-10-23T02:11:16.313281"
+    },
+    {
+      "test": "Healing calculation",
+      "status": "PASS",
+      "message": "10 HP + 8 healing = 18 HP",
+      "timestamp": "2025-10-23T02:11:16.313282"
+    },
+    {
+      "test": "DC calculation",
+      "status": "PASS",
+      "message": "Valid DC values",
+      "timestamp": "2025-10-23T02:11:16.313285"
+    },
+    {
+      "test": "Challenge progression",
+      "status": "PASS",
+      "message": "Successes: 3/3, Failures: 1/3",
+      "timestamp": "2025-10-23T02:11:16.313287"
+    },
+    {
+      "test": "Standard array",
+      "status": "PASS",
+      "message": "Scores: [15, 14, 13, 12, 10, 8]",
+      "timestamp": "2025-10-23T02:11:16.313292"
+    },
+    {
+      "test": "Racial traits",
+      "status": "PASS",
+      "message": "Final scores: {'strength': 12, 'dexterity': 12, 'constitution': 10}",
+      "timestamp": "2025-10-23T02:11:16.313297"
+    },
+    {
+      "test": "Class features",
+      "status": "PASS",
+      "message": "Features at level 5: 6",
+      "timestamp": "2025-10-23T02:11:16.313300"
+    },
+    {
+      "test": "Encounter balancing",
+      "status": "PASS",
+      "message": "XP: 1200 -> Adjusted: 1800.0",
+      "timestamp": "2025-10-23T02:11:16.313372"
+    },
+    {
+      "test": "Loot generation",
+      "status": "PASS",
+      "message": "Generated loot worth ~249 gp",
+      "timestamp": "2025-10-23T02:11:16.313384"
+    },
+    {
+      "test": "NPC generation",
+      "status": "PASS",
+      "message": "Generated elf merchant",
+      "timestamp": "2025-10-23T02:11:16.313390"
+    },
+    {
+      "test": "Combat scenario",
+      "status": "PASS",
+      "message": "Combat simulation completed",
+      "timestamp": "2025-10-23T02:11:16.313399"
+    },
+    {
+      "test": "Skill challenge scenario",
+      "status": "PASS",
+      "message": "Challenge lost",
+      "timestamp": "2025-10-23T02:11:16.313403"
+    }
+  ]
+}

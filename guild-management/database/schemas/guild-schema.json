@@ -1,0 +1,870 @@
+{
+  "collections": {
+    "guilds": {
+      "description": "Core guild information and settings",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["id", "name", "tag", "leaderId", "status", "created"],
+          "properties": {
+            "id": {
+              "bsonType": "string",
+              "description": "Unique guild identifier",
+              "pattern": "^guild_[a-z0-9]{9,}$"
+            },
+            "name": {
+              "bsonType": "string",
+              "description": "Guild display name",
+              "minLength": 3,
+              "maxLength": 32,
+              "pattern": "^[a-zA-Z0-9\\s]{3,32}$"
+            },
+            "tag": {
+              "bsonType": "string",
+              "description": "Guild tag (2-5 uppercase characters)",
+              "minLength": 2,
+              "maxLength": 5,
+              "pattern": "^[A-Z0-9]{2,5}$"
+            },
+            "description": {
+              "bsonType": "string",
+              "description": "Guild description",
+              "maxLength": 500
+            },
+            "charter": {
+              "bsonType": "string",
+              "description": "Guild charter and rules",
+              "maxLength": 2000
+            },
+            "leaderId": {
+              "bsonType": "string",
+              "description": "Guild leader player ID"
+            },
+            "requirements": {
+              "bsonType": "object",
+              "description": "Guild joining requirements",
+              "properties": {
+                "minLevel": {
+                  "bsonType": "int",
+                  "minimum": 1,
+                  "maximum": 100,
+                  "description": "Minimum player level required"
+                },
+                "classRequirements": {
+                  "bsonType": "array",
+                  "description": "Required player classes",
+                  "items": {
+                    "bsonType": "string"
+                  }
+                },
+                "approvalRequired": {
+                  "bsonType": "bool",
+                  "description": "Whether approval is required to join"
+                },
+                "applicationForm": {
+                  "bsonType": "object",
+                  "description": "Custom application form fields"
+                },
+                "trialPeriod": {
+                  "bsonType": "int",
+                  "minimum": 1,
+                  "maximum": 30,
+                  "description": "Trial period in days"
+                }
+              }
+            },
+            "settings": {
+              "bsonType": "object",
+              "description": "Guild configuration settings",
+              "properties": {
+                "memberLimit": {
+                  "bsonType": "int",
+                  "minimum": 10,
+                  "maximum": 500,
+                  "description": "Maximum number of members"
+                },
+                "bankAccess": {
+                  "bsonType": "string",
+                  "enum": ["all", "officers", "leader"],
+                  "description": "Who can access guild bank"
+                },
+                "inviteOnly": {
+                  "bsonType": "bool",
+                  "description": "Whether guild is invite-only"
+                },
+                "voiceChatRequired": {
+                  "bsonType": "bool",
+                  "description": "Whether voice chat is required"
+                },
+                "activityRequirement": {
+                  "bsonType": "int",
+                  "minimum": 0,
+                  "description": "Minimum activity requirement (hours per week)"
+                }
+              }
+            },
+            "status": {
+              "bsonType": "string",
+              "enum": ["active", "inactive", "suspended", "dissolved"],
+              "description": "Guild status"
+            },
+            "level": {
+              "bsonType": "int",
+              "minimum": 1,
+              "maximum": 100,
+              "description": "Guild level"
+            },
+            "experience": {
+              "bsonType": "long",
+              "minimum": 0,
+              "description": "Guild experience points"
+            },
+            "allianceId": {
+              "bsonType": "string",
+              "description": "Alliance ID if guild is in an alliance"
+            },
+            "allianceRole": {
+              "bsonType": "string",
+              "enum": ["founder", "leader", "member"],
+              "description": "Role in alliance"
+            },
+            "allianceJoined": {
+              "bsonType": "date",
+              "description": "When guild joined alliance"
+            },
+            "achievements": {
+              "bsonType": "array",
+              "description": "Guild achievements",
+              "items": {
+                "bsonType": "object",
+                "properties": {
+                  "id": {
+                    "bsonType": "string"
+                  },
+                  "name": {
+                    "bsonType": "string"
+                  },
+                  "unlockedAt": {
+                    "bsonType": "date"
+                  }
+                }
+              }
+            },
+            "statistics": {
+              "bsonType": "object",
+              "description": "Guild statistics",
+              "properties": {
+                "totalMembers": {
+                  "bsonType": "int"
+                },
+                "activeMembers": {
+                  "bsonType": "int"
+                },
+                "totalExperience": {
+                  "bsonType": "long"
+                },
+                "totalGold": {
+                  "bsonType": "long"
+                },
+                "eventsCreated": {
+                  "bsonType": "int"
+                },
+                "questsCompleted": {
+                  "bsonType": "int"
+                }
+              }
+            },
+            "created": {
+              "bsonType": "date",
+              "description": "Guild creation date"
+            },
+            "lastModified": {
+              "bsonType": "date",
+              "description": "Last modification date"
+            }
+          }
+        }
+      },
+      "indexes": [
+        {
+          "key": { "id": 1 },
+          "unique": true,
+          "name": "guild_id_unique"
+        },
+        {
+          "key": { "name": 1 },
+          "unique": true,
+          "name": "guild_name_unique"
+        },
+        {
+          "key": { "tag": 1 },
+          "unique": true,
+          "name": "guild_tag_unique"
+        },
+        {
+          "key": { "leaderId": 1 },
+          "name": "guild_leader"
+        },
+        {
+          "key": { "status": 1, "level": -1 },
+          "name": "guild_status_level"
+        },
+        {
+          "key": { "allianceId": 1 },
+          "name": "guild_alliance"
+        }
+      ]
+    },
+    "guild_members": {
+      "description": "Guild member information and status",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["guildId", "playerId", "rank", "status", "joined"],
+          "properties": {
+            "guildId": {
+              "bsonType": "string",
+              "description": "Guild ID"
+            },
+            "playerId": {
+              "bsonType": "string",
+              "description": "Player ID"
+            },
+            "playerName": {
+              "bsonType": "string",
+              "description": "Player name"
+            },
+            "rank": {
+              "bsonType": "string",
+              "enum": ["Leader", "Officer", "Veteran", "Member", "Initiate"],
+              "description": "Member rank"
+            },
+            "status": {
+              "bsonType": "string",
+              "enum": ["active", "inactive", "suspended", "left"],
+              "description": "Member status"
+            },
+            "joined": {
+              "bsonType": "date",
+              "description": "When member joined guild"
+            },
+            "leftAt": {
+              "bsonType": "date",
+              "description": "When member left guild (if applicable)"
+            },
+            "contribution": {
+              "bsonType": "object",
+              "description": "Member contributions",
+              "properties": {
+                "experience": {
+                  "bsonType": "long",
+                  "minimum": 0
+                },
+                "gold": {
+                  "bsonType": "long",
+                  "minimum": 0
+                },
+                "items": {
+                  "bsonType": "array",
+                  "items": {
+                    "bsonType": "object"
+                  }
+                },
+                "activities": {
+                  "bsonType": "int",
+                  "minimum": 0
+                }
+              }
+            },
+            "permissions": {
+              "bsonType": "array",
+              "description": "Member permissions",
+              "items": {
+                "bsonType": "string"
+              }
+            },
+            "notes": {
+              "bsonType": "string",
+              "description": "Officer notes about member",
+              "maxLength": 500
+            },
+            "lastActivity": {
+              "bsonType": "date",
+              "description": "Last activity timestamp"
+            },
+            "trialEnds": {
+              "bsonType": "date",
+              "description": "When trial period ends (for initiates)"
+            },
+            "customTitle": {
+              "bsonType": "string",
+              "description": "Custom member title",
+              "maxLength": 50
+            },
+            "statistics": {
+              "bsonType": "object",
+              "description": "Member statistics",
+              "properties": {
+                "chatMessages": {
+                  "bsonType": "int"
+                },
+                "eventsParticipated": {
+                  "bsonType": "int"
+                },
+                "questsCompleted": {
+                  "bsonType": "int"
+                },
+                "donationsTotal": {
+                  "bsonType": "long"
+                }
+              }
+            }
+          }
+        }
+      },
+      "indexes": [
+        {
+          "key": { "guildId": 1, "playerId": 1 },
+          "unique": true,
+          "name": "guild_member_unique"
+        },
+        {
+          "key": { "guildId": 1, "rank": 1 },
+          "name": "guild_member_rank"
+        },
+        {
+          "key": { "guildId": 1, "status": 1 },
+          "name": "guild_member_status"
+        },
+        {
+          "key": { "playerId": 1 },
+          "name": "member_player"
+        },
+        {
+          "key": { "lastActivity": 1 },
+          "name": "member_activity"
+        }
+      ]
+    },
+    "guild_ranks": {
+      "description": "Custom guild ranks and permissions",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["guildId", "name", "level", "permissions"],
+          "properties": {
+            "guildId": {
+              "bsonType": "string",
+              "description": "Guild ID"
+            },
+            "name": {
+              "bsonType": "string",
+              "description": "Rank name",
+              "maxLength": 50
+            },
+            "level": {
+              "bsonType": "int",
+              "minimum": 1,
+              "maximum": 100,
+              "description": "Rank hierarchy level"
+            },
+            "permissions": {
+              "bsonType": "array",
+              "description": "Rank permissions",
+              "items": {
+                "bsonType": "string",
+                "enum": [
+                  "invite_members",
+                  "kick_members",
+                  "promote_members",
+                  "demote_members",
+                  "manage_ranks",
+                  "manage_bank",
+                  "manage_settings",
+                  "disband_guild",
+                  "start_wars",
+                  "accept_alliances",
+                  "create_events",
+                  "moderate_chat",
+                  "view_audit",
+                  "manage_recruitment",
+                  "create_quests",
+                  "manage_treasury",
+                  "resolve_conflicts",
+                  "mass_operations",
+                  "export_data"
+                ]
+              }
+            },
+            "color": {
+              "bsonType": "string",
+              "description": "Rank color hex code",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            },
+            "icon": {
+              "bsonType": "string",
+              "description": "Rank icon emoji or symbol",
+              "maxLength": 10
+            },
+            "description": {
+              "bsonType": "string",
+              "description": "Rank description",
+              "maxLength": 200
+            },
+            "isCustom": {
+              "bsonType": "bool",
+              "description": "Whether this is a custom rank"
+            },
+            "created": {
+              "bsonType": "date",
+              "description": "When rank was created"
+            }
+          }
+        }
+      },
+      "indexes": [
+        {
+          "key": { "guildId": 1, "name": 1 },
+          "unique": true,
+          "name": "guild_rank_unique"
+        },
+        {
+          "key": { "guildId": 1, "level": -1 },
+          "name": "guild_rank_hierarchy"
+        }
+      ]
+    },
+    "guild_banks": {
+      "description": "Guild bank storage and transactions",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["guildId", "gold", "tabs", "created"],
+          "properties": {
+            "guildId": {
+              "bsonType": "string",
+              "description": "Guild ID"
+            },
+            "gold": {
+              "bsonType": "long",
+              "minimum": 0,
+              "description": "Gold in guild bank"
+            },
+            "tabs": {
+              "bsonType": "array",
+              "description": "Bank tabs",
+              "items": {
+                "bsonType": "object",
+                "required": ["id", "name", "maxSlots"],
+                "properties": {
+                  "id": {
+                    "bsonType": "string",
+                    "description": "Tab ID"
+                  },
+                  "name": {
+                    "bsonType": "string",
+                    "description": "Tab name",
+                    "maxLength": 50
+                  },
+                  "icon": {
+                    "bsonType": "string",
+                    "description": "Tab icon",
+                    "maxLength": 10
+                  },
+                  "permissions": {
+                    "bsonType": "string",
+                    "enum": ["all", "members", "officers", "leader"],
+                    "description": "Who can access this tab"
+                  },
+                  "items": {
+                    "bsonType": "array",
+                    "description": "Items in this tab",
+                    "items": {
+                      "bsonType": "object",
+                      "properties": {
+                        "itemId": {
+                          "bsonType": "string"
+                        },
+                        "quantity": {
+                          "bsonType": "int",
+                          "minimum": 1
+                        },
+                        "added": {
+                          "bsonType": "date"
+                        },
+                        "addedBy": {
+                          "bsonType": "string"
+                        }
+                      }
+                    }
+                  },
+                  "maxSlots": {
+                    "bsonType": "int",
+                    "minimum": 1,
+                    "description": "Maximum item slots"
+                  }
+                }
+              }
+            },
+            "transactionLog": {
+              "bsonType": "array",
+              "description": "Recent transactions (limited, full log in separate collection)"
+            },
+            "settings": {
+              "bsonType": "object",
+              "description": "Bank settings",
+              "properties": {
+                "depositPermissions": {
+                  "bsonType": "string",
+                  "enum": ["all", "members", "officers", "leader"]
+                },
+                "withdrawPermissions": {
+                  "bsonType": "string",
+                  "enum": ["all", "members", "officers", "leader"]
+                },
+                "maxDailyWithdrawals": {
+                  "bsonType": "int",
+                  "minimum": 0
+                },
+                "logTransactions": {
+                  "bsonType": "bool"
+                },
+                "approvalThreshold": {
+                  "bsonType": "long",
+                  "minimum": 0,
+                  "description": "Amount requiring approval"
+                },
+                "officerThreshold": {
+                  "bsonType": "long",
+                  "minimum": 0,
+                  "description": "Amount requiring leader approval for officers"
+                }
+              }
+            },
+            "created": {
+              "bsonType": "date",
+              "description": "Bank creation date"
+            },
+            "lastModified": {
+              "bsonType": "date",
+              "description": "Last modification date"
+            }
+          }
+        }
+      },
+      "indexes": [
+        {
+          "key": { "guildId": 1 },
+          "unique": true,
+          "name": "guild_bank_unique"
+        }
+      ]
+    },
+    "guild_bank_transactions": {
+      "description": "Complete log of guild bank transactions",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["guildId", "type", "timestamp"],
+          "properties": {
+            "id": {
+              "bsonType": "string",
+              "description": "Transaction ID"
+            },
+            "guildId": {
+              "bsonType": "string",
+              "description": "Guild ID"
+            },
+            "playerId": {
+              "bsonType": "string",
+              "description": "Player ID who initiated transaction"
+            },
+            "type": {
+              "bsonType": "string",
+              "enum": ["deposit", "withdrawal", "move"],
+              "description": "Transaction type"
+            },
+            "amount": {
+              "bsonType": "long",
+              "description": "Amount (for gold transactions)"
+            },
+            "itemType": {
+              "bsonType": "string",
+              "description": "Type of item transaction",
+              "enum": ["gold", "item"]
+            },
+            "itemId": {
+              "bsonType": "string",
+              "description": "Item ID (for item transactions)"
+            },
+            "quantity": {
+              "bsonType": "int",
+              "minimum": 1,
+              "description": "Item quantity"
+            },
+            "fromTabId": {
+              "bsonType": "string",
+              "description": "Source tab ID (for move operations)"
+            },
+            "toTabId": {
+              "bsonType": "string",
+              "description": "Destination tab ID (for move operations)"
+            },
+            "reason": {
+              "bsonType": "string",
+              "description": "Transaction reason",
+              "maxLength": 200
+            },
+            "note": {
+              "bsonType": "string",
+              "description": "Additional notes",
+              "maxLength": 500
+            },
+            "approvedBy": {
+              "bsonType": "string",
+              "description": "Who approved the transaction"
+            },
+            "timestamp": {
+              "bsonType": "date",
+              "description": "Transaction timestamp"
+            },
+            "metadata": {
+              "bsonType": "object",
+              "description": "Additional transaction metadata"
+            }
+          }
+        }
+      },
+      "indexes": [
+        {
+          "key": { "guildId": 1, "timestamp": -1 },
+          "name": "bank_guild_time"
+        },
+        {
+          "key": { "playerId": 1, "timestamp": -1 },
+          "name": "bank_player_time"
+        },
+        {
+          "key": { "type": 1, "timestamp": -1 },
+          "name": "bank_type_time"
+        },
+        {
+          "key": { "timestamp": 1 },
+          "name": "bank_timestamp_ttl",
+          "expireAfterSeconds": 31536000
+        }
+      ]
+    },
+    "guild_halls": {
+      "description": "Guild halls and strongholds",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["id", "guildId", "name", "type", "location", "status", "created"],
+          "properties": {
+            "id": {
+              "bsonType": "string",
+              "description": "Hall ID"
+            },
+            "guildId": {
+              "bsonType": "string",
+              "description": "Guild ID"
+            },
+            "name": {
+              "bsonType": "string",
+              "description": "Hall name",
+              "maxLength": 100
+            },
+            "type": {
+              "bsonType": "string",
+              "enum": ["basic", "premium", "fortress", "palace"],
+              "description": "Hall type"
+            },
+            "location": {
+              "bsonType": "string",
+              "description": "Hall location",
+              "maxLength": 100
+            },
+            "level": {
+              "bsonType": "int",
+              "minimum": 1,
+              "maximum": 20,
+              "description": "Hall level"
+            },
+            "experience": {
+              "bsonType": "long",
+              "minimum": 0,
+              "description": "Hall experience"
+            },
+            "rooms": {
+              "bsonType": "array",
+              "description": "Hall rooms",
+              "items": {
+                "bsonType": "object",
+                "properties": {
+                  "id": {
+                    "bsonType": "string"
+                  },
+                  "name": {
+                    "bsonType": "string"
+                  },
+                  "size": {
+                    "bsonType": "string",
+                    "enum": ["small", "medium", "large"]
+                  },
+                  "decorations": {
+                    "bsonType": "array"
+                  }
+                }
+              }
+            },
+            "decorations": {
+              "bsonType": "array",
+              "description": "Hall decorations",
+              "items": {
+                "bsonType": "object",
+                "properties": {
+                  "id": {
+                    "bsonType": "string"
+                  },
+                  "itemId": {
+                    "bsonType": "string"
+                  },
+                  "position": {
+                    "bsonType": "object"
+                  },
+                  "rotation": {
+                    "bsonType": "object"
+                  },
+                  "room": {
+                    "bsonType": "string"
+                  },
+                  "placedBy": {
+                    "bsonType": "string"
+                  },
+                  "placedAt": {
+                    "bsonType": "date"
+                  }
+                }
+              }
+            },
+            "facilities": {
+              "bsonType": "array",
+              "description": "Hall facilities",
+              "items": {
+                "bsonType": "object",
+                "properties": {
+                  "id": {
+                    "bsonType": "string"
+                  },
+                  "type": {
+                    "bsonType": "string"
+                  },
+                  "name": {
+                    "bsonType": "string"
+                  },
+                  "level": {
+                    "bsonType": "int"
+                  },
+                  "uses": {
+                    "bsonType": "int"
+                  },
+                  "maxUses": {
+                    "bsonType": "int"
+                  },
+                  "builtBy": {
+                    "bsonType": "string"
+                  },
+                  "builtAt": {
+                    "bsonType": "date"
+                  }
+                }
+              }
+            },
+            "storage": {
+              "bsonType": "object",
+              "description": "Hall storage",
+              "properties": {
+                "gold": {
+                  "bsonType": "long",
+                  "minimum": 0
+                },
+                "resources": {
+                  "bsonType": "object"
+                },
+                "items": {
+                  "bsonType": "array"
+                }
+              }
+            },
+            "upgrades": {
+              "bsonType": "object",
+              "description": "Hall upgrades",
+              "properties": {
+                "current": {
+                  "bsonType": "array",
+                  "items": {
+                    "bsonType": "string"
+                  }
+                },
+                "available": {
+                  "bsonType": "array",
+                  "items": {
+                    "bsonType": "string"
+                  }
+                }
+              }
+            },
+            "settings": {
+              "bsonType": "object",
+              "description": "Hall settings",
+              "properties": {
+                "publicAccess": {
+                  "bsonType": "bool"
+                },
+                "visitorPermissions": {
+                  "bsonType": "array"
+                },
+                "teleportEnabled": {
+                  "bsonType": "bool"
+                },
+                "maintenanceCost": {
+                  "bsonType": "long",
+                  "minimum": 0
+                }
+              }
+            },
+            "status": {
+              "bsonType": "string",
+              "enum": ["active", "degraded", "maintenance", "inactive"],
+              "description": "Hall status"
+            },
+            "created": {
+              "bsonType": "date",
+              "description": "Hall creation date"
+            },
+            "lastModified": {
+              "bsonType": "date",
+              "description": "Last modification date"
+            },
+            "lastMaintenance": {
+              "bsonType": "date",
+              "description": "Last maintenance date"
+            }
+          }
+        }
+      },
+      "indexes": [
+        {
+          "key": { "guildId": 1 },
+          "unique": true,
+          "name": "guild_hall_unique"
+        },
+        {
+          "key": { "status": 1 },
+          "name": "hall_status"
+        }
+      ]
+    }
+  }
+}

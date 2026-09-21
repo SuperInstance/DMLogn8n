@@ -1,0 +1,156 @@
+{
+  "name": "Match Completion Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "match-complete",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Match Completion Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Validate match completion request\nconst { matchId, results, finalStats } = $input.first().json;\n\nif (!matchId || !results) {\n  throw new Error('Match ID and results are required');\n}\n\n// Validate results structure\nif (!results.playerResults || !Array.isArray(results.playerResults)) {\n  throw new Error('Invalid results structure');\n}\n\n// Calculate additional statistics\nconst completionTime = new Date().toISOString();\nconst totalKills = results.playerResults.reduce((sum, player) => sum + player.statistics.kills, 0);\nconst totalDamage = results.playerResults.reduce((sum, player) => sum + player.statistics.damageDealt, 0);\nconst avgMatchDuration = results.duration / 1000; // Convert to seconds\n\nreturn {\n  matchId,\n  results,\n  finalStats,\n  completionTime,\n  calculatedStats: {\n    totalKills,\n    totalDamage,\n    avgMatchDuration,\n    playerCount: results.playerResults.length\n  },\n  processed: false\n};"
+      },
+      "id": "function-1",
+      "name": "Validate Completion Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "resource": "document",
+        "database": "dmlogn8n_arena",
+        "collection": "matches",
+        "documentId": "={{ $json.matchId }}",
+        "returnAll": true
+      },
+      "id": "mongodb-1",
+      "name": "Retrieve Match Data",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "mongodb": {
+          "id": "mongodb_credential_id",
+          "name": "MongoDB Atlas"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "if-1",
+      "name": "Match Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Update player rankings for each participant\nconst matchData = $input.first().json;\nconst completionData = $input.item.json;\nconst rankingUpdates = [];\n\ncompletionData.results.playerResults.forEach(playerResult => {\n  const player = matchData.players.find(p => p.id === playerResult.playerId);\n  if (player) {\n    rankingUpdates.push({\n      playerId: playerResult.playerId,\n      playerName: player.name,\n      characterClass: player.character.class,\n      matchResult: {\n        placement: playerResult.placement,\n        kills: playerResult.statistics.kills,\n        deaths: playerResult.statistics.deaths,\n        assists: playerResult.statistics.assists,\n        kda: playerResult.statistics.kda,\n        damageDealt: playerResult.statistics.damageDealt,\n        healingDone: playerResult.statistics.healingDone,\n        mvp: playerResult.mvp || false,\n        score: playerResult.statistics.score,\n        arenaType: matchData.arenaType,\n        opponentAverageElo: completionData.calculatedStats.opponentAverageElo || 1500\n      }\n    });\n  }\n});\n\nreturn { rankingUpdates };"
+      },
+      "id": "function-2",
+      "name": "Prepare Ranking Updates",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ranking/update-player-rankings",
+        "body": {
+          "updates": "={{ $json.rankingUpdates }}"
+        }
+      },
+      "id": "http-request-1",
+      "name": "Update Player Rankings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1360,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "resource": "document",
+        "database": "dmlogn8n_arena",
+        "collection": "matches",
+        "documentId": "={{ $json.matchId }}",
+        "updateFields": {
+          "status": "completed",
+          "completedAt": "={{ $json.completionTime }}",
+          "results": "={{ $json.results }}",
+          "finalStats": "={{ $json.finalStats }}",
+          "calculatedStats": "={{ $json.calculatedStats }}",
+          "rankingUpdates": "={{ $node[\"Update Player Rankings\"].json.data }}"
+        }
+      },
+      "id": "mongodb-2",
+      "name": "Update Match Record",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1580,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process achievements for each player\nconst playerResults = $input.first().json.results.playerResults;\nconst achievementUnlocks = [];\n\nplayerResults.forEach(playerResult => {\n  // Check for various achievement conditions\n  const achievements = [];\n  \n  // First blood achievement\n  if (playerResult.statistics.kills === 1 && playerResult.placement === 1) {\n    achievements.push({\n      id: 'first_blood_victory',\n      name: 'First Blood Victory',\n      description: 'Win a match with exactly 1 kill',\n      rarity: 'common'\n    });\n  }\n  \n  // Dominating performance\n  if (playerResult.statistics.kills >= 10 && playerResult.statistics.deaths <= 2) {\n    achievements.push({\n      id: 'dominating',\n      name: 'Dominating Performance',\n      description: 'Get 10+ kills with 2 or fewer deaths',\n      rarity: 'rare'\n    });\n  }\n  \n  // Untouchable\n  if (playerResult.statistics.kills >= 5 && playerResult.statistics.deaths === 0) {\n    achievements.push({\n      id: 'untouchable',\n      name: 'Untouchable',\n      description: 'Get 5+ kills without dying',\n      rarity: 'epic'\n    });\n  }\n  \n  // Damage dealer\n  if (playerResult.statistics.damageDealt >= 5000) {\n    achievements.push({\n      id: 'damage_dealer',\n      name: 'Damage Dealer',\n      description: 'Deal 5000+ damage in a single match',\n      rarity: 'uncommon'\n    });\n  }\n  \n  // Team player (high assists)\n  if (playerResult.statistics.assists >= 10) {\n    achievements.push({\n      id: 'team_player',\n      name: 'Team Player',\n      description: 'Get 10+ assists in a single match',\n      rarity: 'uncommon'\n    });\n  }\n  \n  if (achievements.length > 0) {\n    achievementUnlocks.push({\n      playerId: playerResult.playerId,\n      playerName: playerResult.playerName,\n      achievements: achievements\n    });\n  }\n});\n\nreturn { achievementUnlocks };"
+      },
+      "id": "function-3",
+      "name": "Check Achievements",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1140,
+n        400\n      ]\n    },\n    {\n      "parameters": {\n        "httpMethod": "POST",\n        "path": "achievements/unlock-achievements",\n        "body": {\n          "unlocks": "={{ $json.achievementUnlocks }}"\n        }\n      },\n      "id": "http-request-2",\n      "name": "Unlock Achievements",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 3,\n      "position": [\n        1360,\n        400\n      ]\n    },\n    {\n      "parameters": {\n        "functionCode": "// Calculate and distribute rewards\nconst playerResults = $input.first().json.results.playerResults;\nconst rewardDistributions = [];\n\nplayerResults.forEach(playerResult => {\n  let xpReward = 100; // Base XP\n  let goldReward = 50; // Base gold\n  \n  // Placement multipliers\n  const placementMultipliers = {\n    1: 3.0,\n    2: 2.0,\n    3: 1.5,\n    4: 1.2,\n    5: 1.0\n  };\n  \n  const multiplier = placementMultipliers[playerResult.placement] || 0.8;\n  xpReward = Math.floor(xpReward * multiplier);\n  goldReward = Math.floor(goldReward * multiplier);\n  \n  // Performance bonuses\n  if (playerResult.statistics.kills >= 10) {\n    xpReward += 200;\n    goldReward += 100;\n  }\n  \n  if (playerResult.mvp) {\n    xpReward += 150;\n    goldReward += 75;\n  }\n  \n  if (playerResult.statistics.damageDealt >= 3000) {\n    xpReward += 100;\n    goldReward += 50;\n  }\n  \n  rewardDistributions.push({\n    playerId: playerResult.playerId,\n    playerName: playerResult.playerName,\n    rewards: {\n      xp: xpReward,\n      gold: goldReward,\n      score: playerResult.statistics.score\n    },\n    placement: playerResult.placement,\n    mvp: playerResult.mvp\n  });\n});\n\nreturn { rewardDistributions };"
+      },
+      "id": "function-4",
+      "name": "Calculate Rewards",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+n        1140,\n        600\n      ]\n    },\n    {\n      "parameters": {\n        "httpMethod": "POST",\n        "path": "rewards/distribute-rewards",\n        "body": {\n          "distributions": "={{ $json.rewardDistributions }}"\n        }\n      },\n      "id": "http-request-3",\n      "name": "Distribute Rewards",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 3,\n      "position": [\n        1360,\n        600\n      ]\n    },\n    {\n      "parameters": {\n        "operation": "insert",\n        "resource": "document",\n        "database": "dmlogn8n_arena",\n        "collection": "match_history",\n        "fields": {\n          "matchId": "={{ $json.matchId }}",\n          "arenaType": "={{ $node[\"Retrieve Match Data\"].json.arenaType }}",\n          "completionTime": "={{ $json.completionTime }}",\n          "duration": "={{ $json.results.duration }}",\n          "playerCount": "={{ $json.results.playerResults.length }}",\n          "winner": "={{ $json.results.winner }}",\n          "calculatedStats": "={{ $json.calculatedStats }}",\n          "topPerformers": "={{ $json.results.playerResults.filter(p => p.placement <= 3).map(p => ({ id: p.playerId, name: p.playerName, placement: p.placement, score: p.statistics.score })) }}"\n        }\n      },\n      "id": "mongodb-3",\n      "name": "Archive Match History",\n      "type": "n8n-nodes-base.mongodb",\n      "typeVersion": 1,\n      "position": [\n        1800,\n        200\n      ]\n    },\n    {\n      "parameters": {\n        "functionCode": "// Generate match summary for analytics\nconst matchData = $node[\"Retrieve Match Data\"].json;\nconst completionData = $input.first().json;\nconst summary = {\n  matchId: completionData.matchId,\n  arenaType: matchData.arenaType,\n  completionTime: completionData.completionTime,\n  duration: completionData.results.duration,\n  playerCount: completionData.results.playerResults.length,\n  totalKills: completionData.calculatedStats.totalKills,\n  totalDamage: completionData.calculatedStats.totalDamage,\n  winner: completionData.results.winner,\n  winningPlacement: completionData.results.playerResults.find(p => p.playerId === completionData.results.winner)?.placement || 1,\n  topScorer: completionData.results.playerResults.reduce((top, player) => \n    player.statistics.score > (top?.statistics.score || 0) ? player : top, null\n  ),\n  mvp: completionData.results.playerResults.find(p => p.mvp),\n  gameModeStats: {\n    avgKillsPerPlayer: completionData.calculatedStats.totalKills / completionData.results.playerResults.length,\n    avgDamagePerPlayer: completionData.calculatedStats.totalDamage / completionData.results.playerResults.length,\n    avgScore: completionData.results.playerResults.reduce((sum, p) => sum + p.statistics.score, 0) / completionData.results.playerResults.length\n  }\n};\n\nreturn { summary };"
+      },
+      "id": "function-5",
+      "name": "Generate Analytics Summary",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+n        1800,\n        400\n      ]\n    },\n    {\n      "parameters": {\n        "operation": "insert",\n        "resource": "document",\n        "database": "dmlogn8n_analytics",\n        "collection": "match_analytics",\n        "fields": "={{ $json.summary }}"\n      },\n      "id": "mongodb-4",\n      "name": "Store Analytics Data",\n      "type": "n8n-nodes-base.mongodb",\n      "typeVersion": 1,\n      "position": [\n        2020,\n        400\n      ]\n    },\n    {\n      "parameters": {\n        "respondWith": "json",\n        "responseBody": "={{ {\n  success: true,\n  matchId: $json.matchId,\n  status: 'completed',\n  playerCount: $json.results.playerResults.length,\n  winner: $json.results.winner,\n  duration: $json.results.duration,\n  rankingsUpdated: $node[\"Update Player Rankings\"].json.success,\n  achievementsUnlocked: $node[\"Unlock Achievements\"].json.unlocks?.length || 0,\n  rewardsDistributed: $json.rewardDistributions.length\n} }}"\n      },\n      "id": "webhook-response-1",\n      "name": "Return Success Response",\n      "type": "n8n-nodes-base.respondToWebhook",\n      "typeVersion": 1,\n      "position": [\n        2240,\n        300\n      ]\n    },\n    {\n      "parameters": {\n        "respondWith": "json",\n        "responseBody": "={{ {\n  success: false,\n  error: 'Match not found',\n  matchId: $json.matchId\n} }}"\n      },\n      "id": "webhook-response-2",\n      "name": "Return Error Response",\n      "type": "n8n-nodes-base.respondToWebhook",\n      "typeVersion": 1,\n      "position": [\n        1140,\n        800\n      ]\n    }\n  ],\n  "connections": {\n    "Match Completion Trigger": {\n      "main": [\n        [\n          {\n            "node": "Validate Completion Data",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Validate Completion Data": {\n      "main": [\n        [\n          {\n            "node": "Retrieve Match Data",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Retrieve Match Data": {\n      "main": [\n        [\n          {\n            "node": "Match Found?",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Match Found?": {\n      "main": [\n        [\n          {\n            "node": "Prepare Ranking Updates",\n            "type": "main",\n            "index": 0\n          },\n          {\n            "node": "Check Achievements",\n            "type": "main",\n            "index": 0\n          },\n          {\n            "node": "Calculate Rewards",\n            "type": "main",\n            "index": 0\n          }\n        ],\n        [\n          {\n            "node": "Return Error Response",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Prepare Ranking Updates": {\n      "main": [\n        [\n          {\n            "node": "Update Player Rankings",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Update Player Rankings": {\n      "main": [\n        [\n          {\n            "node": "Update Match Record",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Check Achievements": {\n      "main": [\n        [\n          {\n            "node": "Unlock Achievements",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Calculate Rewards": {\n      "main": [\n        [\n          {\n            "node": "Distribute Rewards",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Update Match Record": {\n      "main": [\n        [\n          {\n            "node": "Archive Match History",\n            "type": "main",\n            "index": 0\n          },\n          {\n            "node": "Generate Analytics Summary",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Generate Analytics Summary": {\n      "main": [\n        [\n          {\n            "node": "Store Analytics Data",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Store Analytics Data": {\n      "main": [\n        [\n          {\n            "node": "Return Success Response",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    }\n  },\n  "settings": {\n    "executionOrder": "v1"\n  },\n  "staticData": null,\n  "tags": [\n    {\n      "createdAt": "2024-01-01T00:00:00.000Z",\n      "updatedAt": "2024-01-01T00:00:00.000Z",\n      "id": "2",\n      "name": "MatchProcessing"\n    }\n  ],\n  "triggerCount": 0,\n  "updatedAt": "2024-01-01T00:00:00.000Z",\n  "versionId": "1"\n}

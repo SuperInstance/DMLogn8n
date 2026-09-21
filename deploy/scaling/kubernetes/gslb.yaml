@@ -1,0 +1,451 @@
+---
+# Global Server Load Balancing (GSLB) Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gslb-config
+  namespace: dmlog
+  labels:
+    app: dmlog
+    component: gslb
+data:
+  gslb.yaml: |
+    # GSLB Configuration for Multi-Region Deployment
+    global:
+      # DNS Configuration
+      dns:
+        provider: "route53"
+        domain: "dmlog.com"
+        ttl: 60
+        health_check_interval: 30
+
+      # Geographic Regions
+      regions:
+        us-west-2:
+          priority: 1
+          weight: 40
+          health_check_endpoint: "https://us-west-2.api.dmlog.com/health"
+          failover_regions: ["us-east-1", "eu-west-1"]
+          latency_threshold: 200ms
+
+        us-east-1:
+          priority: 2
+          weight: 35
+          health_check_endpoint: "https://us-east-1.api.dmlog.com/health"
+          failover_regions: ["us-west-2", "eu-west-1"]
+          latency_threshold: 150ms
+
+        eu-west-1:
+          priority: 3
+          weight: 25
+          health_check_endpoint: "https://eu-west-1.api.dmlog.com/health"
+          failover_regions: ["us-west-2", "us-east-1"]
+          latency_threshold: 250ms
+
+      # Load Balancing Algorithms
+      algorithms:
+        primary: "weighted_latency"
+        fallback: "round_robin"
+        emergency: "geographic"
+
+      # Health Checks
+      health_checks:
+        protocol: "HTTPS"
+        port: 443
+        path: "/health"
+        timeout: 5
+        healthy_threshold: 2
+        unhealthy_threshold: 3
+        interval: 30
+
+      # Traffic Routing Rules
+      routing_rules:
+        - name: "geo-routing"
+          type: "geographic"
+          rules:
+            - source: "NA"
+              destinations: ["us-west-2", "us-east-1"]
+              weight: 70
+            - source: "EU"
+              destinations: ["eu-west-1"]
+              weight: 25
+            - source: "APAC"
+              destinations: ["us-west-2"]
+              weight: 5
+
+        - name: "latency-routing"
+          type: "latency"
+          threshold: 200ms
+          rules:
+            - region: "us-west-2"
+              max_latency: 150ms
+            - region: "us-east-1"
+              max_latency: 100ms
+            - region: "eu-west-1"
+              max_latency: 200ms
+
+        - name: "failover-routing"
+          type: "failover"
+          rules:
+            - primary: "us-west-2"
+              secondary: "us-east-1"
+              tertiary: "eu-west-1"
+            - primary: "us-east-1"
+              secondary: "us-west-2"
+              tertiary: "eu-west-1"
+
+---
+# Regional Ingress Configurations for GSLB
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: us-west-2-ingress
+  namespace: dmlog
+  labels:
+    region: us-west-2
+    gslb-enabled: "true"
+  annotations:
+    kubernetes.io/ingress.class: "alb"
+    alb.ingress.kubernetes.io/scheme: "internet-facing"
+    alb.ingress.kubernetes.io/load-balancer-name: "dmlog-us-west-2-alb"
+    alb.ingress.kubernetes.io/healthcheck-path: "/health"
+    alb.ingress.kubernetes.io/success-codes: "200"
+    alb.ingress.kubernetes.io/target-group-attributes: |
+      deregistration_delay.timeout_seconds=30
+      stickiness.enabled=false
+spec:
+  rules:
+  - host: us-west-2.api.dmlog.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-service
+            port:
+              number: 8080
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: us-east-1-ingress
+  namespace: dmlog
+  labels:
+    region: us-east-1
+    gslb-enabled: "true"
+  annotations:
+    kubernetes.io/ingress.class: "alb"
+    alb.ingress.kubernetes.io/scheme: "internet-facing"
+    alb.ingress.kubernetes.io/load-balancer-name: "dmlog-us-east-1-alb"
+    alb.ingress.kubernetes.io/healthcheck-path: "/health"
+    alb.ingress.kubernetes.io/success-codes: "200"
+spec:
+  rules:
+  - host: us-east-1.api.dmlog.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-service
+            port:
+              number: 8080
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: eu-west-1-ingress
+  namespace: dmlog
+  labels:
+    region: eu-west-1
+    gslb-enabled: "true"
+  annotations:
+    kubernetes.io/ingress.class: "alb"
+    alb.ingress.kubernetes.io/scheme: "internet-facing"
+    alb.ingress.kubernetes.io/load-balancer-name: "dmlog-eu-west-1-alb"
+    alb.ingress.kubernetes.io/healthcheck-path: "/health"
+    alb.ingress.kubernetes.io/success-codes: "200"
+spec:
+  rules:
+  - host: eu-west-1.api.dmlog.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-service
+            port:
+              number: 8080
+
+---
+# GSLB Controller Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gslb-controller
+  namespace: dmlog
+  labels:
+    app: dmlog
+    component: gslb-controller
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: dmlog
+      component: gslb-controller
+  template:
+    metadata:
+      labels:
+        app: dmlog
+        component: gslb-controller
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: gslb-controller-sa
+      containers:
+      - name: gslb-controller
+        image: dmlog/gslb-controller:latest
+        ports:
+        - containerPort: 8080
+          name: metrics
+        - containerPort: 9090
+          name: grpc
+        env:
+        - name: CONFIG_PATH
+          value: "/etc/gslb/config.yaml"
+        - name: AWS_REGION
+          value: "us-west-2"
+        - name: LOG_LEVEL
+          value: "info"
+        - name: GSLB_SYNC_INTERVAL
+          value: "30s"
+        volumeMounts:
+        - name: config
+          mountPath: /etc/gslb
+        - name: aws-credentials
+          mountPath: /etc/aws
+          readOnly: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: config
+        configMap:
+          name: gslb-config
+      - name: aws-credentials
+        secret:
+          secretName: aws-credentials
+
+---
+# GSLB Controller Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: gslb-controller-service
+  namespace: dmlog
+  labels:
+    app: dmlog
+    component: gslb-controller
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+spec:
+  selector:
+    app: dmlog
+    component: gslb-controller
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: grpc
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+
+---
+# GSLB Controller Service Account and RBAC
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gslb-controller-sa
+  namespace: dmlog
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/gslb-controller-role
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gslb-controller
+rules:
+- apiGroups: [""]
+  resources: ["services", "endpoints", "pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+- apiGroups: ["extensions"]
+  resources: ["ingresses"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+- apiGroups: ["dmlog.io"]
+  resources: ["gslbpolicies"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gslb-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: gslb-controller
+subjects:
+- kind: ServiceAccount
+  name: gslb-controller-sa
+  namespace: dmlog
+
+---
+# Custom Resource Definition for GSLB Policies
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: gslbpolicies.dmlog.io
+spec:
+  group: dmlog.io
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              domains:
+                type: array
+                items:
+                  type: string
+              regions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    weight:
+                      type: integer
+                    priority:
+                      type: integer
+                    healthCheck:
+                      type: object
+                      properties:
+                        endpoint:
+                          type: string
+                        path:
+                          type: string
+                        interval:
+                          type: string
+              routingAlgorithm:
+                type: string
+                enum: ["weighted", "latency", "geographic", "round_robin"]
+              failoverPolicy:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                  threshold:
+                    type: integer
+                  retryCount:
+                    type: integer
+  scope: Namespaced
+  names:
+    plural: gslbpolicies
+    singular: gslbpolicy
+    kind: GSLBPolicy
+
+---
+# Example GSLB Policy
+apiVersion: dmlog.io/v1
+kind: GSLBPolicy
+metadata:
+  name: dmlog-gslb-policy
+  namespace: dmlog
+spec:
+  domains:
+  - "api.dmlog.com"
+  - "app.dmlog.com"
+  regions:
+  - name: "us-west-2"
+    weight: 40
+    priority: 1
+    healthCheck:
+      endpoint: "https://us-west-2.api.dmlog.com"
+      path: "/health"
+      interval: "30s"
+  - name: "us-east-1"
+    weight: 35
+    priority: 2
+    healthCheck:
+      endpoint: "https://us-east-1.api.dmlog.com"
+      path: "/health"
+      interval: "30s"
+  - name: "eu-west-1"
+    weight: 25
+    priority: 3
+    healthCheck:
+      endpoint: "https://eu-west-1.api.dmlog.com"
+      path: "/health"
+      interval: "30s"
+  routingAlgorithm: "weighted_latency"
+  failoverPolicy:
+    enabled: true
+    threshold: 3
+    retryCount: 5
+
+---
+# ServiceMonitor for GSLB Metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: gslb-controller-metrics
+  namespace: dmlog
+  labels:
+    app: dmlog
+    component: gslb-controller
+spec:
+  selector:
+    matchLabels:
+      app: dmlog
+      component: gslb-controller
+  endpoints:
+  - port: http
+    interval: 30s
+    path: /metrics
+    honorLabels: true

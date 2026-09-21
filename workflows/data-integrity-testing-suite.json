@@ -1,0 +1,529 @@
+{
+  "name": "Data Integrity Testing Suite - System Reliability Validation",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/integrity/test/start",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "integrity-test-trigger",
+      "name": "Start Data Integrity Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [240, 300],
+      "webhookId": "integrity-test-suite-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize data integrity test configuration\nconst integrityConfig = {\n  testId: 'integrity_' + Date.now(),\n  startTime: new Date().toISOString(),\n  testSuite: 'data_integrity',\n  testScope: {\n    databases: ['characters', 'memories', 'sessions', 'campaigns', 'quests'],\n    dataTypes: ['character_state', 'memory_data', 'session_state', 'campaign_progress', 'quest_status'],\n    consistencyChecks: ['referential_integrity', 'data_validation', 'transaction_integrity', 'backup_integrity']\n  },\n  corruptionDetection: {\n    enableChecksums: true,\n    enableDataValidation: true,\n    enableSchemaValidation: true,\n    testScenarios: ['data_corruption', 'partial_updates', 'concurrent_modifications', 'rollback_scenarios']\n  },\n  validationRules: {\n    characterState: {\n      requiredFields: ['id', 'name', 'class', 'level', 'abilities'],\n      dataTypes: {\n        level: 'number',\n        experience: 'number',\n        abilities: 'object'\n      },\n      valueConstraints: {\n        level: { min: 1, max: 20 },\n        abilities: { min: 1, max: 20 }\n      }\n    },\n    memoryData: {\n      requiredFields: ['id', 'character_id', 'memory_type', 'content', 'timestamp'],\n      dataTypes: {\n        timestamp: 'date',\n        importance_score: 'number'\n      },\n      relationships: {\n        character_id: 'characters.id'\n      }\n    }\n  }\n};\n\n$items[0].json.integrityConfig = integrityConfig;\n\nreturn [{\n  json: {\n    ...integrityConfig,\n    status: 'initialized',\n    currentTest: 'character_state_consistency'\n  }\n}];"
+      },
+      "id": "initialize-integrity-test",
+      "name": "Initialize Integrity Test",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "character-consistency-condition",
+              "leftValue": "={{ $json.currentTest }}",
+              "rightValue": "character_state_consistency",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "integrity-test-router",
+      "name": "Route Integrity Test",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/integrity/character-state",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "validationRules": "={{ $json.validationRules.characterState }}",
+          "testScenarios": [
+            "level_progression_validation",
+            "ability_score_validation",
+            "inventory_consistency",
+            "experience_calculation",
+            "hit_points_validation"
+          ],
+          "dataCorruptionTests": [
+            "invalid_level_values",
+            "negative_experience",
+            "corrupted_abilities",
+            "missing_required_fields",
+            "invalid_data_types"
+          ],
+          "consistencyChecks": {
+            "referential_integrity": true,
+            "business_rules_validation": true,
+            "data_type_validation": true,
+            "range_validation": true
+          }
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "character-state-consistency",
+      "name": "Character State Consistency Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/integrity/memory-corruption",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "validationRules": "={{ $json.validationRules.memoryData }}",
+          "corruptionDetection": {
+            "checksumValidation": true,
+            "contentValidation": true,
+            "timestampValidation": true,
+            "relationshipValidation": true
+          },
+          "testScenarios": [
+            "memory_content_corruption",
+            "timestamp_manipulation",
+            "broken_character_references",
+            "invalid_memory_types",
+            "circular_references"
+          ],
+          "integrityChecks": [
+            "content_hash_verification",
+            "character_relationship_validation",
+            "memory_consolidation_integrity",
+            "episodic_sequence_validation"
+          ]
+        },
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "memory-corruption-detection",
+      "name": "Memory Corruption Detection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/integrity/transaction-rollback",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "transactionScenarios": [
+            "character_update_rollback",
+            "memory_creation_rollback",
+            "session_state_rollback",
+            "quest_progress_rollback",
+            "campaign_modification_rollback"
+          ],
+          "failureConditions": [
+            "database_connection_loss",
+            "constraint_violation",
+            "concurrent_modification_conflict",
+            "resource_exhaustion",
+            "network_timeout"
+          ],
+          "rollbackValidation": {
+            "data_state_restoration": true,\n            "referential_integrity_maintained": true,\n            "cascade_effects_reversed": true,\n            "transaction_log_integrity": true
+          }
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "transaction-rollback-validation",
+      "name": "Transaction Rollback Validation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/integrity/cross-service-sync",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "services": [\n            "character_service",\n            "memory_service",\n            "session_service",\n            "campaign_service",\n            "ai_service"\n          ],\n          "syncScenarios": [\n            "character_level_sync",\n            "memory_consolidation_sync",\n            "session_state_sync",\n            "campaign_progress_sync",\n            "ai_decision_sync"\n          ],\n          "consistencyChecks": {\n            "eventual_consistency": true,\n            "strong_consistency_critical_paths": true,\n            "conflict_resolution": true,\n            "data_versioning": true\n          },\n          "networkPartitionTests": {\n            "simulated_partitions": true,\n            "recovery_validation": true,\n            "data_reconciliation": true\n          }\n        },
+        "options": {
+          "timeout": 150000
+        }
+      },
+      "id": "cross-service-sync",
+      "name": "Cross-Service Data Synchronization",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/integrity/backup-restore",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "backupOperations": [
+            "full_database_backup",
+            "incremental_backup",
+            "differential_backup",
+            "point_in_time_backup"
+          ],
+          "restoreOperations": [
+            "full_restore",
+            "selective_restore",
+            "point_in_time_restore",
+            "partial_data_restore"
+          ],
+          "integrityValidation": {
+            "data_completeness_check": true,\n            "data_accuracy_check": true,\n            "schema_consistency_check": true,\n            "relationship_integrity_check": true,\n            "checksum_verification": true\n          },
+          "corruptionScenarios": [
+            "backup_file_corruption",\n            "partial_backup_recovery",\n            "backup_metadata_corruption",\n            "restore_process_interruption"\n          ]
+        },
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "backup-restore-verification",
+      "name": "Backup and Restore Verification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/integrity/concurrent-modifications",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "concurrencyScenarios": [
+            "simultaneous_character_updates",
+            "concurrent_memory_consolidation",\n            "parallel_session_modifications",\n            "simultaneous_quest_progress_updates",\n            "concurrent_campaign_changes"\n          ],\n          "isolationLevels": [\n            "read_committed",\n            "repeatable_read",\n            "serializable"\n          ],\n          "conflictDetection": {\n            "optimistic_locking": true,\n            "pessimistic_locking": true,\n            "version_based_conflicts": true,\n            "timestamp_based_conflicts": true\n          },\n          "dataIntegrityChecks": {\n            "lost_update_prevention": true,\n            "dirty_read_prevention": true,\n            "phantom_read_prevention": true,\n            "non_repeatable_read_prevention": true\n          }\n        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "concurrent-modifications-test",
+      "name": "Concurrent Modifications Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/integrity/schema-validation",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+n          "schemas": [\n            "character_schema",\n            "memory_schema",\n            "session_schema",\n            "campaign_schema",\n            "quest_schema"\n          ],\n          "validationChecks": [\n            "required_fields_validation",\n            "data_type_validation",\n            "constraint_validation",\n            "relationship_validation",\n            "index_validation"\n          ],\n          "migrationTests": {\n            "schema_migration_validation": true,\n            "data_migration_integrity": true,\n            "rollback_validation": true\n          }\n        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "schema-validation-test",
+      "name": "Schema Validation Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/integrity/data-recovery",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "recoveryScenarios": [\n            "accidental_data_deletion",\n            "data_corruption_recovery",\n            "system_crash_recovery",\n            "network_partition_recovery",\n            "hardware_failure_recovery"\n          ],\n          "recoveryMechanisms": {\n            "transaction_log_replay": true,\n            "backup_restoration": true,\n            "data_reconciliation": true,\n            "manual_data_intervention": true\n          },\n          "validationChecks": {\n            "data_completeness": true,\n            "data_consistency": true,\n            "business_rule_compliance": true,\n            "referential_integrity": true\n          }\n        },
+        "options": {
+          "timeout": 150000
+        }
+      },
+      "id": "data-recovery-test",
+      "name": "Data Recovery Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyze data integrity test results and generate comprehensive report\nconst integrityResults = {\n  testId: $json.testId,\n  testSuite: 'data_integrity',\n  startTime: $json.startTime,\n  endTime: new Date().toISOString(),\n  totalDuration: Date.now() - new Date($json.startTime).getTime(),\n  tests: [\n    {\n      name: 'character_state_consistency',\n      status: $json.characterStateResults ? 'passed' : 'failed',\n      recordsValidated: $json.characterStateValidated || 0,\n      violationsFound: $json.characterStateViolations || 0,\n      corruptionDetected: $json.characterStateCorruption || false,\n      consistencyScore: $json.characterStateConsistencyScore || 0,\n      details: $json.characterStateDetails || {}\n    },\n    {\n      name: 'memory_corruption_detection',\n      status: $json.memoryCorruptionResults ? 'passed' : 'failed',\n      memoriesChecked: $json.memoriesChecked || 0,\n      corruptionInstances: $json.memoryCorruptionInstances || 0,\n      checksumValidations: $json.memoryChecksumValidations || 0,\n      integrityScore: $json.memoryIntegrityScore || 0,\n      details: $json.memoryCorruptionDetails || {}\n    },\n    {\n      name: 'transaction_rollback',\n      status: $json.transactionRollbackResults ? 'passed' : 'failed',\n      transactionsTested: $json.transactionsTested || 0,\n      rollbacksValidated: $json.rollbacksValidated || 0,\n      rollbackFailures: $json.rollbackFailures || 0,\n      dataIntegrityMaintained: $json.rollbackDataIntegrity || false,\n      details: $json.transactionRollbackDetails || {}\n    },\n    {\n      name: 'cross_service_synchronization',\n      status: $json.crossServiceSyncResults ? 'passed' : 'failed',\n      servicesTested: $json.servicesTested || 0,\n      syncOperations: $json.syncOperations || 0,\n      syncFailures: $json.syncFailures || 0,\n      consistencyIssues: $json.syncConsistencyIssues || 0,\n      details: $json.crossServiceSyncDetails || {}\n    },\n    {\n      name: 'backup_restore_verification',\n      status: $json.backupRestoreResults ? 'passed' : 'failed',\n      backupsCreated: $json.backupsCreated || 0,\n      restoresPerformed: $json.restoresPerformed || 0,\n      backupCorruptionDetected: $json.backupCorruptionDetected || 0,\n      restoreValidationPassed: $json.restoreValidationPassed || 0,\n      details: $json.backupRestoreDetails || {}\n    },\n    {\n      name: 'concurrent_modifications',\n      status: $json.concurrentModResults ? 'passed' : 'failed',\n      concurrentOperations: $json.concurrentOperations || 0,\n      conflictsDetected: $json.conflictsDetected || 0,\n      dataLossIncidents: $json.dataLossIncidents || 0,\n      isolationViolations: $json.isolationViolations || 0,\n      details: $json.concurrentModificationsDetails || {}\n    },\n    {\n      name: 'schema_validation',\n      status: $json.schemaValidationResults ? 'passed' : 'failed',\n      schemasValidated: $json.schemasValidated || 0,\n      validationErrors: $json.schemaValidationErrors || 0,\n      constraintViolations: $json.constraintViolations || 0,\n      migrationTestsPassed: $json.migrationTestsPassed || 0,\n      details: $json.schemaValidationDetails || {}\n    },\n    {\n      name: 'data_recovery',\n      status: $json.dataRecoveryResults ? 'passed' : 'failed',\n      recoveryScenarios: $json.recoveryScenarios || 0,\n      successfulRecoveries: $json.successfulRecoveries || 0,\n      dataLossEvents: $json.dataLossEvents || 0,\n      recoveryTimeAverage: $json.recoveryTimeAverage || 0,\n      details: $json.dataRecoveryDetails || {}\n    }\n  ],\n  overallMetrics: {\n    totalRecordsValidated: $json.totalRecordsValidated || 0,\n    totalViolations: $json.totalViolations || 0,\n    totalCorruptionInstances: $json.totalCorruptionInstances || 0,\n    averageConsistencyScore: 0\n  }\n};\n\n// Calculate integrity summary\nconst passedTests = integrityResults.tests.filter(t => t.status === 'passed').length;\nconst totalTests = integrityResults.tests.length;\nconst successRate = (passedTests / totalTests * 100).toFixed(1);\n\n// Calculate overall consistency score\nconst consistencyScores = integrityResults.tests.map(t => t.consistencyScore || t.integrityScore || 0).filter(s => s > 0);\nintegrityResults.overallMetrics.averageConsistencyScore = \n  consistencyScores.length > 0 ? consistencyScores.reduce((sum, score) => sum + score, 0) / consistencyScores.length : 0;\n\n// Determine overall integrity rating\nlet integrityRating = 'excellent';\nif (integrityResults.overallMetrics.totalViolations > 0) {\n  integrityRating = 'poor';\n} else if (integrityResults.overallMetrics.totalCorruptionInstances > 0) {\n  integrityRating = 'fair';\n} else if (integrityResults.overallMetrics.averageConsistencyScore < 95) {\n  integrityRating = 'good';\n}\n\n// Critical issues detection\nconst criticalIssues = [];\nif (integrityResults.overallMetrics.totalCorruptionInstances > 0) {\n  criticalIssues.push('Data corruption detected');\n}\nif (integrityResults.tests.find(t => t.dataLossIncidents > 0)) {\n  criticalIssues.push('Data loss incidents detected');\n}\nif (integrityResults.tests.find(t => t.rollbackFailures > 0)) {\n  criticalIssues.push('Transaction rollback failures');\n}\n\nconst summary = {\n  totalTests,\n  passedTests,\n  failedTests: totalTests - passedTests,\n  successRate: parseFloat(successRate),\n  overallStatus: criticalIssues.length > 0 ? 'failed' : successRate >= 90 ? 'passed' : 'warning',\n  integrityRating,\n  criticalIssues,\n  overallMetrics: integrityResults.overallMetrics\n};\n\nreturn [{\n  json: {\n    testSuite: 'data_integrity',\n    ...integrityResults,\n    summary,\n    status: summary.overallStatus,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "analyze-integrity-results",
+      "name": "Analyze Integrity Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/integrity/results",
+        "jsonParameters": true,
+        "json": "={{ $json }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "save-integrity-results",
+      "name": "Save Integrity Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "return-integrity-report",
+      "name": "Return Integrity Report",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate data integrity recommendations and alerts\nconst recommendations = [];\nconst alerts = [];\n\n// Analyze test results for recommendations\n$json.tests.forEach(test => {\n  if (test.violationsFound > 0) {\n    recommendations.push({\n      category: 'data_validation',\n      priority: 'high',\n      test: test.name,\n      issue: `${test.violationsFound} data validation violations found`,\n      suggestion: 'Review and fix data validation rules, implement stricter input validation'\n    });\n  }\n  \n  if (test.corruptionDetected) {\n    alerts.push({\n      level: 'critical',\n      category: 'data_corruption',\n      test: test.name,\n      message: 'Data corruption detected - immediate investigation required',\n      action: 'Isolate affected systems and perform data restoration'\n    });\n  }\n  \n  if (test.consistencyScore < 95 && test.consistencyScore > 0) {\n    recommendations.push({\n      category: 'consistency',\n      priority: 'medium',\n      test: test.name,\n      issue: `Consistency score of ${test.consistencyScore}% below threshold`,\n      suggestion: 'Review synchronization mechanisms and improve consistency checks'\n    });\n  }\n});\n\n// Check for critical integrity issues\nif ($json.summary.criticalIssues.length > 0) {\n  alerts.push({\n    level: 'critical',\n    category: 'system_integrity',\n    message: `Critical integrity issues detected: ${$json.summary.criticalIssues.join(', ')}`,\n    action: 'Immediate system maintenance and data integrity restoration required'\n  });\n}\n\n// Performance recommendations\nif ($json.overallMetrics.totalRecordsValidated > 0 && \n    $json.overallMetrics.totalViolations / $json.overallMetrics.totalRecordsValidated > 0.01) {\n  recommendations.push({\n    category: 'data_quality',\n    priority: 'high',\n    issue: 'Data quality issues exceed 1% threshold',\n    suggestion: 'Implement comprehensive data quality monitoring and automated correction'\n  });\n}\n\n// Backup and recovery recommendations\nconst backupTest = $json.tests.find(t => t.name === 'backup_restore_verification');\nif (backupTest && backupTest.backupCorruptionDetected > 0) {\n  recommendations.push({\n    category: 'backup_system',\n    priority: 'critical',\n    issue: 'Backup corruption detected',\n    suggestion: 'Review backup procedures, implement backup verification, and consider alternative backup strategies'\n  });\n}\n\n// Transaction integrity recommendations\nconst transactionTest = $json.tests.find(t => t.name === 'transaction_rollback');\nif (transactionTest && transactionTest.rollbackFailures > 0) {\n  recommendations.push({\n    category: 'transaction_management',\n    priority: 'high',\n    issue: 'Transaction rollback failures detected',\n    suggestion: 'Review transaction management, improve error handling, and test rollback procedures'\n  });\n}\n\nreturn [{\n  json: {\n    testId: $json.testId,\n    recommendations,\n    alerts,\n    summary: {\n      totalRecommendations: recommendations.length,\n      criticalAlerts: alerts.filter(a => a.level === 'critical').length,\n      highPriorityIssues: recommendations.filter(r => r.priority === 'high').length,\n      mediumPriorityIssues: recommendations.filter(r => r.priority === 'medium').length\n    },\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "generate-integrity-recommendations",
+      "name": "Generate Integrity Recommendations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/integrity/recommendations",
+        "jsonParameters": true,
+        "json": "={{ $json }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "save-integrity-recommendations",
+      "name": "Save Integrity Recommendations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2000, 500]
+    }
+  ],
+  "connections": {
+    "Start Data Integrity Test": {
+      "main": [
+        [
+          {
+            "node": "Initialize Integrity Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Integrity Test": {
+      "main": [
+        [
+          {
+            "node": "Route Integrity Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Integrity Test": {
+      "main": [
+        [
+          {
+            "node": "Character State Consistency Check",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Backup and Restore Verification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Character State Consistency Check": {
+      "main": [
+        [
+          {
+            "node": "Memory Corruption Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory Corruption Detection": {
+      "main": [
+        [
+          {
+            "node": "Transaction Rollback Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transaction Rollback Validation": {
+      "main": [
+        [
+          {
+            "node": "Cross-Service Data Synchronization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cross-Service Data Synchronization": {
+      "main": [
+        [
+          {
+            "node": "Analyze Integrity Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Backup and Restore Verification": {
+      "main": [
+        [
+          {
+            "node": "Concurrent Modifications Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Concurrent Modifications Test": {
+      "main": [
+        [
+          {
+            "node": "Schema Validation Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schema Validation Test": {
+      "main": [
+        [
+          {
+            "node": "Data Recovery Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data Recovery Test": {
+      "main": [
+        [
+          {
+            "node": "Analyze Integrity Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Integrity Results": {
+      "main": [
+        [
+          {
+            "node": "Save Integrity Results",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Integrity Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Integrity Results": {
+      "main": [
+        [
+          {
+            "node": "Return Integrity Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Integrity Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Save Integrity Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T16:00:00.000Z",
+      "updatedAt": "2024-10-23T16:00:00.000Z",
+      "id": "tag-integrity",
+      "name": "Data Integrity"
+    },
+    {
+      "createdAt": "2024-10-23T16:00:00.000Z",
+      "updatedAt": "2024-10-23T16:00:00.000Z",
+      "id": "tag-reliability",
+      "name": "Reliability"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T16:00:00.000Z",
+  "versionId": "1"
+}

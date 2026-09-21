@@ -1,0 +1,577 @@
+{
+  "name": "Event Cascade System - Consequence Propagation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cascade/trigger",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "cascade-trigger-webhook",
+      "name": "Cascade Trigger Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "event-cascade-trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize event cascade processing\nconst triggerData = $input.first().json;\nconst {\n  campaignId,\n  initialEvent,\n  cascadeDepth = 3,\n  propagationSpeed = 'normal', // slow, normal, fast\n  affectedSystems = ['all'], // all, npcs, factions, locations, economy\n  playerInvolvement = false\n} = triggerData;\n\n// Validate required fields\nif (!campaignId || !initialEvent) {\n  throw new Error('Missing required fields: campaignId, initialEvent');\n}\n\n// Prepare cascade configuration\nconst cascadeConfig = {\n  cascadeId: `cascade_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n  campaignId,\n  initialEvent: {\n    ...initialEvent,\n    id: initialEvent.id || `event_${Date.now()}`,\n    timestamp: initialEvent.timestamp || new Date().toISOString(),\n    source: initialEvent.source || 'external',\n    magnitude: initialEvent.magnitude || 'normal', // minor, normal, major, catastrophic\n    type: initialEvent.type || 'unknown'\n  },\n  cascadeDepth,\n  propagationSpeed,\n  affectedSystems,\n  playerInvolvement,\n  startTime: new Date().toISOString(),\n  currentDepth: 0,\n  propagationHistory: [],\n  cascadeBranches: [],\n  systemState: {\n    active: true,\n    paused: false,\n    completed: false,\n    errors: []\n  }\n};\n\nreturn [{ json: cascadeConfig }];"
+      },
+      "id": "initialize-cascade",
+      "name": "Initialize Cascade",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.NEO4J_URI }}",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.NEO4J_PASSWORD }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "=MATCH (c:Campaign {id: '{{ $json.campaignId }}' }) RETURN c.worldState as worldState, c.cascadeHistory as cascadeHistory, c.relationshipGraph as relationships"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-world-context",
+      "name": "Neo4j - Fetch World Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyze initial event and determine propagation patterns\nconst cascadeConfig = $input.first().json;\nconst worldContext = $input.last().json;\n\nconst { worldState, cascadeHistory, relationships } = worldContext.results[0] || {};\nconst { initialEvent } = cascadeConfig;\n\n// Analyze event characteristics\nconst eventAnalysis = {\n  event_type: initialEvent.type,\n  magnitude: initialEvent.magnitude,\n  propagation_vectors: determinePropagationVectors(initialEvent, worldState),\n  affected_domains: determineAffectedDomains(initialEvent, worldState),\n  cascade_potential: calculateCascadePotential(initialEvent, worldState),\n  propagation_delay: calculatePropagationDelay(cascadeConfig.propagationSpeed, initialEvent.magnitude),\n  resonance_factors: identifyResonanceFactors(initialEvent, worldState)\n};\n\nfunction determinePropagationVectors(event, worldState) {\n  const vectors = [];\n  \n  // Location-based propagation\n  if (event.location_id && worldState.locations) {\n    const location = worldState.locations.find(loc => loc.id === event.location_id);\n    if (location) {\n      vectors.push({\n        type: 'location',\n        target: location.id,\n        strength: 0.8,\n        connected_locations: location.connections || []\n      });\n    }\n  }\n  \n  // NPC-based propagation\n  if (event.npc_id && worldState.npcs) {\n    const npc = worldState.npcs.find(n => n.id === event.npc_id);\n    if (npc) {\n      vectors.push({\n        type: 'npc',\n        target: npc.id,\n        strength: 0.7,\n        relationships: Object.keys(npc.relationships || {}),\n        location: npc.location\n      });\n    }\n  }\n  \n  // Faction-based propagation\n  if (event.faction_id && worldState.factions) {\n    const faction = worldState.factions.find(f => f.id === event.faction_id);\n    if (faction) {\n      vectors.push({\n        type: 'faction',\n        target: faction.id,\n        strength: 0.9,\n        relationships: Object.keys(faction.relationships || {}),\n        territories: faction.territories || []\n      });\n    }\n  }\n  \n  // Economic propagation\n  if (['economic_change', 'trade', 'resource'].includes(event.type)) {\n    vectors.push({\n      type: 'economic',\n      strength: 0.6,\n      market_regions: ['local', 'regional', 'global'],\n      trade_routes: worldState.trade_routes || []\n    });\n  }\n  \n  // Environmental propagation\n  if (['environmental', 'weather', 'natural_disaster'].includes(event.type)) {\n    vectors.push({\n      type: 'environmental',\n      strength: 0.75,\n      affected_biomes: ['all'],\n      spread_pattern: 'radial'\n    });\n  }\n  \n  return vectors;\n}\n\nfunction determineAffectedDomains(event, worldState) {\n  const domains = [];\n  \n  // Direct domain impacts\n  const domainMappings = {\n    'combat': ['locations', 'npcs', 'factions'],\n    'social': ['npcs', 'factions', 'locations'],\n    'economic': ['economy', 'factions', 'locations'],\n    'environmental': ['locations', 'npcs', 'economy'],\n    'political': ['factions', 'npcs', 'locations'],\n    'magical': ['locations', 'npcs', 'economy', 'factions'],\n    'divine': ['npcs', 'factions', 'locations', 'economy']\n  };\n  \n  if (domainMappings[event.type]) {\n    domains.push(...domainMappings[event.type]);\n  }\n  \n  // Magnitude-based domain expansion\n  if (event.magnitude === 'major' || event.magnitude === 'catastrophic') {\n    domains.push('all');\n  }\n  \n  return [...new Set(domains)];\n}\n\nfunction calculateCascadePotential(event, worldState) {\n  let potential = 0.5; // Base potential\n  \n  // Magnitude factor\n  const magnitudeFactors = {\n    'minor': 0.2,\n    'normal': 0.5,\n    'major': 0.8,\n    'catastrophic': 1.0\n  };\n  potential += magnitudeFactors[event.magnitude] || 0.5;\n  \n  // World state complexity factor\n  const complexity = (worldState.locations?.length || 0) + \n                    (worldState.npcs?.length || 0) + \n                    (worldState.factions?.length || 0);\n  potential += Math.min(complexity / 50, 0.3);\n  \n  // Relationship density factor\n  const relationshipDensity = Object.keys(relationships || {}).length;\n  potential += Math.min(relationshipDensity / 20, 0.2);\n  \n  return Math.min(potential, 1.0);\n}\n\nfunction calculatePropagationDelay(speed, magnitude) {\n  const baseDelays = {\n    'slow': { 'minor': 24, 'normal': 12, 'major': 6, 'catastrophic': 2 },\n    'normal': { 'minor': 12, 'normal': 6, 'major': 3, 'catastrophic': 1 },\n    'fast': { 'minor': 6, 'normal': 3, 'major': 1.5, 'catastrophic': 0.5 }\n  };\n  \n  return (baseDelays[speed] || baseDelays['normal'])[magnitude] || 6;\n}\n\nfunction identifyResonanceFactors(event, worldState) {\n  const factors = [];\n  \n  // Pre-existing tensions\n  if (worldState.factions) {\n    const tenseFactions = worldState.factions.filter(f => \n      (f.relationships && Object.values(f.relationships).some(rel => rel < -30))\n    );\n    if (tenseFactions.length > 0) {\n      factors.push({\n        type: 'faction_tension',\n        description: 'Pre-existing faction tensions may amplify effects',\n        multiplier: 1.3\n      });\n    }\n  }\n  \n  // Economic instability\n  if (worldState.economy?.instability > 0.5) {\n    factors.push({\n      type: 'economic_instability',\n      description: 'Economic instability may cause economic cascades',\n      multiplier: 1.2\n    });\n  }\n  \n  // Active conflicts\n  if (worldState.activeConflicts && worldState.activeConflicts.length > 0) {\n    factors.push({\n      type: 'active_conflicts',\n      description: 'Active conflicts may spread or intensify',\n      multiplier: 1.4\n    });\n  }\n  \n  // Magical phenomena\n  if (worldState.activeMagic && worldState.activeMagic.length > 0) {\n    factors.push({\n      type: 'magical_resonance',\n      description: 'Active magical phenomena may interact unpredictably',\n      multiplier: 1.25\n    });\n  }\n  \n  return factors;\n}\n\nreturn [{\n  json: {\n    ...cascadeConfig,\n    worldContext: {\n      worldState,\n      cascadeHistory: cascadeHistory || [],\n      relationships: relationships || {}\n    },\n    eventAnalysis,\n    propagationMap: {\n      vectors: eventAnalysis.propagation_vectors,\n      domains: eventAnalysis.affected_domains,\n      potential: eventAnalysis.cascade_potential,\n      delay: eventAnalysis.propagation_delay,\n      resonance: eventAnalysis.resonance_factors\n    }\n  }\n}];"
+      },
+      "id": "analyze-event-propagation",
+      "name": "Analyze Event Propagation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "depth-check",
+              "leftValue": "={{ $json.currentDepth }}",
+              "rightValue": "={{ $json.cascadeDepth }}",
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-cascade-depth",
+      "name": "Check Cascade Depth",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate cascade effects for current depth\nconst cascadeData = $input.first().json;\nconst { currentDepth, initialEvent, worldContext, propagationMap, cascadeId } = cascadeData;\n\nconst cascadeEffects = [];\nconst currentTimestamp = new Date();\n\n// Calculate delay based on propagation speed and depth\nconst delayMs = cascadeData.propagationMap.delay * 60 * 60 * 1000 * Math.pow(1.2, currentDepth);\nconst effectTimestamp = new Date(currentTimestamp.getTime() + delayMs);\n\n// Generate effects for each propagation vector\npropagationMap.vectors.forEach(vector => {\n  const effects = generateVectorEffects(vector, initialEvent, worldContext, currentDepth);\n  cascadeEffects.push(...effects);\n});\n\nfunction generateVectorEffects(vector, initialEvent, worldContext, depth) {\n  const effects = [];\n  const baseStrength = vector.strength * Math.pow(0.8, depth); // Decay over depth\n  \n  switch (vector.type) {\n    case 'location':\n      effects.push(...generateLocationEffects(vector, initialEvent, worldContext, baseStrength));\n      break;\n    case 'npc':\n      effects.push(...generateNPCEffects(vector, initialEvent, worldContext, baseStrength));\n      break;\n    case 'faction':\n      effects.push(...generateFactionEffects(vector, initialEvent, worldContext, baseStrength));\n      break;\n    case 'economic':\n      effects.push(...generateEconomicEffects(vector, initialEvent, worldContext, baseStrength));\n      break;\n    case 'environmental':\n      effects.push(...generateEnvironmentalEffects(vector, initialEvent, worldContext, baseStrength));\n      break;\n  }\n  \n  return effects;\n}\n\nfunction generateLocationEffects(vector, event, worldContext, strength) {\n  const effects = [];\n  const location = worldContext.worldState.locations?.find(loc => loc.id === vector.target);\n  \n  if (!location) return effects;\n  \n  // Direct location impact\n  effects.push({\n    id: `location_effect_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n    type: 'location_impact',\n    target_type: 'location',\n    target_id: location.id,\n    target_name: location.name,\n    effect_type: determineLocationEffectType(event.type),\n    severity: calculateSeverity(strength, event.magnitude),\n    description: generateLocationEffectDescription(location, event),\n    immediate_consequences: generateLocationConsequences(location, event),\n    timestamp: new Date().toISOString(),\n    parent_event: event.id,\n    cascade_depth: currentDepth,\n    propagation_strength: strength\n  });\n  \n  // Connected location impacts\n  if (vector.connected_locations && vector.connected_locations.length > 0) {\n    vector.connected_locations.slice(0, 3).forEach(connectedId => {\n      const connectedLocation = worldContext.worldState.locations?.find(loc => loc.id === connectedId);\n      if (connectedLocation && Math.random() < strength * 0.7) {\n        effects.push({\n          id: `connected_location_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n          type: 'location_impact',\n          target_type: 'location',\n          target_id: connectedLocation.id,\n          target_name: connectedLocation.name,\n          effect_type: 'ripple_effect',\n          severity: calculateSeverity(strength * 0.6, event.magnitude),\n          description: `Ripple effects from ${location.name} reach ${connectedLocation.name}`,\n          timestamp: new Date().toISOString(),\n          parent_event: event.id,\n          cascade_depth: currentDepth,\n          propagation_strength: strength * 0.6,\n          source_location: location.id\n        });\n      }\n    });\n  }\n  \n  return effects;\n}\n\nfunction generateNPCEffects(vector, event, worldContext, strength) {\n  const effects = [];\n  const npc = worldContext.worldState.npcs?.find(n => n.id === vector.target);\n  \n  if (!npc) return effects;\n  \n  // Direct NPC impact\n  effects.push({\n    id: `npc_effect_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n    type: 'npc_impact',\n    target_type: 'npc',\n    target_id: npc.id,\n    target_name: npc.name,\n    effect_type: determineNPCEffectType(event.type, npc),\n    severity: calculateSeverity(strength, event.magnitude),\n    description: generateNPCEffectDescription(npc, event),\n    behavioral_changes: generateNPCBehaviorChanges(npc, event, strength),\n    relationship_changes: generateNPCRelationshipChanges(npc, vector.relationships, strength),\n    timestamp: new Date().toISOString(),\n    parent_event: event.id,\n    cascade_depth: currentDepth,\n    propagation_strength: strength\n  });\n  \n  // Relationship propagation\n  if (vector.relationships && vector.relationships.length > 0) {\n    vector.relationships.slice(0, 2).forEach(relatedNpcId => {\n      const relatedNpc = worldContext.worldState.npcs?.find(n => n.id === relatedNpcId);\n      if (relatedNpc && Math.random() < strength * 0.8) {\n        effects.push({\n          id: `npc_relationship_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n          type: 'npc_impact',\n          target_type: 'npc',\n          target_id: relatedNpc.id,\n          target_name: relatedNpc.name,\n          effect_type: 'relationship_ripple',\n          severity: calculateSeverity(strength * 0.5, event.magnitude),\n          description: `${relatedNpc.name} is affected by events involving ${npc.name}`,\n          behavioral_changes: generateNPCBehaviorChanges(relatedNpc, event, strength * 0.5),\n          timestamp: new Date().toISOString(),\n          parent_event: event.id,\n          cascade_depth: currentDepth,\n          propagation_strength: strength * 0.5,\n          source_npc: npc.id\n        });\n      }\n    });\n  }\n  \n  return effects;\n}\n\nfunction generateFactionEffects(vector, event, worldContext, strength) {\n  const effects = [];\n  const faction = worldContext.worldState.factions?.find(f => f.id === vector.target);\n  \n  if (!faction) return effects;\n  \n  // Direct faction impact\n  effects.push({\n    id: `faction_effect_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n    type: 'faction_impact',\n    target_type: 'faction',\n    target_id: faction.id,\n    target_name: faction.name,\n    effect_type: determineFactionEffectType(event.type, faction),\n    severity: calculateSeverity(strength, event.magnitude),\n    description: generateFactionEffectDescription(faction, event),\n    political_changes: generateFactionPoliticalChanges(faction, event, strength),\n    resource_changes: generateFactionResourceChanges(faction, event, strength),\n    timestamp: new Date().toISOString(),\n    parent_event: event.id,\n    cascade_depth: currentDepth,\n    propagation_strength: strength\n  });\n  \n  // Faction relationship propagation\n  if (vector.relationships && vector.relationships.length > 0) {\n    vector.relationships.slice(0, 2).forEach(relatedFactionId => {\n      const relatedFaction = worldContext.worldState.factions?.find(f => f.id === relatedFactionId);\n      if (relatedFaction && Math.random() < strength * 0.9) {\n        effects.push({\n          id: `faction_relationship_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n          type: 'faction_impact',\n          target_type: 'faction',\n          target_id: relatedFaction.id,\n          target_name: relatedFaction.name,\n          effect_type: 'diplomatic_ripple',\n          severity: calculateSeverity(strength * 0.6, event.magnitude),\n          description: `${relatedFaction.name} responds to events involving ${faction.name}`,\n          diplomatic_changes: generateDiplomaticChanges(relatedFaction, faction, event, strength * 0.6),\n          timestamp: new Date().toISOString(),\n          parent_event: event.id,\n          cascade_depth: currentDepth,\n          propagation_strength: strength * 0.6,\n          source_faction: faction.id\n        });\n      }\n    });\n  }\n  \n  return effects;\n}\n\nfunction generateEconomicEffects(vector, event, worldContext, strength) {\n  const effects = [];\n  \n  // Market impact\n  effects.push({\n    id: `economic_effect_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n    type: 'economic_impact',\n    target_type: 'economy',\n    target_id: 'global_market',\n    effect_type: determineEconomicEffectType(event.type),\n    severity: calculateSeverity(strength, event.magnitude),\n    description: generateEconomicEffectDescription(event),\n    market_changes: {\n      price_volatility: strength * 0.4,\n      supply_disruption: strength * 0.3,\n      demand_shift: strength * 0.3\n    },\n    affected_regions: vector.market_regions || ['local'],\n    timestamp: new Date().toISOString(),\n    parent_event: event.id,\n    cascade_depth: currentDepth,\n    propagation_strength: strength\n  });\n  \n  return effects;\n}\n\nfunction generateEnvironmentalEffects(vector, event, worldContext, strength) {\n  const effects = [];\n  \n  // Environmental spread\n  effects.push({\n    id: `environmental_effect_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n    type: 'environmental_impact',\n    target_type: 'environment',\n    effect_type: determineEnvironmentalEffectType(event.type),\n    severity: calculateSeverity(strength, event.magnitude),\n    description: generateEnvironmentalEffectDescription(event),\n    affected_areas: vector.affected_biomes || ['all'],\n    spread_pattern: vector.spread_pattern || 'radial',\n    duration: calculateEnvironmentalDuration(event.type, strength),\n    timestamp: new Date().toISOString(),\n    parent_event: event.id,\n    cascade_depth: currentDepth,\n    propagation_strength: strength\n  });\n  \n  return effects;\n}\n\n// Helper functions for effect generation\nfunction determineLocationEffectType(eventType) {\n  const types = {\n    'combat': 'damage',\n    'social': 'atmosphere_change',\n    'economic': 'commerce_disruption',\n    'environmental': 'environmental_change',\n    'magical': 'magical_residue',\n    'political': 'control_change'\n  };\n  return types[eventType] || 'general_impact';\n}\n\nfunction determineNPCEffectType(eventType, npc) {\n  const types = {\n    'combat': npc.combat_role ? 'combat_stress' : 'fear_response',\n    'social': 'social_adjustment',\n    'economic': 'financial_impact',\n    'environmental': 'survival_response',\n    'magical': 'magical_exposure',\n    'political': 'political_alignment'\n  };\n  return types[eventType] || 'general_reaction';\n}\n\nfunction determineFactionEffectType(eventType, faction) {\n  const types = {\n    'combat': 'military_response',\n    'social': 'public_opinion_shift',\n    'economic': 'resource_allocation',\n    'environmental': 'territory_impact',\n    'magical': 'magical_policy',\n    'political': 'political_strategy'\n  };\n  return types[eventType] || 'strategic_response';\n}\n\nfunction determineEconomicEffectType(eventType) {\n  const types = {\n    'combat': 'military_economy',\n    'social': 'consumer_confidence',\n    'economic': 'market_cycle',\n    'environmental': 'resource_availability',\n    'magical': 'magical_economy',\n    'political': 'regulation_impact'\n  };\n  return types[eventType] || 'general_economic';\n}\n\nfunction determineEnvironmentalEffectType(eventType) {\n  const types = {\n    'combat': 'battlefield_scarring',\n    'social': 'settlement_impact',\n    'economic': 'resource_extraction',\n    'environmental': 'ecosystem_change',\n    'magical': 'magical_pollution',\n    'political': 'land_use_change'\n  };\n  return types[eventType] || 'environmental_change';\n}\n\nfunction calculateSeverity(strength, magnitude) {\n  const magnitudeMultipliers = {\n    'minor': 0.5,\n    'normal': 1.0,\n    'major': 1.5,\n    'catastrophic': 2.0\n  };\n  \n  const adjustedStrength = strength * (magnitudeMultipliers[magnitude] || 1.0);\n  \n  if (adjustedStrength < 0.3) return 'trivial';\n  if (adjustedStrength < 0.6) return 'minor';\n  if (adjustedStrength < 1.2) return 'moderate';\n  if (adjustedStrength < 1.8) return 'major';\n  return 'catastrophic';\n}\n\nfunction generateLocationEffectDescription(location, event) {\n  const templates = {\n    'combat': `The events at ${location.name} have left visible marks and altered the local atmosphere.`,\n    'social': `Social dynamics in ${location.name} have shifted due to recent events.`,\n    'economic': `Economic activity in ${location.name} has been disrupted by recent developments.`,\n    'environmental': `The environment around ${location.name} shows signs of change.`,\n    'magical': `Magical energies around ${location.name} have been altered by recent events.`,\n    'political': `Political control over ${location.name} is in flux.`\n  };\n  return templates[event.type] || `Recent events have affected ${location.name}.`;\n}\n\nfunction generateNPCEffectDescription(npc, event) {\n  return `${npc.name} has been affected by recent events, showing changes in behavior and outlook.`;\n}\n\nfunction generateFactionEffectDescription(faction, event) {\n  return `The ${faction.name} faction is responding to recent events with strategic adjustments.`;\n}\n\nfunction generateEconomicEffectDescription(event) {\n  return 'Economic conditions are shifting in response to recent events.';\n}\n\nfunction generateEnvironmentalEffectDescription(event) {\n  return 'Environmental patterns are showing signs of change.';\n}\n\nfunction generateLocationConsequences(location, event) {\n  return [\n    'altered atmosphere',\n    'changed perception',\n    'new opportunities',\n    'increased danger'\n  ];\n}\n\nfunction generateNPCBehaviorChanges(npc, event, strength) {\n  return {\n    mood_adjustment: (Math.random() - 0.5) * strength,\n    activity_level_change: (Math.random() - 0.5) * strength,\n    caution_level: Math.random() * strength,\n    new_goals: Math.random() < strength ? 1 : 0\n  };\n}\n\nfunction generateNPCRelationshipChanges(npc, relationships, strength) {\n  const changes = {};\n  relationships.slice(0, 2).forEach(relatedId => {\n    changes[relatedId] = (Math.random() - 0.5) * strength * 20; // -10 to +10\n  });\n  return changes;\n}\n\nfunction generateFactionPoliticalChanges(faction, event, strength) {\n  return {\n    leadership_stability: Math.max(0, 1 - strength * 0.3),\n    public_support: (Math.random() - 0.5) * strength * 0.4,\n    policy_changes: Math.random() < strength ? 1 : 0\n  };\n}\n\nfunction generateFactionResourceChanges(faction, event, strength) {\n  return {\n    military_strength: (Math.random() - 0.5) * strength * 0.2,\n    economic_resources: (Math.random() - 0.5) * strength * 0.3,\n    influence: (Math.random() - 0.5) * strength * 0.25\n  };\n}\n\nfunction generateDiplomaticChanges(targetFaction, sourceFaction, event, strength) {\n  return {\n    relationship_change: (Math.random() - 0.5) * strength * 15,\n    trade_agreements: Math.random() < strength * 0.3 ? 'reviewed' : 'unchanged',\n    diplomatic_stance: Math.random() < strength * 0.2 ? 'shifted' : 'stable'\n  };\n}\n\nfunction calculateEnvironmentalDuration(eventType, strength) {\n  const baseDurations = {\n    'combat': '1-3 days',\n    'environmental': '1-2 weeks',\n    'magical': '3-7 days',\n    'economic': '1-2 weeks'\n  };\n  \n  const multiplier = strength > 1 ? 2 : 1;\n  return baseDurations[eventType] || '1 week';\n}\n\nreturn [{\n  json: {\n    ...cascadeData,\n    currentDepth: currentDepth + 1,\n    cascadeEffects,\n    effectsGenerated: cascadeEffects.length,\n    lastPropagationTime: new Date().toISOString(),\n    propagationHistory: [\n      ...cascadeData.propagationHistory,\n      {\n        depth: currentDepth,\n        effects_count: cascadeEffects.length,\n        timestamp: new Date().toISOString()\n      }\n    ]\n  }\n}];"
+      },
+      "id": "generate-cascade-effects",
+      "name": "Generate Cascade Effects",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.DEEPSEEK_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "deepseek-chat"
+            },
+            {
+              "name": "messages",
+              "value": "={{[{\n  \"role\": \"system\",\n  \"content\": \"You are a master storyteller and world-builder. Transform the following cascade effects into compelling narrative descriptions that would engage D&D players. Focus on cause and effect, making the world feel alive and responsive.\\n\\nFor each effect, provide:\\n1. A vivid narrative description (2-3 sentences)\\n2. How players might perceive or discover this change\\n3. Potential hooks for player involvement\\n4. Foreshadowing of further consequences\\n\\nFormat as JSON with keys: narrative_description, player_perception, player_hooks, foreshadowing\"\n}], [\n  {\n    \"role\": \"user\",\n    \"content\": \"Generate narrative descriptions for these cascade effects in campaign {{ $json.campaignId }} at cascade depth {{ $json.currentDepth }}:\\n\\nInitial Event: {{ JSON.stringify($json.initialEvent, null, 2) }}\\n\\nCascade Effects: {{ JSON.stringify($json.cascadeEffects, null, 2) }}\\n\\nWorld Context: {{ JSON.stringify($json.worldContext.worldState, null, 2) }}\"\n  }\n])}}"
+            },
+            {
+              "name": "temperature",
+              "value": "0.8"
+            },
+            {
+              "name": "max_tokens",
+              "value": "2000"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "deepseek-cascade-narratives",
+      "name": "DeepSeek - Generate Cascade Narratives",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process narratives and prepare for next cascade iteration\nconst cascadeData = $input.first().json;\nconst deepseekResponse = $input.last().json;\n\nlet narrativeData = {};\ntry {\n  const content = deepseekResponse.choices[0].message.content;\n  narrativeData = JSON.parse(content);\n} catch (error) {\n  console.error('Failed to parse DeepSeek cascade narrative:', error);\n  narrativeData = {\n    narrative_description: 'The effects of the event continue to ripple through the world.',\n    player_perception: 'Changes in the world become gradually apparent.',\n    player_hooks: 'Opportunities for investigation or intervention may arise.',\n    foreshadowing: 'Further consequences may develop over time.'\n  };\n}\n\n// Enrich cascade effects with narratives\nconst enrichedEffects = cascadeData.cascadeEffects.map((effect, index) => {\n  const effectNarrative = narrativeData.effects?.[index] || narrativeData;\n  \n  return {\n    ...effect,\n    narrative_description: effectNarrative.narrative_description || `The world responds with ${effect.effect_type}`,\n    player_perception: effectNarrative.player_perception || 'This change may be noticed through careful observation.',\n    player_hooks: effectNarrative.player_hooks || 'This may present new opportunities or challenges.',\n    foreshadowing: effectNarrative.foreshadowing || 'Further effects may follow.',\n    processed: true\n  };\n});\n\n// Check if cascade should continue\nconst shouldContinue = cascadeData.currentDepth < cascadeData.cascadeDepth && \n                      enrichedEffects.length > 0 && \n                      cascadeData.systemState.active;\n\n// Prepare next iteration data\nconst nextIterationData = shouldContinue ? {\n  ...cascadeData,\n  cascadeEffects: enrichedEffects,\n  narrative_summary: narrativeData.narrative_description || 'Cascade effects continue to propagate',\n  effects_enriched: enrichedEffects.length\n} : cascadeData;\n\nreturn [{\n  json: {\n    ...nextIterationData,\n    cascadeEffects: enrichedEffects,\n    narrativeData,\n    shouldContinue,\n    processing_complete: !shouldContinue\n  }\n}];"
+      },
+      "id": "process-cascade-narratives",
+      "name": "Process Cascade Narratives",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.NEO4J_URI }}",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.NEO4J_PASSWORD }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "=MATCH (c:Campaign {id: '{{ $json.campaignId }}' }) CREATE (e:Event {id: '{{ $json.cascadeId }}', type: 'cascade', initial_event: {{ JSON.stringify($json.initialEvent) }}, effects: {{ JSON.stringify($json.cascadeEffects) }}, current_depth: {{ $json.currentDepth }}, completed: {{ $json.processing_complete }}, timestamp: '{{ $json.lastPropagationTime }}' })-[r:AFFECTS]->(c) RETURN e, r"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "store-cascade-state",
+      "name": "Neo4j - Store Cascade State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate cascade branch points for parallel processing\nconst cascadeData = $input.first().json;\nconst { cascadeEffects, shouldContinue, currentDepth } = cascadeData;\n\nif (!shouldContinue) {\n  return [{ json: { ...cascadeData, branches: [] } }];\n}\n\n// Identify effects that can spawn new cascade branches\nconst potentialBranches = cascadeEffects.filter(effect => {\n  // Effects with high severity can spawn branches\n  if (['major', 'catastrophic'].includes(effect.severity)) return true;\n  \n  // Effects affecting multiple targets can spawn branches\n  if (effect.target_type === 'faction' || effect.target_type === 'environmental') return true;\n  \n  // Effects with strong propagation strength\n  if (effect.propagation_strength > 0.7) return true;\n  \n  return false;\n});\n\n// Generate branch data\nconst branches = potentialBranches.slice(0, 3).map((effect, index) => {\n  return {\n    branch_id: `${cascadeData.cascadeId}_branch_${index}`,\n    parent_effect_id: effect.id,\n    source_event: effect,\n    remaining_depth: cascadeData.cascadeDepth - currentDepth,\n    propagation_modifier: effect.propagation_strength,\n    branch_type: determineBranchType(effect),\n    priority: calculateBranchPriority(effect),\n    delay: calculateBranchDelay(effect, currentDepth),\n    conditions: generateBranchConditions(effect)\n  };\n});\n\nfunction determineBranchType(effect) {\n  const types = {\n    'location_impact': 'territorial',\n    'npc_impact': 'social',\n    'faction_impact': 'political',\n    'economic_impact': 'economic',\n    'environmental_impact': 'environmental'\n  };\n  return types[effect.type] || 'general';\n}\n\nfunction calculateBranchPriority(effect) {\n  let priority = 5;\n  \n  // Severity factor\n  if (effect.severity === 'catastrophic') priority += 3;\n  else if (effect.severity === 'major') priority += 2;\n  else if (effect.severity === 'moderate') priority += 1;\n  \n  // Propagation strength factor\n  priority += effect.propagation_strength * 2;\n  \n  // Target importance factor\n  if (effect.target_type === 'faction') priority += 2;\n  if (effect.target_type === 'environmental') priority += 1;\n  \n  return Math.min(priority, 10);\n}\n\nfunction calculateBranchDelay(effect, depth) {\n  const baseDelay = (depth + 1) * 2; // hours\n  const severityMultiplier = {\n    'catastrophic': 0.5,\n    'major': 0.75,\n    'moderate': 1.0,\n    'minor': 1.5,\n    'trivial': 2.0\n  };\n  \n  return baseDelay * (severityMultiplier[effect.severity] || 1.0);\n}\n\nfunction generateBranchConditions(effect) {\n  return {\n    minimum_propagation_strength: 0.3,\n    required_context: [effect.target_type],\n    exclusion_factors: ['player_intervention'],\n    environmental_factors: effect.target_type === 'environmental' ? ['weather', 'magic'] : []\n  };\n}\n\nreturn [{\n  json: {\n    ...cascadeData,\n    branches,\n    total_branches: branches.length,\n    cascade_complete: !shouldContinue\n  }\n}];"
+      },
+      "id": "generate-cascade-branches",
+      "name": "Generate Cascade Branches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "branches-check",
+              "leftValue": "={{ $json.total_branches }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-for-branches",
+      "name": "Check for Branches",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "process-branches",
+      "name": "Process Branches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1780, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.NEO4J_URI }}",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.NEO4J_PASSWORD }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "=MATCH (c:Campaign {id: '{{ $json.campaignId }}' }) CREATE (b:Branch {id: '{{ $json.branch_id }}', parent_event: '{{ $json.parent_effect_id }}', type: '{{ $json.branch_type }}', priority: {{ $json.priority }}, delay: {{ $json.delay }}, conditions: {{ JSON.stringify($json.conditions) }}, created: timestamp() })-[r:BRANCH_OF]->(c) RETURN b, r"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "store-branches-neo4j",
+      "name": "Neo4j - Store Branches",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.CAMPAIGN_API_URL }}/api/campaigns/{{ $json.campaignId }}/cascades/{{ $json.cascadeId }}/branches",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.CAMPAIGN_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "branch_data",
+              "value": "={{ $json }}"
+            },
+            {
+              "name": "cascade_context",
+              "value": "={{ { cascadeId: $json.cascadeId, campaignId: $json.campaignId, currentDepth: $json.currentDepth } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "notify-branch-processing",
+      "name": "Notify Branch Processing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate final cascade summary\nconst cascadeData = $input.first().json;\n\nconst summary = {\n  cascade_id: cascadeData.cascadeId,\n  campaign_id: cascadeData.campaignId,\n  completion_time: new Date().toISOString(),\n  cascade_statistics: {\n    total_depths_processed: cascadeData.currentDepth,\n    max_depth: cascadeData.cascadeDepth,\n    total_effects_generated: cascadeData.cascadeEffects?.length || 0,\n    branches_created: cascadeData.total_branches || 0,\n    propagation_vectors_used: cascadeData.propagationMap?.vectors?.length || 0,\n    affected_domains: cascadeData.propagationMap?.domains || [],\n    cascade_potential: cascadeData.propagationMap?.potential || 0\n  },\n  impact_summary: {\n    locations_affected: cascadeData.cascadeEffects?.filter(e => e.target_type === 'location').length || 0,\n    npcs_affected: cascadeData.cascadeEffects?.filter(e => e.target_type === 'npc').length || 0,\n    factions_affected: cascadeData.cascadeEffects?.filter(e => e.target_type === 'faction').length || 0,\n    economic_impacts: cascadeData.cascadeEffects?.filter(e => e.target_type === 'economy').length || 0,\n    environmental_impacts: cascadeData.cascadeEffects?.filter(e => e.target_type === 'environment').length || 0\n  },\n  severity_distribution: calculateSeverityDistribution(cascadeData.cascadeEffects || []),\n  narrative_summary: cascadeData.narrative_summary || 'Event cascade processing completed',\n  player_hooks: extractPlayerHooks(cascadeData.cascadeEffects || []),\n  next_steps: generateNextSteps(cascadeData),\n  cascade_complete: cascadeData.cascade_complete || true\n};\n\nfunction calculateSeverityDistribution(effects) {\n  const distribution = {\n    trivial: 0,\n    minor: 0,\n    moderate: 0,\n    major: 0,\n    catastrophic: 0\n  };\n  \n  effects.forEach(effect => {\n    if (distribution.hasOwnProperty(effect.severity)) {\n      distribution[effect.severity]++;\n    }\n  });\n  \n  return distribution;\n}\n\nfunction extractPlayerHooks(effects) {\n  return effects\n    .filter(effect => effect.player_hooks && effect.player_hooks.length > 0)\n    .map(effect => ({\n      effect_id: effect.id,\n      hook_type: effect.effect_type,\n      hooks: effect.player_hooks,\n      target: effect.target_name,\n      severity: effect.severity\n    }));\n}\n\nfunction generateNextSteps(cascadeData) {\n  const steps = [];\n  \n  // Continue monitoring if there are branches\n  if (cascadeData.total_branches > 0) {\n    steps.push({\n      action: 'monitor_branches',\n      description: 'Monitor cascade branches for further propagation',\n      priority: 'high',\n      timeline: 'next 1-24 hours'\n    });\n  }\n  \n  // Player involvement recommendations\n  if (cascadeData.playerInvolvement) {\n    steps.push({\n      action: 'player_notification',\n      description: 'Notify players of significant world changes',\n      priority: 'medium',\n      timeline: 'immediate'\n    });\n  }\n  \n  // World state update\n  steps.push({\n    action: 'world_state_update',\n    description: 'Update campaign world state with cascade effects',\n    priority: 'high',\n    timeline: 'immediate'\n  });\n  \n  return steps;\n}\n\nreturn [{ json: summary }];"
+      },
+      "id": "generate-final-summary",
+      "name": "Generate Final Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2440, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_WORLD_SHEET_ID }}",
+        "range": "Cascade_Log!A:J",
+        "options": {}
+      },
+      "id": "log-cascade-completion",
+      "name": "Log Cascade Completion",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2660, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, cascade_id: $json.cascade_id, effects_processed: $json.cascade_statistics.total_effects_generated, branches_created: $json.cascade_statistics.branches_created, narrative_summary: $json.narrative_summary, player_hooks: $json.player_hooks, cascade_complete: $json.cascade_complete, next_steps: $json.next_steps } }}"
+      },
+      "id": "cascade-response",
+      "name": "Cascade Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2880, 300]
+    }
+  ],
+  "connections": {
+    "Cascade Trigger Webhook": {
+      "main": [
+        [
+          {
+            "node": "Initialize Cascade",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Cascade": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Fetch World Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j - Fetch World Context": {
+      "main": [
+        [
+          {
+            "node": "Analyze Event Propagation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Event Propagation": {
+      "main": [
+        [
+          {
+            "node": "Check Cascade Depth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Cascade Depth": {
+      "main": [
+        [
+          {
+            "node": "Generate Cascade Effects",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Cascade Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Cascade Effects": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek - Generate Cascade Narratives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek - Generate Cascade Narratives": {
+      "main": [
+        [
+          {
+            "node": "Process Cascade Narratives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Cascade Narratives": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Store Cascade State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j - Store Cascade State": {
+      "main": [
+        [
+          {
+            "node": "Generate Final Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Cascade Branches": {
+      "main": [
+        [
+          {
+            "node": "Check for Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Branches": {
+      "main": [
+        [
+          {
+            "node": "Process Branches",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Final Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Branches": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Store Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j - Store Branches": {
+      "main": [
+        [
+          {
+            "node": "Notify Branch Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Branch Processing": {
+      "main": [
+        [
+          {
+            "node": "Process Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Final Summary": {
+      "main": [
+        [
+          {
+            "node": "Log Cascade Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Cascade Completion": {
+      "main": [
+        [
+          {
+            "node": "Cascade Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicyDefaultOption": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T13:00:00.000Z",
+      "updatedAt": "2024-10-23T13:00:00.000Z",
+      "id": "world-simulation",
+      "name": "World Simulation"
+    },
+    {
+      "createdAt": "2024-10-23T13:00:00.000Z",
+      "updatedAt": "2024-10-23T13:00:00.000Z",
+      "id": "cascade",
+      "name": "Event Cascade"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T13:00:00.000Z",
+  "versionId": "1.0.0"
+}

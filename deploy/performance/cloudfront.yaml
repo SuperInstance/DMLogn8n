@@ -1,0 +1,444 @@
+# CloudFront Distribution Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudfront-config
+  namespace: dmlog
+  labels:
+    app: cloudfront
+data:
+  cloudfront-distribution.json: |
+    {
+      "CallerReference": "dmlog-cloudfront-distribution-v1",
+      "Comment": "CloudFront distribution for DMLog application",
+      "DefaultRootObject": "index.html",
+      "Origins": {
+        "Quantity": 3,
+        "Items": [
+          {
+            "Id": "S3-dmlog-frontend",
+            "DomainName": "dmlog-static-files.s3.amazonaws.com",
+            "S3OriginConfig": {
+              "OriginAccessIdentity": "origin-access-identity/cloudfront/E1234567890ABCDEF"
+            },
+            "ConnectionAttempts": 3,
+            "ConnectionTimeout": 10,
+            "OriginShield": {
+              "Enabled": true,
+              "OriginShieldRegion": "us-west-2"
+            }
+          },
+          {
+            "Id": "API-dmlog-backend",
+            "DomainName": "api.dmlog.com",
+            "CustomOriginConfig": {
+              "HTTPPort": 80,
+              "HTTPSPort": 443,
+              "OriginProtocolPolicy": "https-only",
+              "OriginSslProtocols": {
+                "Quantity": 1,
+                "Items": ["TLSv1.2"]
+              },
+              "OriginReadTimeout": 30,
+              "OriginKeepaliveTimeout": 5
+            },
+            "ConnectionAttempts": 3,
+            "ConnectionTimeout": 10,
+            "OriginShield": {
+              "Enabled": true,
+              "OriginShieldRegion": "us-west-2"
+            }
+          },
+          {
+            "Id": "CDN-dmlog-media",
+            "DomainName": "dmlog-media-files.s3.amazonaws.com",
+            "S3OriginConfig": {
+              "OriginAccessIdentity": "origin-access-identity/cloudfront/E1234567890ABCDEF"
+            },
+            "ConnectionAttempts": 3,
+            "ConnectionTimeout": 10,
+            "OriginShield": {
+              "Enabled": true,
+              "OriginShieldRegion": "us-west-2"
+            }
+          }
+        ]
+      },
+      "DefaultCacheBehavior": {
+        "TargetOriginId": "S3-dmlog-frontend",
+        "ViewerProtocolPolicy": "redirect-to-https",
+        "TrustedSigners": {
+          "Enabled": false,
+          "Quantity": 0
+        },
+        "ForwardedValues": {
+          "QueryString": false,
+          "Cookies": {
+            "Forward": "none"
+          },
+          "Headers": {
+            "Quantity": 2,
+            "Items": ["Origin", "Access-Control-Request-Headers"]
+          }
+        },
+        "MinTTL": 0,
+        "DefaultTTL": 86400,
+        "MaxTTL": 31536000,
+        "Compress": true,
+        "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+        "ResponseHeadersPolicyId": "5cc3b908-e619-4b99-88e5-2ca7b0c59500"
+      },
+      "CacheBehaviors": {
+        "Quantity": 2,
+        "Items": [
+          {
+            "PathPattern": "/api/*",
+            "TargetOriginId": "API-dmlog-backend",
+            "ViewerProtocolPolicy": "https-only",
+            "TrustedSigners": {
+              "Enabled": false,
+              "Quantity": 0
+            },
+            "ForwardedValues": {
+              "QueryString": true,
+              "Cookies": {
+                "Forward": "whitelist",
+                "WhitelistedNames": {
+                  "Quantity": 2,
+                  "Items": ["session_id", "csrf_token"]
+                }
+              },
+              "Headers": {
+                "Quantity": 5,
+                "Items": ["Authorization", "Content-Type", "Accept", "User-Agent", "X-Requested-With"]
+              }
+            },
+            "MinTTL": 0,
+            "DefaultTTL": 0,
+            "MaxTTL": 300,
+            "Compress": true,
+            "CachePolicyId": "ab41c602-3a1b-4626-b4d6-b793a7c9d1a8"
+          },
+          {
+            "PathPattern": "/media/*",
+            "TargetOriginId": "CDN-dmlog-media",
+            "ViewerProtocolPolicy": "https-only",
+            "TrustedSigners": {
+              "Enabled": false,
+              "Quantity": 0
+            },
+            "ForwardedValues": {
+              "QueryString": false,
+              "Cookies": {
+                "Forward": "none"
+              }
+            },
+            "MinTTL": 86400,
+            "DefaultTTL": 604800,
+            "MaxTTL": 31536000,
+            "Compress": false,
+            "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+          }
+        ]
+      },
+      "Enabled": true,
+      "PriceClass": "PriceClass_All",
+      "ViewerCertificate": {
+        "CloudFrontDefaultCertificate": false,
+        "ACMCertificateArn": "arn:aws:acm:us-west-2:123456789012:certificate/12345678-1234-1234-1234-123456789012",
+        "SSLSupportMethod": "sni-only",
+        "MinimumProtocolVersion": "TLSv1.2_2021",
+        "Certificate": "arn:aws:acm:us-west-2:123456789012:certificate/12345678-1234-1234-1234-123456789012",
+        "CertificateSource": "acm"
+      },
+      "Restrictions": {
+        "GeoRestriction": {
+          "RestrictionType": "none",
+          "Quantity": 0
+        }
+      },
+      "WebACLId": "arn:aws:wafv2:us-west-2:123456789012:global/webacl/DMLogWebACL/12345678-1234-1234-1234-123456789012",
+      "HttpVersion": "http2",
+      "IsIPV6Enabled": true,
+      "Logging": {
+        "Enabled": true,
+        "IncludeCookies": false,
+        "Bucket": "dmlog-cloudfront-logs",
+        "Prefix": "cloudfront-logs/"
+      }
+    }
+---
+# Cache Policies Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cache-policies
+  namespace: dmlog
+  labels:
+    app: cloudfront
+data:
+  cache-policy-static.json: |
+    {
+      "CallerReference": "dmlog-static-cache-policy",
+      "Comment": "Cache policy for static assets",
+      "DefaultTTL": 86400,
+      "MaxTTL": 31536000,
+      "MinTTL": 0,
+      "ParametersInCacheKeyAndForwardedToOrigin": {
+        "EnableAcceptEncodingGzip": true,
+        "EnableAcceptEncodingBrotli": true,
+        "HeadersConfig": {
+          "HeaderBehavior": "none",
+          "Headers": []
+        },
+        "CookiesConfig": {
+          "CookieBehavior": "none",
+          "Cookies": []
+        },
+        "QueryStringsConfig": {
+          "QueryStringBehavior": "none",
+          "QueryStrings": []
+        }
+      }
+    }
+  cache-policy-api.json: |
+    {
+      "CallerReference": "dmlog-api-cache-policy",
+      "Comment": "Cache policy for API responses",
+      "DefaultTTL": 0,
+      "MaxTTL": 300,
+      "MinTTL": 0,
+      "ParametersInCacheKeyAndForwardedToOrigin": {
+        "EnableAcceptEncodingGzip": true,
+        "EnableAcceptEncodingBrotli": true,
+        "HeadersConfig": {
+          "HeaderBehavior": "whitelist",
+          "Headers": {
+            "Quantity": 5,
+            "Items": ["Authorization", "Content-Type", "Accept", "User-Agent", "X-Requested-With"]
+          }
+        },
+        "CookiesConfig": {
+          "CookieBehavior": "whitelist",
+          "Cookies": {
+            "Quantity": 2,
+            "Items": ["session_id", "csrf_token"]
+          }
+        },
+        "QueryStringsConfig": {
+          "QueryStringBehavior": "all",
+          "QueryStrings": []
+        }
+      }
+    }
+---
+# Response Headers Policies
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: response-headers-policies
+  namespace: dmlog
+  labels:
+    app: cloudfront
+data:
+  security-headers.json: |
+    {
+      "CallerReference": "dmlog-security-headers-policy",
+      "Comment": "Security headers policy",
+      "SecurityHeadersConfig": {
+        "FrameOptions": {
+          "FrameOption": "DENY",
+          "Override": true
+        },
+        "ReferrerPolicy": {
+          "ReferrerPolicy": "strict-origin-when-cross-origin",
+          "Override": true
+        },
+        "XSSProtection": {
+          "Protection": true,
+          "ModeBlock": true,
+          "Override": true
+        },
+        "StrictTransportSecurity": {
+          "AccessControlMaxAgeSec": 31536000,
+          "IncludeSubdomains": true,
+          "Preload": true,
+          "Override": true
+        },
+        "ContentTypeOptions": {
+          "Override": true
+        }
+      },
+      "ServerTimingHeadersConfig": {
+        "Enabled": false,
+        "SamplingRate": 10
+      },
+      "CustomHeadersConfig": {
+        "Quantity": 2,
+        "Items": [
+          {
+            "Header": "X-Content-Type-Options",
+            "Value": "nosniff",
+            "Override": true
+          },
+          {
+            "Header": "X-Frame-Options",
+            "Value": "DENY",
+            "Override": true
+          }
+        ]
+      }
+    }
+---
+# Origin Access Control Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: origin-access-control
+  namespace: dmlog
+  labels:
+    app: cloudfront
+data:
+  origin-access-control.json: |
+    {
+      "CallerReference": "dmlog-oac-s3",
+      "Comment": "Origin Access Control for S3 origins",
+      "OriginAccessControlConfig": {
+        "Name": "dmlog-s3-oac",
+        "OriginAccessControlOriginType": "s3",
+        "SigningBehavior": "always",
+        "SigningProtocol": "sigv4",
+        "OriginAccessControlSigningIncludeHeaders": [
+          "host",
+          "accept",
+          "accept-encoding",
+          "accept-language",
+          "user-agent",
+          "referer",
+          "origin",
+          "cache-control"
+        ]
+      }
+    }
+---
+# CloudFront Monitoring and Alarms
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cloudfront-monitor
+  namespace: dmlog
+  labels:
+    app: cloudfront-monitor
+spec:
+  schedule: "*/5 * * * *"  # Every 5 minutes
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: cloudfront-monitor
+          restartPolicy: OnFailure
+          containers:
+          - name: cloudfront-monitor
+            image: amazon/aws-cli:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Monitoring CloudFront performance at $(date)"
+
+              # Get CloudFront metrics
+              CACHE_HIT_RATE=$(aws cloudwatch get-metric-statistics \
+                --namespace AWS/CloudFront \
+                --metric-name CacheHitRate \
+                --dimensions Name=DistributionId,Value=E1234567890ABCDEF \
+                --start-time $(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ) \
+                --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+                --period 300 \
+                --statistics Average \
+                --query 'Datapoints[0].Average' \
+                --output text 2>/dev/null || echo "0")
+
+              ERROR_RATE=$(aws cloudwatch get-metric-statistics \
+                --namespace AWS/CloudFront \
+                --metric-name 4xxErrorRate \
+                --dimensions Name=DistributionId,Value=E1234567890ABCDEF \
+                --start-time $(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ) \
+                --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+                --period 300 \
+                --statistics Average \
+                --query 'Datapoints[0].Average' \
+                --output text 2>/dev/null || echo "0")
+
+              LATENCY=$(aws cloudwatch get-metric-statistics \
+                --namespace AWS/CloudFront \
+                --metric-name TotalLatency \
+                --dimensions Name=DistributionId,Value=E1234567890ABCDEF \
+                --start-time $(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ) \
+                --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+                --period 300 \
+                --statistics Average \
+                --query 'Datapoints[0].Average' \
+                --output text 2>/dev/null || echo "0")
+
+              echo "Cache Hit Rate: ${CACHE_HIT_RATE}%"
+              echo "Error Rate: ${ERROR_RATE}%"
+              echo "Latency: ${LATENCY}ms"
+
+              # Check thresholds and alert
+              if (( $(echo "$CACHE_HIT_RATE < 80" | bc -l) )); then
+                curl -X POST -H 'Content-type: application/json' \
+                  --data "{\"text\":\"⚠️ Low cache hit rate: ${CACHE_HIT_RATE}%\"}" \
+                  "$SLACK_WEBHOOK_URL"
+              fi
+
+              if (( $(echo "$ERROR_RATE > 5" | bc -l) )); then
+                curl -X POST -H 'Content-type: application/json' \
+                  --data "{\"text\":\"🚨 High error rate: ${ERROR_RATE}%\"}" \
+                  "$SLACK_WEBHOOK_URL"
+              fi
+
+              if (( $(echo "$LATENCY > 2000" | bc -l) )); then
+                curl -X POST -H 'Content-type: application/json' \
+                  --data "{\"text\":\"⚠️ High latency: ${LATENCY}ms\"}" \
+                  "$SLACK_WEBHOOK_URL"
+              fi
+            env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: cloudfront-secrets
+                  key: aws-access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: cloudfront-secrets
+                  key: aws-secret-access-key
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: cloudfront-secrets
+                  key: slack-webhook-url
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 200m
+                memory: 256Mi
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ServiceAccount
+metadata:
+  name: cloudfront-monitor
+  namespace: dmlog
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudfront-secrets
+  namespace: dmlog
+type: Opaque
+data:
+  aws-access-key-id: <BASE64_ENCODED_AWS_ACCESS_KEY_ID>
+  aws-secret-access-key: <BASE64_ENCODED_AWS_SECRET_ACCESS_KEY>
+  slack-webhook-url: <BASE64_ENCODED_SLACK_WEBHOOK_URL>

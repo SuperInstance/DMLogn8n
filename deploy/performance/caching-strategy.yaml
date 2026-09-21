@@ -1,0 +1,412 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-caching-config
+  namespace: dmlog
+  labels:
+    app: redis
+    component: cache
+data:
+  redis.conf: |
+    # Redis Configuration for Production
+    bind 0.0.0.0
+    port 6379
+    protected-mode yes
+    requirepass ${REDIS_PASSWORD}
+
+    # Memory Management
+    maxmemory 2gb
+    maxmemory-policy allkeys-lru
+    maxmemory-samples 5
+
+    # Persistence
+    save 900 1
+    save 300 10
+    save 60 10000
+    stop-writes-on-bgsave-error yes
+    rdbcompression yes
+    rdbchecksum yes
+    dbfilename dump.rdb
+    dir /data
+
+    # AOF Persistence
+    appendonly yes
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+    aof-load-truncated yes
+    aof-use-rdb-preamble yes
+
+    # Networking
+    timeout 300
+    tcp-keepalive 300
+    tcp-backlog 511
+
+    # Clients
+    maxclients 10000
+
+    # Memory Optimization
+    hash-max-ziplist-entries 512
+    hash-max-ziplist-value 64
+    list-max-ziplist-size -2
+    list-compress-depth 0
+    set-max-intset-entries 512
+    zset-max-ziplist-entries 128
+    zset-max-ziplist-value 64
+    hll-sparse-max-bytes 3000
+    stream-node-max-bytes 4096
+    stream-node-max-entries 100
+
+    # Lazy Freeing
+    lazyfree-lazy-eviction no
+    lazyfree-lazy-expire no
+    lazyfree-lazy-server-del no
+    replica-lazy-flush no
+
+    # AOF Rewrite Incremental fsync
+    aof-rewrite-incremental-fsync yes
+
+    # RDB save incremental fsync
+    rdb-save-incremental-fsync yes
+
+    # Logging
+    loglevel notice
+    syslog-enabled yes
+    syslog-ident redis
+    syslog-facility local0
+
+    # Security
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    rename-command DEBUG ""
+    rename-command CONFIG ""
+    rename-command SHUTDOWN SHUTDOWN_89ABCDEF
+
+    # Slow Log
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+
+    # Client Output Buffer Limits
+    client-output-buffer-limit normal 0 0 0
+    client-output-buffer-limit replica 256mb 64mb 60
+    client-output-buffer-limit pubsub 32mb 8mb 60
+
+    # Redis Cluster
+    cluster-enabled yes
+    cluster-config-file nodes-6379.conf
+    cluster-node-timeout 15000
+    cluster-announce-ip ${POD_IP}
+    cluster-announce-port 6379
+    cluster-announce-bus-port 16379
+
+    # Active Defragmentation
+    activedefrag yes
+    active-defrag-ignore-bytes 100mb
+    active-defrag-threshold-lower 10
+    active-defrag-threshold-upper 100
+    active-defrag-cycle-min 25
+    active-defrag-cycle-max 75
+
+    # Threaded I/O
+    io-threads 4
+    io-threads-do-reads yes
+
+    # TLS (if needed)
+    # tls-port 6380
+    # tls-cert-file /path/to/redis.crt
+    # tls-key-file /path/to/redis.key
+    # tls-ca-cert-file /path/to/ca.crt
+    # tls-dh-params-file /path/to/redis.dh
+    # tls-protocols "TLSv1.2 TLSv1.3"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: application-caching-config
+  namespace: dmlog
+  labels:
+    app: dmlog
+    component: backend
+data:
+  caching-strategy.py: |
+    """
+    Advanced Caching Strategy for DMLog Application
+    """
+    import redis
+    import json
+    import pickle
+    import hashlib
+    from typing import Any, Optional, Union
+    from functools import wraps
+    from datetime import timedelta, datetime
+
+    class CacheManager:
+        def __init__(self, redis_url: str):
+            self.redis_client = redis.from_url(redis_url)
+
+        # Cache keys patterns
+        CACHE_KEYS = {
+            'user_session': 'session:{user_id}',
+            'user_data': 'user:{user_id}:data',
+            'api_response': 'api:{endpoint}:{params_hash}',
+            'database_query': 'query:{table}:{query_hash}',
+            'file_metadata': 'file:{file_id}:metadata',
+            'search_results': 'search:{query_hash}',
+            'analytics_data': 'analytics:{metric}:{timeframe}',
+            'config_data': 'config:{key}',
+            'rate_limit': 'ratelimit:{user_id}:{endpoint}',
+            'feature_flag': 'feature:{flag_name}',
+            'dashboard_data': 'dashboard:{user_id}:{dashboard_id}',
+        }
+
+        # TTL values in seconds
+        CACHE_TTL = {
+            'user_session': 3600 * 24,        # 24 hours
+            'user_data': 3600 * 2,           # 2 hours
+            'api_response': 300,              # 5 minutes
+            'database_query': 600,            # 10 minutes
+            'file_metadata': 3600 * 24,      # 24 hours
+            'search_results': 1800,           # 30 minutes
+            'analytics_data': 300,            # 5 minutes
+            'config_data': 3600,              # 1 hour
+            'rate_limit': 3600,               # 1 hour
+            'feature_flag': 300,              # 5 minutes
+            'dashboard_data': 600,            # 10 minutes
+        }
+
+        def cache_key(self, key_type: str, **kwargs) -> str:
+            """Generate cache key with pattern and parameters"""
+            pattern = self.CACHE_KEYS.get(key_type, 'default:{key}')
+            return pattern.format(**kwargs)
+
+        def hash_params(self, params: dict) -> str:
+            """Create hash from parameters for cache keys"""
+            params_str = json.dumps(params, sort_keys=True)
+            return hashlib.md5(params_str.encode()).hexdigest()
+
+        def set_cache(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
+            """Set value in cache with optional TTL"""
+            try:
+                serialized_value = pickle.dumps(value)
+                return self.redis_client.setex(key, ttl or 300, serialized_value)
+            except Exception as e:
+                print(f"Cache set error: {e}")
+                return False
+
+        def get_cache(self, key: str) -> Optional[Any]:
+            """Get value from cache"""
+            try:
+                cached_value = self.redis_client.get(key)
+                if cached_value:
+                    return pickle.loads(cached_value)
+                return None
+            except Exception as e:
+                print(f"Cache get error: {e}")
+                return None
+
+        def delete_cache(self, key: str) -> bool:
+            """Delete key from cache"""
+            try:
+                return bool(self.redis_client.delete(key))
+            except Exception as e:
+                print(f"Cache delete error: {e}")
+                return False
+
+        def delete_pattern(self, pattern: str) -> int:
+            """Delete keys matching pattern"""
+            try:
+                keys = self.redis_client.keys(pattern)
+                if keys:
+                    return self.redis_client.delete(*keys)
+                return 0
+            except Exception as e:
+                print(f"Cache pattern delete error: {e}")
+                return 0
+
+        def cache_decorator(self, key_type: str, ttl: Optional[int] = None, key_params: list = None):
+            """Decorator for caching function results"""
+            def decorator(func):
+                @wraps(func)
+                def wrapper(*args, **kwargs):
+                    # Generate cache key
+                    cache_params = {}
+                    if key_params:
+                        for i, param in enumerate(key_params):
+                            if i < len(args):
+                                cache_params[param] = args[i]
+                            elif param in kwargs:
+                                cache_params[param] = kwargs[param]
+
+                    cache_key = self.cache_key(key_type, **cache_params)
+
+                    # Try to get from cache
+                    cached_result = self.get_cache(cache_key)
+                    if cached_result is not None:
+                        return cached_result
+
+                    # Execute function and cache result
+                    result = func(*args, **kwargs)
+                    cache_ttl = ttl or self.CACHE_TTL.get(key_type, 300)
+                    self.set_cache(cache_key, result, cache_ttl)
+
+                    return result
+                return wrapper
+            return decorator
+
+        def invalidate_user_cache(self, user_id: int) -> None:
+            """Invalidate all cache entries for a user"""
+            patterns = [
+                f"session:{user_id}*",
+                f"user:{user_id}:*",
+                f"ratelimit:{user_id}:*",
+                f"dashboard:{user_id}:*",
+            ]
+            for pattern in patterns:
+                self.delete_pattern(pattern)
+
+        def invalidate_endpoint_cache(self, endpoint: str) -> None:
+            """Invalidate cache for specific API endpoint"""
+            pattern = f"api:{endpoint}:*"
+            self.delete_pattern(pattern)
+
+        def warm_cache(self, user_id: int) -> None:
+            """Warm up cache for frequently accessed user data"""
+            # Preload user data
+            user_data_key = self.cache_key('user_data', user_id=user_id)
+            if not self.get_cache(user_data_key):
+                # This would call the actual user service to get data
+                # For now, we'll just set a placeholder
+                self.set_cache(user_data_key, {"user_id": user_id}, self.CACHE_TTL['user_data'])
+
+    # Usage examples:
+
+    # cache_manager = CacheManager(redis_url="redis://localhost:6379/0")
+
+    # @cache_manager.cache_decorator('api_response', ttl=300, key_params=['endpoint', 'params'])
+    # def get_api_data(endpoint: str, params: dict = None):
+    #     # Your API logic here
+    #     pass
+
+    # @cache_manager.cache_decorator('database_query', ttl=600)
+    # def get_user_activity(user_id: int, timeframe: str):
+    #     # Database query logic here
+    #     pass
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-cluster
+  namespace: dmlog
+  labels:
+    app: redis
+    component: cluster
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: redis
+      component: cluster
+  template:
+    metadata:
+      labels:
+        app: redis
+        component: cluster
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        command:
+        - redis-server
+        - /etc/redis/redis.conf
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dmlog-secrets
+              key: REDIS_PASSWORD
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        ports:
+        - containerPort: 6379
+          name: client
+        - containerPort: 16379
+          name: gossip
+        volumeMounts:
+        - name: redis-config
+          mountPath: /etc/redis/redis.conf
+          subPath: redis.conf
+        - name: redis-storage
+          mountPath: /data
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - -a
+            - $(REDIS_PASSWORD)
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - -a
+            - $(REDIS_PASSWORD)
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: redis-config
+        configMap:
+          name: redis-caching-config
+      - name: redis-storage
+        persistentVolumeClaim:
+          claimName: redis-cluster-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cluster-service
+  namespace: dmlog
+  labels:
+    app: redis
+    component: cluster
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6379
+    targetPort: 6379
+    name: client
+  - port: 16379
+    targetPort: 16379
+    name: gossip
+  selector:
+    app: redis
+    component: cluster
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-cluster-pvc
+  namespace: dmlog
+  labels:
+    app: redis
+    component: cluster
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp2-encrypted
+  resources:
+    requests:
+      storage: 50Gi

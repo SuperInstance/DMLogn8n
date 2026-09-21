@@ -1,0 +1,37 @@
+{
+  "service": {
+    "name": "postgresql",
+    "id": "postgresql-1",
+    "tags": [
+      "database",
+      "postgres",
+      "dmlogn8n",
+      "primary",
+      "version:14"
+    ],
+    "address": "postgresql.dmlogn8n.local",
+    "port": 5432,
+    "meta": {
+      "service_id": "postgresql-1",
+      "service_type": "database",
+      "version": "14.0",
+      "owner": "data-team",
+      "team": "data",
+      "environment": "production",
+      "region": "us-east-1",
+      "availability_zone": "us-east-1a",
+      "database_type": "postgresql",
+      "role": "primary",
+      "backup_retention": "30d"
+    },
+    "enable_tag_override": false,
+    "check": {
+      "id": "postgresql-health",
+      "name": "PostgreSQL Health Check",
+      "tcp": "postgresql.dmlogn8n.local:5432",
+      "interval": "10s",
+      "timeout": "3s",
+      "deregister_critical_service_after": "30s"
+    }
+  }
+}

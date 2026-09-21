@@ -1,0 +1,447 @@
+{
+  "name": "Character State Tables - Dynamic Character Data Management",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "character/update",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "character-update-webhook",
+      "name": "Character Update Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "character-update"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process character update request\nconst characterData = $input.first().json;\nconst { \n  characterId,\n  action, // 'update', 'create', 'get', 'delete'\n  hpChange = 0,\n  mpChange = 0,\n  xpGain = 0,\n  conditionChanges = [],\n  inventoryChanges = [],\n  spellUsage = [],\n  stats = {}\n} = characterData;\n\n// Validate required fields\nif (!characterId || !action) {\n  throw new Error('Missing required fields: characterId, action');\n}\n\n// Prepare operation data\nconst operationData = {\n  characterId,\n  action,\n  timestamp: new Date().toISOString(),\n  hpChange,\n  mpChange,\n  xpGain,\n  conditionChanges,\n  inventoryChanges,\n  spellUsage,\n  stats,\n  metadata: {\n    processedBy: 'character-state-workflow',\n    version: '1.0'\n  }\n};\n\nreturn { json: operationData };"
+      },
+      "id": "process-character-update",
+      "name": "Process Character Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "action-check",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "get",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "route-character-action",
+      "name": "Route Character Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "lookup",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_CHARACTER_SHEET_ID }}",
+        "range": "Character_State!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-get-character",
+      "name": "Google Sheets - Get Character",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [920, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_CHARACTER_SHEET_ID }}",
+        "range": "Character_State!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-update-character",
+      "name": "Google Sheets - Update Character",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [920, 400],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate character stat updates and HP/MP regeneration\nconst characterData = $input.first().json;\nconst { \n  hpChange,\n  mpChange,\n  xpGain,\n  conditionChanges,\n  inventoryChanges,\n  spellUsage\n} = characterData;\n\n// Get current character data (if updating)\nlet currentStats = {};\nif ($input.length > 1 && $input[1].json && $input[1].json.values) {\n  const headerRow = $input[1].json.values[0];\n  const dataRow = $input[1].json.values.find(row => row[0] === characterData.characterId);\n  \n  if (dataRow) {\n    currentStats = {\n      characterId: dataRow[0],\n      name: dataRow[1],\n      level: parseInt(dataRow[2]) || 1,\n      class: dataRow[3] || '',\n      hpCurrent: parseInt(dataRow[4]) || 0,\n      hpMax: parseInt(dataRow[5]) || 100,\n      mpCurrent: parseInt(dataRow[6]) || 0,\n      mpMax: parseInt(dataRow[7]) || 50,\n      xpCurrent: parseInt(dataRow[8]) || 0,\n      xpToNext: parseInt(dataRow[9]) || 1000,\n      conditions: dataRow[10] || '',\n      inventoryWeight: parseFloat(dataRow[11]) || 0,\n      inventoryValue: parseFloat(dataRow[12]) || 0,\n      spellSlotsUsed: parseInt(dataRow[13]) || 0,\n      spellSlotsMax: parseInt(dataRow[14]) || 3,\n      lastUpdated: dataRow[15] || new Date().toISOString()\n    };\n  }\n}\n\n// Calculate new HP/MP with bounds checking\nconst newHpCurrent = Math.max(0, Math.min(\n  currentStats.hpMax || 100,\n  (currentStats.hpCurrent || 0) + hpChange\n));\n\nconst newMpCurrent = Math.max(0, Math.min(\n  currentStats.mpMax || 50,\n  (currentStats.mpCurrent || 0) + mpChange\n));\n\n// Handle XP and level progression\nlet newXpCurrent = (currentStats.xpCurrent || 0) + xpGain;\nlet newLevel = currentStats.level || 1;\nlet xpToNext = currentStats.xpToNext || 1000;\n\n// Level up logic\nwhile (newXpCurrent >= xpToNext) {\n  newXpCurrent -= xpToNext;\n  newLevel++;\n  xpToNext = Math.floor(xpToNext * 1.2); // 20% increase per level\n}\n\n// Update conditions\nlet currentConditions = (currentStats.conditions || '').split(',').filter(c => c.trim());\nconditionChanges.forEach(change => {\n  const { condition, action: condAction } = change;\n  if (condAction === 'add' && !currentConditions.includes(condition)) {\n    currentConditions.push(condition);\n  } else if (condAction === 'remove') {\n    currentConditions = currentConditions.filter(c => c !== condition);\n  }\n});\n\n// Update inventory weight/value (simplified calculation)\nlet inventoryWeight = currentStats.inventoryWeight || 0;\nlet inventoryValue = currentStats.inventoryValue || 0;\ninventoryChanges.forEach(change => {\n  const { action: invAction, weight = 0, value = 0 } = change;\n  if (invAction === 'add') {\n    inventoryWeight += weight;\n    inventoryValue += value;\n  } else if (invAction === 'remove') {\n    inventoryWeight = Math.max(0, inventoryWeight - weight);\n    inventoryValue = Math.max(0, inventoryValue - value);\n  }\n});\n\n// Update spell slots\nlet spellSlotsUsed = currentStats.spellSlotsUsed || 0;\nspellUsage.forEach(usage => {\n  if (usage.action === 'cast') {\n    spellSlotsUsed += usage.slots || 1;\n  } else if (usage.action === 'restore') {\n    spellSlotsUsed = Math.max(0, spellSlotsUsed - (usage.slots || 1));\n  }\n});\n\n// Prepare updated character data\nconst updatedCharacter = {\n  characterId: characterData.characterId,\n  name: currentStats.name || 'Unknown',\n  level: newLevel,\n  class: currentStats.class || '',\n  hpCurrent: newHpCurrent,\n  hpMax: currentStats.hpMax || 100,\n  mpCurrent: newMpCurrent,\n  mpMax: currentStats.mpMax || 50,\n  xpCurrent: newXpCurrent,\n  xpToNext: xpToNext,\n  conditions: currentConditions.join(', '),\n  inventoryWeight: Math.round(inventoryWeight * 100) / 100,\n  inventoryValue: Math.round(inventoryValue * 100) / 100,\n  spellSlotsUsed: spellSlotsUsed,\n  spellSlotsMax: currentStats.spellSlotsMax || 3,\n  lastUpdated: new Date().toISOString(),\n  metadata: {\n    hpChange,\n    mpChange,\n    xpGain,\n    leveledUp: newLevel > (currentStats.level || 1),\n    processedBy: 'character-calculations'\n  }\n};\n\nreturn { json: updatedCharacter };"
+      },
+      "id": "calculate-character-updates",
+      "name": "Calculate Character Updates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_CHARACTER_SHEET_ID }}",
+        "range": "Character_State!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-create-character",
+      "name": "Google Sheets - Create Character",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [920, 600],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "clear",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_CHARACTER_SHEET_ID }}",
+        "range": "Character_State!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-delete-character",
+      "name": "Google Sheets - Delete Character",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [920, 800],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format character data for Google Sheets\nconst characterData = $input.first().json;\n\n// Prepare row data in the correct order for Google Sheets\nconst rowData = [\n  characterData.characterId,\n  characterData.name,\n  characterData.level,\n  characterData.class,\n  characterData.hpCurrent,\n  characterData.hpMax,\n  characterData.mpCurrent,\n  characterData.mpMax,\n  characterData.xpCurrent,\n  characterData.xpToNext,\n  characterData.conditions,\n  characterData.inventoryWeight,\n  characterData.inventoryValue,\n  characterData.spellSlotsUsed,\n  characterData.spellSlotsMax,\n  characterData.lastUpdated\n];\n\nreturn {\n  json: {\n    range: 'Character_State!A:P',\n    values: [rowData]\n  }\n};"
+      },
+      "id": "format-for-sheets-update",
+      "name": "Format for Sheets Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Send real-time character update to WebSocket system\nconst characterData = $input.first().json;\nconst { characterId, metadata } = characterData;\n\n// Prepare WebSocket broadcast payload\nconst broadcastPayload = {\n  type: 'character_update',\n  data: {\n    characterId,\n    updates: {\n      hp: {\n        current: characterData.hpCurrent,\n        max: characterData.hpMax,\n        change: metadata.hpChange || 0\n      },\n      mp: {\n        current: characterData.mpCurrent,\n        max: characterData.mpMax,\n        change: metadata.mpChange || 0\n      },\n      xp: {\n        current: characterData.xpCurrent,\n        toNext: characterData.xpToNext,\n        gain: metadata.xpGain || 0,\n        leveledUp: metadata.leveledUp || false\n      },\n      conditions: characterData.conditions,\n      inventory: {\n        weight: characterData.inventoryWeight,\n        value: characterData.inventoryValue\n      },\n      spellSlots: {\n        used: characterData.spellSlotsUsed,\n        max: characterData.spellSlotsMax\n      },\n      level: characterData.level\n    },\n    timestamp: new Date().toISOString()\n  },\n  channels: [`character_${characterId}`, 'game_updates']\n};\n\n// Send to WebSocket system\nfetch('http://localhost:5678/webhook/websocket/broadcast', {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json'\n  },\n  body: JSON.stringify(broadcastPayload)\n}).catch(error => {\n  console.error('Failed to broadcast character update:', error);\n});\n\nreturn { json: { broadcast: 'sent', characterId } };"
+      },
+      "id": "broadcast-character-update",
+      "name": "Broadcast Character Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: true,\n  characterId: $json.characterId,\n  level: $json.level,\n  hp: { current: $json.hpCurrent, max: $json.hpMax },\n  mp: { current: $json.mpCurrent, max: $json.mpMax },\n  xp: { current: $json.xpCurrent, toNext: $json.xpToNext },\n  conditions: $json.conditions,\n  inventory: { weight: $json.inventoryWeight, value: $json.inventoryValue },\n  spellSlots: { used: $json.spellSlotsUsed, max: $json.spellSlotsMax },\n  metadata: $json.metadata,\n  timestamp: new Date().toISOString()\n} }}"
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1580, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: false,\n  error: $json.error || 'Unknown error occurred',\n  timestamp: new Date().toISOString()\n} }}",
+        "options": {}
+      },
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1580, 600]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "character/regeneration",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "regeneration-webhook",
+      "name": "Regeneration Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 1000],
+      "webhookId": "character-regeneration"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process character regeneration request\nconst regenData = $input.first().json;\nconst { \n  characterId,\n  hpRegenRate = 0.05, // 5% of max HP per interval\n  mpRegenRate = 0.10, // 10% of max MP per interval\n  intervalMinutes = 5 // Default 5-minute intervals\n} = regenData;\n\n// Get current character data from Google Sheets\nconst sheetId = $vars.GOOGLE_SHEETS_CHARACTER_SHEET_ID;\nconst range = 'Character_State!A:P';\n\n// This would typically be a Google Sheets lookup\n// For now, simulate getting current character data\nreturn {\n  json: {\n    characterId,\n    hpRegenRate,\n    mpRegenRate,\n    intervalMinutes,\n    action: 'regeneration',\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "process-regeneration",
+      "name": "Process Regeneration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 1000]
+    },
+    {
+      "parameters": {
+        "operation": "lookup",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_CHARACTER_SHEET_ID }}",
+        "range": "Character_State!A:Z",
+        "options": {}
+      },
+      "id": "get-character-for-regen",
+      "name": "Get Character for Regen",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [680, 1000],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate regeneration amounts\nconst characterData = $input.first().json;\nconst { hpRegenRate, mpRegenRate } = characterData;\n\n// Get current character stats\nlet currentStats = { hpCurrent: 0, hpMax: 100, mpCurrent: 0, mpMax: 50 };\nif ($input.length > 1 && $input[1].json && $input[1].json.values) {\n  const dataRow = $input[1].json.values.find(row => row[0] === characterData.characterId);\n  if (dataRow) {\n    currentStats = {\n      hpCurrent: parseInt(dataRow[4]) || 0,\n      hpMax: parseInt(dataRow[5]) || 100,\n      mpCurrent: parseInt(dataRow[6]) || 0,\n      mpMax: parseInt(dataRow[7]) || 50\n    };\n  }\n}\n\n// Calculate regeneration amounts\nconst hpRegenAmount = Math.floor(currentStats.hpMax * hpRegenRate);\nconst mpRegenAmount = Math.floor(currentStats.mpMax * mpRegenRate);\n\n// Apply regeneration with bounds checking\nconst newHpCurrent = Math.min(\n  currentStats.hpMax,\n  currentStats.hpCurrent + hpRegenAmount\n);\n\nconst newMpCurrent = Math.min(\n  currentStats.mpMax,\n  currentStats.mpCurrent + mpRegenAmount\n);\n\n// Prepare regeneration data\nconst regenerationData = {\n  characterId: characterData.characterId,\n  hpChange: newHpCurrent - currentStats.hpCurrent,\n  mpChange: newMpCurrent - currentStats.mpCurrent,\n  hpRegenAmount,\n  mpRegenAmount,\n  action: 'update',\n  timestamp: new Date().toISOString()\n};\n\nreturn { json: regenerationData };"
+      },
+      "id": "calculate-regeneration",
+      "name": "Calculate Regeneration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 1000]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Data validation for character operations\nconst characterData = $input.first().json;\nconst validationErrors = [];\n\n// Validate character ID format\nif (!characterData.characterId || typeof characterData.characterId !== 'string') {\n  validationErrors.push('Invalid character ID format');\n}\n\n// Validate HP values\nif (characterData.hpCurrent !== undefined) {\n  if (typeof characterData.hpCurrent !== 'number' || characterData.hpCurrent < 0) {\n    validationErrors.push('HP current must be a non-negative number');\n  }\n}\nif (characterData.hpMax !== undefined) {\n  if (typeof characterData.hpMax !== 'number' || characterData.hpMax <= 0) {\n    validationErrors.push('HP max must be a positive number');\n  }\n}\n\n// Validate MP values\nif (characterData.mpCurrent !== undefined) {\n  if (typeof characterData.mpCurrent !== 'number' || characterData.mpCurrent < 0) {\n    validationErrors.push('MP current must be a non-negative number');\n  }\n}\nif (characterData.mpMax !== undefined) {\n  if (typeof characterData.mpMax !== 'number' || characterData.mpMax < 0) {\n    validationErrors.push('MP max must be a non-negative number');\n  }\n}\n// Validate XP values\nif (characterData.xpCurrent !== undefined) {\n  if (typeof characterData.xpCurrent !== 'number' || characterData.xpCurrent < 0) {\n    validationErrors.push('XP current must be a non-negative number');\n  }\n}\n\n// Validate level\nif (characterData.level !== undefined) {\n  if (typeof characterData.level !== 'number' || characterData.level < 1 || characterData.level > 100) {\n    validationErrors.push('Level must be a number between 1 and 100');\n  }\n}\n\n// Validate inventory weight/value\nif (characterData.inventoryWeight !== undefined) {\n  if (typeof characterData.inventoryWeight !== 'number' || characterData.inventoryWeight < 0) {\n    validationErrors.push('Inventory weight must be a non-negative number');\n  }\n}\nif (characterData.inventoryValue !== undefined) {\n  if (typeof characterData.inventoryValue !== 'number' || characterData.inventoryValue < 0) {\n    validationErrors.push('Inventory value must be a non-negative number');\n  }\n}\n\n// Validate spell slots\nif (characterData.spellSlotsUsed !== undefined) {\n  if (typeof characterData.spellSlotsUsed !== 'number' || characterData.spellSlotsUsed < 0) {\n    validationErrors.push('Spell slots used must be a non-negative number');\n  }\n}\nif (characterData.spellSlotsMax !== undefined) {\n  if (typeof characterData.spellSlotsMax !== 'number' || characterData.spellSlotsMax < 0) {\n    validationErrors.push('Spell slots max must be a non-negative number');\n  }\n}\n\n// Return validation result\nif (validationErrors.length > 0) {\n  return {\n    json: {\n      valid: false,\n      errors: validationErrors,\n      characterId: characterData.characterId\n    }\n  };\n}\n\nreturn {\n  json: {\n    valid: true,\n    characterData,\n    characterId: characterData.characterId\n  }\n};"
+      },
+      "id": "validate-character-data",
+      "name": "Validate Character Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 600]
+    }
+  ],
+  "connections": {
+    "Character Update Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Character Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Character Update": {
+      "main": [
+        [
+          {
+            "node": "Route Character Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Character Action": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Get Character",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Calculate Character Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Get Character": {
+      "main": [
+        [
+          {
+            "node": "Calculate Character Updates",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Calculate Character Updates": {
+      "main": [
+        [
+          {
+            "node": "Format for Sheets Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for Sheets Update": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Update Character",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Update Character": {
+      "main": [
+        [
+          {
+            "node": "Broadcast Character Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Broadcast Character Update": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Create Character": {
+      "main": [
+        [
+          {
+            "node": "Broadcast Character Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Regeneration Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Regeneration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Regeneration": {
+      "main": [
+        [
+          {
+            "node": "Get Character for Regen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Character for Regen": {
+      "main": [
+        [
+          {
+            "node": "Calculate Regeneration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Regeneration": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Update Character",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Character Data": {
+      "main": [
+        [
+          {
+            "node": "Process Character Update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "character-management",
+      "name": "Character Management"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "game-state",
+      "name": "Game State"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "google-sheets",
+      "name": "Google Sheets"
+    }
+  ],
+  "triggerCount": 2,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

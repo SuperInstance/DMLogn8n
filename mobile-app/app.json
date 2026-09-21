@@ -1,0 +1,102 @@
+{
+  "expo": {
+    "name": "DMlogn8n Mobile",
+    "slug": "dmlogn8n-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#2C1810"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "requireFullScreen": false,
+      "bundleIdentifier": "com.dmlogn8n.mobile",
+      "buildNumber": "1.0.0",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera for AR miniature scanning and QR code import.",
+        "NSMicrophoneUsageDescription": "This app uses the microphone for voice chat and voice commands.",
+        "NSLocationWhenInUseUsageDescription": "This app uses location for local game discovery."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#2C1810"
+      },
+      "package": "com.dmlogn8n.mobile",
+      "versionCode": 1,
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "VIBRATE",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow DMlogn8n to access your camera for AR features and content scanning."
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow DMlogn8n to access your microphone for voice chat and commands."
+        }
+      ],
+      [
+        "expo-haptics"
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#2C1810",
+          "sounds": [
+            "./assets/sounds/notification.wav"
+          ]
+        }
+      ],
+      [
+        "expo-sensors"
+      ],
+      [
+        "expo-speech"
+      ],
+      [
+        "@react-native-async-storage/async-storage"
+      ],
+      [
+        "expo-sqlite"
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id-here"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/your-project-id-here"
+    },
+    "jsEngine": "hermes"
+  }
+}

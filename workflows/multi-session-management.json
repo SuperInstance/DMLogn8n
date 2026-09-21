@@ -1,0 +1,848 @@
+{
+  "name": "Multi-Session Management - Concurrent Game Sessions",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "session/create",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "create-session-webhook",
+      "name": "Create Session Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "create-session"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process session creation request\nconst sessionData = $input.first().json;\nconst { \n  userId, \n  campaignId, \n  sessionName, \n  maxPlayers = 6, \n  sessionType = 'campaign',\n  settings = {} \n} = sessionData;\n\n// Validate required fields\nif (!userId || !campaignId || !sessionName) {\n  throw new Error('Missing required fields: userId, campaignId, sessionName');\n}\n\n// Generate session ID\nconst sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;\n\n// Session configuration\nconst sessionConfig = {\n  sessionId,\n  userId,\n  campaignId,\n  sessionName,\n  sessionType, // 'campaign', 'one-shot', 'tutorial', 'testing'\n  maxPlayers,\n  currentPlayers: 0,\n  status: 'preparing',\n  createdAt: new Date().toISOString(),\n  settings: {\n    voiceChat: settings.voiceChat || true,\n    videoChat: settings.videoChat || false,\n    screenShare: settings.screenShare || true,\n    autoSave: settings.autoSave || true,\n    saveInterval: settings.saveInterval || 300, // 5 minutes\n    ...settings\n  },\n  resourceAllocation: {\n    maxMemory: '512MB',\n    maxCpu: '0.5',\n    maxBandwidth: '1Mbps',\n    aiAgentSlots: 2,\n    voiceChannels: 1\n  },\n  metadata: {\n    createdBy: userId,\n    createdWith: 'n8n-workflow',\n    version: '1.0'\n  }\n};\n\nreturn { json: sessionConfig };"
+      },
+      "id": "process-session-creation",
+      "name": "Process Session Creation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "capacity-check",
+              "leftValue": "={{ $json.maxPlayers }}",
+              "rightValue": "10",
+              "operator": {
+                "type": "number",
+                "operation": "smallerEqual"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "validate-session-limits",
+      "name": "Validate Session Limits",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "documentId": "={{ $json.sessionId }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "sessionId",
+              "fieldValue": "={{ $json.sessionId }}"
+            },
+            {
+              "fieldName": "userId",
+              "fieldValue": "={{ $json.userId }}"
+            },
+            {
+              "fieldName": "campaignId",
+              "fieldValue": "={{ $json.campaignId }}"
+            },
+            {
+              "fieldName": "sessionName",
+              "fieldValue": "={{ $json.sessionName }}"
+            },
+            {
+              "fieldName": "sessionType",
+              "fieldValue": "={{ $json.sessionType }}"
+            },
+            {
+              "fieldName": "maxPlayers",
+              "fieldValue": "={{ $json.maxPlayers }}"
+            },
+            {
+              "fieldName": "currentPlayers",
+              "fieldValue": "={{ $json.currentPlayers }}"
+            },
+            {
+              "fieldName": "status",
+              "fieldValue": "={{ $json.status }}"
+            },
+            {
+              "fieldName": "createdAt",
+              "fieldValue": "={{ $json.createdAt }}"
+            },
+            {
+              "fieldName": "settings",
+              "fieldValue": "={{ $json.settings }}"
+            },
+            {
+              "fieldName": "resourceAllocation",
+              "fieldValue": "={{ $json.resourceAllocation }}"
+            },
+            {
+              "fieldName": "metadata",
+              "fieldValue": "={{ $json.metadata }}"
+            }
+          ]
+        }
+      },
+      "id": "create-session-record",
+      "name": "Create Session Record",
+      "type": "n8n-nodes-base.googleFirestore",
+      "typeVersion": 1,
+      "position": [900, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Allocate system resources for the session\nconst sessionData = $input.first().json;\nconst { sessionId, resourceAllocation } = sessionData;\n\n// Create resource allocation record\nconst resourceRecord = {\n  sessionId,\n  allocatedAt: new Date().toISOString(),\n  resources: {\n    memory: {\n      allocated: resourceAllocation.maxMemory,\n      used: '0MB',\n      peak: '0MB'\n    },\n    cpu: {\n      allocated: resourceAllocation.maxCpu,\n      current: '0.0',\n      peak: '0.0'\n    },\n    bandwidth: {\n      allocated: resourceAllocation.maxBandwidth,\n      current: '0bps',\n      peak: '0bps'\n    },\n    aiAgents: {\n      allocated: resourceAllocation.aiAgentSlots,\n      active: 0,\n      available: resourceAllocation.aiAgentSlots\n    },\n    voiceChannels: {\n      allocated: resourceAllocation.voiceChannels,\n      active: 0\n    }\n  },\n  status: 'allocated'\n};\n\nreturn { json: resourceRecord };"
+      },
+      "id": "allocate-resources",
+      "name": "Allocate Resources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 220]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "documentId": "={{ $json.sessionId }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "sessionId",
+              "fieldValue": "={{ $json.sessionId }}"
+            },
+            {
+              "fieldName": "allocatedAt",
+              "fieldValue": "={{ $json.allocatedAt }}"
+            },
+            {
+              "fieldName": "resources",
+              "fieldValue": "={{ $json.resources }}"
+            },
+            {
+              "fieldName": "status",
+              "fieldValue": "={{ $json.status }}"
+            }
+          ]
+        }
+      },
+      "id": "store-resource-allocation",
+      "name": "Store Resource Allocation",
+      "type": "n8n-nodes-base.googleFirestore",
+      "typeVersion": 1,
+      "position": [1340, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize session state and game state\nconst sessionData = $input.first().json;\nconst { sessionId, userId, campaignId } = sessionData;\n\n// Create initial session state\nconst sessionState = {\n  sessionId,\n  gameMasterId: userId,\n  campaignId,\n  state: {\n    phase: 'setup', // 'setup', 'active', 'paused', 'ended'\n    turnOrder: [],\n    currentTurn: null,\n    roundNumber: 0,\n    initiativeTracker: {\n      currentRound: 0,\n      turnIndex: 0,\n      participants: []\n    }\n  },\n  gameState: {\n    scene: {\n      name: 'Starting Scene',\n      description: '',\n      environment: 'unknown',\n      lighting: 'normal',\n      weather: 'clear'\n    },\n    parties: [\n      {\n        id: 'player_party',\n        name: 'Player Party',\n        members: [],\n        position: { x: 0, y: 0 }\n      }\n    ],\n    npcs: [],\n    enemies: [],\n    objects: [],\n    map: {\n      grid: null,\n      size: { width: 0, height: 0 },\n      scale: '5ft'\n    },\n    combat: {\n      active: false,\n      startedAt: null,\n      currentRound: 0\n    }\n  },\n  lastUpdated: new Date().toISOString()\n};\n\nreturn { json: sessionState };"
+      },
+      "id": "initialize-session-state",
+      "name": "Initialize Session State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 220]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "documentId": "={{ $json.sessionId }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "sessionId",
+              "fieldValue": "={{ $json.sessionId }}"
+            },
+            {
+              "fieldName": "gameMasterId",
+              "fieldValue": "={{ $json.gameMasterId }}"
+            },
+            {
+              "fieldName": "campaignId",
+              "fieldValue": "={{ $json.campaignId }}"
+            },
+            {
+              "fieldName": "state",
+              "fieldValue": "={{ $json.state }}"
+            },
+            {
+              "fieldName": "gameState",
+              "fieldValue": "={{ $json.gameState }}"
+            },
+            {
+              "fieldName": "lastUpdated",
+              "fieldValue": "={{ $json.lastUpdated }}"
+            }
+          ]
+        }
+      },
+      "id": "store-session-state",
+      "name": "Store Session State",
+      "type": "n8n-nodes-base.googleFirestore",
+      "typeVersion": 1,
+      "position": [1780, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Setup session monitoring and health checks\nconst sessionData = $input.first().json;\nconst { sessionId } = sessionData;\n\n// Create monitoring configuration\nconst monitoringConfig = {\n  sessionId,\n  healthChecks: {\n    connectionHealth: {\n      enabled: true,\n      interval: 30, // seconds\n      timeout: 10,\n      maxFailures: 3\n    },\n    resourceHealth: {\n      enabled: true,\n      interval: 60, // seconds\n      memoryThreshold: 0.9, // 90%\n      cpuThreshold: 0.8, // 80%\n      bandwidthThreshold: 0.9 // 90%\n    },\n    performanceHealth: {\n      enabled: true,\n      interval: 120, // seconds\n      latencyThreshold: 1000, // ms\n      errorRateThreshold: 0.05 // 5%\n    }\n  },\n  alerts: {\n    email: true,\n    webhook: true,\n    slack: false\n  },\n  metrics: {\n    playerCount: 0,\n    messageCount: 0,\n    averageLatency: 0,\n    errorRate: 0,\n    uptime: 0\n  },\n  createdAt: new Date().toISOString()\n};\n\nreturn { json: monitoringConfig };"
+      },
+      "id": "setup-monitoring",
+      "name": "Setup Monitoring",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 220]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "documentId": "={{ $json.sessionId }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "sessionId",
+              "fieldValue": "={{ $json.sessionId }}"
+            },
+            {
+              "fieldName": "healthChecks",
+              "fieldValue": "={{ $json.healthChecks }}"
+            },
+            {
+              "fieldName": "alerts",
+              "fieldValue": "={{ $json.alerts }}"
+            },
+            {
+              "fieldName": "metrics",
+              "fieldValue": "={{ $json.metrics }}"
+            },
+            {
+              "fieldName": "createdAt",
+              "fieldValue": "={{ $json.createdAt }}"
+            }
+          ]
+        }
+      },
+      "id": "store-monitoring-config",
+      "name": "Store Monitoring Config",
+      "type": "n8n-nodes-base.googleFirestore",
+      "typeVersion": 1,
+      "position": [2220, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, sessionId: $json.sessionId, message: 'Session created successfully', resourceAllocation: $json.resourceAllocation, status: 'preparing' } }}"
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2440, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Session exceeds maximum player limit', maxAllowed: 10, requested: $json.maxPlayers } }}"
+      },
+      "id": "respond-limit-error",
+      "name": "Respond Limit Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 380]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "session/join",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "join-session-webhook",
+      "name": "Join Session Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 600],
+      "webhookId": "join-session"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process session join request\nconst joinData = $input.first().json;\nconst { sessionId, userId, characterId, joinAs = 'player' } = joinData;\n\n// Validate required fields\nif (!sessionId || !userId || !characterId) {\n  throw new Error('Missing required fields: sessionId, userId, characterId');\n}\n\n// Get session information\nconst sessionInfo = await $getGoogleFirestoreItem('game_sessions', sessionId);\nif (!sessionInfo) {\n  throw new Error('Session not found');\n}\n\n// Check if session is joinable\nif (sessionInfo.status !== 'preparing' && sessionInfo.status !== 'active') {\n  throw new Error('Session is not accepting new players');\n}\n\n// Check player limit\nif (sessionInfo.currentPlayers >= sessionInfo.maxPlayers) {\n  throw new Error('Session is full');\n}\n\n// Check if user is already in session\nconst existingPlayer = sessionInfo.players?.find(p => p.userId === userId);\nif (existingPlayer) {\n  throw new Error('User already in session');\n}\n\nreturn {\n  json: {\n    sessionId,\n    userId,\n    characterId,\n    joinAs,\n    sessionInfo\n  }\n};"
+      },
+      "id": "process-join-request",
+      "name": "Process Join Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Add player to session and update counters\nconst joinData = $input.first().json;\nconst { sessionId, userId, characterId, joinAs, sessionInfo } = joinData;\n\n// Create player record\nconst playerRecord = {\n  userId,\n  characterId,\n  joinAs,\n  joinedAt: new Date().toISOString(),\n  status: 'connected',\n  role: joinAs === 'dm' ? 'game_master' : 'player',\n  permissions: {\n    canControlNpcs: joinAs === 'dm',\n    canEditMap: joinAs === 'dm',\n    canRollDice: true,\n    canUseVoice: sessionInfo.settings.voiceChat,\n    canUseVideo: sessionInfo.settings.videoChat\n  }\n};\n\n// Update session players\nconst currentPlayers = sessionInfo.players || [];\nconst updatedPlayers = [...currentPlayers, playerRecord];\n\n// Update session record\nconst sessionUpdates = {\n  players: updatedPlayers,\n  currentPlayers: updatedPlayers.length,\n  lastActivity: new Date().toISOString(),\n  status: updatedPlayers.length > 0 ? 'active' : 'preparing'\n};\n\n// Check if session should auto-start\nif (updatedPlayers.length >= 2 && sessionInfo.status === 'preparing') {\n  sessionUpdates.status = 'active';\n  sessionUpdates.startedAt = new Date().toISOString();\n}\n\nreturn {\n  json: {\n    sessionId,\n    playerRecord,\n    sessionUpdates,\n    totalPlayers: updatedPlayers.length\n  }\n};"
+      },
+      "id": "add-player-to-session",
+      "name": "Add Player to Session",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 600]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": "={{ $json.sessionId }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "players",
+              "fieldValue": "={{ $json.sessionUpdates.players }}"
+            },
+            {
+              "fieldName": "currentPlayers",
+              "fieldValue": "={{ $json.sessionUpdates.currentPlayers }}"
+            },
+            {
+              "fieldName": "lastActivity",
+              "fieldValue": "={{ $json.sessionUpdates.lastActivity }}"
+            },
+            {
+              "fieldName": "status",
+              "fieldValue": "={{ $json.sessionUpdates.status }}"
+            },
+            {
+              "fieldName": "startedAt",
+              "fieldValue": "={{ $json.sessionUpdates.startedAt }}"
+            }
+          ]
+        }
+      },
+      "id": "update-session-players",
+      "name": "Update Session Players",
+      "type": "n8n-nodes-base.googleFirestore",
+      "typeVersion": 1,
+      "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Allocate player-specific resources\nconst joinData = $input.first().json;\nconst { sessionId, playerRecord } = joinData;\n\n// Get current resource allocation\nconst resourceRecord = await $getGoogleFirestoreItem('session_resources', sessionId);\nconst resources = resourceRecord.resources;\n\n// Allocate player resources\nconst playerResources = {\n  memory: '64MB',\n  cpu: '0.1',\n  bandwidth: '100kbps',\n  voiceChannel: playerRecord.permissions.canUseVoice ? 1 : 0,\n  aiAgentSlots: joinData.joinAs === 'dm' ? 1 : 0\n};\n\n// Update resource allocation\nconst updatedResources = {\n  ...resources,\n  memory: {\n    ...resources.memory,\n    used: incrementMemory(resources.memory.used, playerResources.memory)\n  },\n  cpu: {\n    ...resources.cpu,\n    current: (parseFloat(resources.cpu.current) + parseFloat(playerResources.cpu)).toString()\n  },\n  bandwidth: {\n    ...resources.bandwidth,\n    current: incrementBandwidth(resources.bandwidth.current, playerResources.bandwidth)\n  },\n  voiceChannels: {\n    ...resources.voiceChannels,\n    active: resources.voiceChannels.active + playerResources.voiceChannel\n  },\n  aiAgents: {\n    ...resources.aiAgents,\n    active: resources.aiAgents.active + playerResources.aiAgentSlots\n  }\n};\n\nfunction incrementMemory(current, addition) {\n  const currentMB = parseInt(current.replace('MB', ''));\n  const additionMB = parseInt(addition.replace('MB', ''));\n  return `${currentMB + additionMB}MB`;\n}\n\nfunction incrementBandwidth(current, addition) {\n  const currentBps = parseBandwidth(current);\n  const additionBps = parseBandwidth(addition);\n  return formatBandwidth(currentBps + additionBps);\n}\n\nfunction parseBandwidth(bandwidth) {\n  const value = parseInt(bandwidth);\n  if (bandwidth.includes('Mbps')) return value * 1000000;\n  if (bandwidth.includes('kbps')) return value * 1000;\n  return value;\n}\n\nfunction formatBandwidth(bps) {\n  if (bps >= 1000000) return `${(bps / 1000000).toFixed(2)}Mbps`;\n  if (bps >= 1000) return `${(bps / 1000).toFixed(0)}kbps`;\n  return `${bps}bps`;\n}\n\nreturn {\n  json: {\n    sessionId,\n    playerRecord,\n    playerResources,\n    updatedResources\n  }\n};"
+      },
+      "id": "allocate-player-resources",
+      "name": "Allocate Player Resources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 600]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": "={{ $json.sessionId }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "resources",
+              "fieldValue": "={{ $json.updatedResources }}"
+            }
+          ]
+        }
+      },
+      "id": "update-resource-allocation",
+      "name": "Update Resource Allocation",
+      "type": "n8n-nodes-base.googleFirestore",
+      "typeVersion": 1,
+      "position": [1340, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create player session state\nconst joinData = $input.first().json;\nconst { sessionId, playerRecord } = joinData;\n\n// Get session state\nconst sessionState = await $getGoogleFirestoreItem('session_states', sessionId);\n\n// Create player state\nconst playerState = {\n  userId: playerRecord.userId,\n  characterId: playerRecord.characterId,\n  role: playerRecord.role,\n  status: 'active',\n  joinedAt: playerRecord.joinedAt,\n  permissions: playerRecord.permissions,\n  gameState: {\n    position: { x: 0, y: 0 },\n    health: { current: 100, max: 100 },\n    resources: {\n      actions: 1,\n      bonusAction: 1,\n      movement: 30,\n      reaction: 1\n    },\n    conditions: [],\n    inventory: [],\n    spells: [],\n    features: []\n  },\n  clientState: {\n    viewport: { x: 0, y: 0, zoom: 1.0 },\n    selectedCharacter: null,\n    activeTools: [],\n    uiState: 'normal'\n  }\n};\n\n// Update session state with new player\nif (!sessionState.players) {\n  sessionState.players = [];\n}\nsessionState.players.push(playerState);\n\n// Add to initiative tracker if needed\nif (sessionState.gameState.combat.active) {\n  sessionState.state.initiativeTracker.participants.push({\n    id: playerRecord.characterId,\n    name: playerRecord.characterId,\n    initiative: Math.floor(Math.random() * 20) + 1,\n    type: 'player'\n  });\n}\n\nreturn {\n  json: {\n    sessionId,\n    playerState,\n    sessionState\n  }\n};"
+      },
+      "id": "create-player-state",
+      "name": "Create Player State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 600]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": "={{ $json.sessionId }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "players",
+              "fieldValue": "={{ $json.sessionState.players }}"
+            },
+            {
+              "fieldName": "state",
+              "fieldValue": "={{ $json.sessionState.state }}"
+            },
+            {
+              "fieldName": "gameState",
+              "fieldValue": "={{ $json.sessionState.gameState }}"
+            },
+            {
+              "fieldName": "lastUpdated",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            }
+          ]
+        }
+      },
+      "id": "update-session-state",
+      "name": "Update Session State",
+      "type": "n8n-nodes-base.googleFirestore",
+      "typeVersion": 1,
+      "position": [1780, 600]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, sessionId: $json.sessionId, playerState: $json.playerState, totalPlayers: $json.playerState ? 1 : 0, message: 'Joined session successfully' } }}"
+      },
+      "id": "respond-join-success",
+      "name": "Respond Join Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2000, 600]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "session/migrate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "migrate-session-webhook",
+      "name": "Migrate Session Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 900],
+      "webhookId": "migrate-session"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process session migration request\nconst migrateData = $input.first().json;\nconst { sessionId, targetServer, reason = 'load_balancing' } = migrateData;\n\n// Validate required fields\nif (!sessionId || !targetServer) {\n  throw new Error('Missing required fields: sessionId, targetServer');\n}\n\n// Get session information\nconst sessionInfo = await $getGoogleFirestoreItem('game_sessions', sessionId);\nif (!sessionInfo) {\n  throw new Error('Session not found');\n}\n\n// Check if migration is allowed\nif (sessionInfo.status === 'migrating') {\n  throw new Error('Session already migrating');\n}\n\nif (sessionInfo.status === 'active' && sessionInfo.currentPlayers > 0) {\n  // Active sessions require careful handling\n  const canMigrate = await checkMigrationSafety(sessionId);\n  if (!canMigrate) {\n    throw new Error('Session not safe for migration (active combat/time-sensitive actions)');\n  }\n}\n\nreturn {\n  json: {\n    sessionId,\n    targetServer,\n    reason,\n    sessionInfo,\n    migrationStarted: new Date().toISOString()\n  }\n};\n\nasync function checkMigrationSafety(sessionId) {\n  // Check for active combat\n  const sessionState = await $getGoogleFirestoreItem('session_states', sessionId);\n  if (sessionState?.gameState?.combat?.active) {\n    return false;\n  }\n  \n  // Check for recent actions (within last 30 seconds)\n  const recentActions = await checkRecentActivity(sessionId, 30);\n  if (recentActions > 5) {\n    return false;\n  }\n  \n  return true;\n}\n\nasync function checkRecentActivity(sessionId, seconds) {\n  // Implementation would check recent message/activity count\n  return 0; // Placeholder\n}"
+      },
+      "id": "process-migration-request",
+      "name": "Process Migration Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 900]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": "={{ $json.sessionId }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "status",
+              "fieldValue": "migrating"
+            },
+            {
+              "fieldName": "migrationStarted",
+              "fieldValue": "={{ $json.migrationStarted }}"
+            },
+            {
+              "fieldName": "migrationTarget",
+              "fieldValue": "={{ $json.targetServer }}"
+            },
+            {
+              "fieldName": "migrationReason",
+              "fieldValue": "={{ $json.reason }}"
+            }
+          ]
+        }
+      },
+      "id": "mark-session-migrating",
+      "name": "Mark Session Migrating",
+      "type": "n8n-nodes-base.googleFirestore",
+      "typeVersion": 1,
+      "position": [680, 900]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Export session data for migration\nconst migrateData = $input.first().json;\nconst { sessionId } = migrateData;\n\n// Collect all session data\nconst sessionExport = {\n  sessionId,\n  exportedAt: new Date().toISOString(),\n  data: {\n    session: await $getGoogleFirestoreItem('game_sessions', sessionId),\n    state: await $getGoogleFirestoreItem('session_states', sessionId),\n    resources: await $getGoogleFirestoreItem('session_resources', sessionId),\n    monitoring: await $getGoogleFirestoreItem('session_monitoring', sessionId),\n    messages: await getSessionMessages(sessionId),\n    voiceData: await getVoiceSessionData(sessionId),\n    gameLogs: await getGameLogs(sessionId)\n  }\n};\n\nasync function getSessionMessages(sessionId) {\n  // Get recent session messages\n  return []; // Placeholder\n}\n\nasync function getVoiceSessionData(sessionId) {\n  // Get voice session information\n  return null; // Placeholder\n}\n\nasync function getGameLogs(sessionId) {\n  // Get game logs and events\n  return []; // Placeholder\n}\n\nreturn { json: sessionExport };"
+      },
+      "id": "export-session-data",
+      "name": "Export Session Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 900]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.targetServer }}/api/session/import",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.migrationApi.apiKey }}"
+            },
+            {
+              "name": "X-Migration-Source",
+              "value": "n8n-workflow"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "sessionData",
+              "value": "={{ $json.data }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "import-to-target-server",
+      "name": "Import to Target Server",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1120, 900]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Complete migration and cleanup\nconst migrateData = $input.first().json;\nconst { sessionId } = migrateData;\n\n// Update session status\nawait $setGoogleFirestoreItem('game_sessions', sessionId, {\n  status: 'migrated',\n  migrationCompleted: new Date().toISOString(),\n  previousServer: 'current',\n  newServer: migrateData.targetServer\n});\n\n// Notify players of migration\nconst sessionInfo = await $getGoogleFirestoreItem('game_sessions', sessionId);\nconst players = sessionInfo?.players || [];\n\nconst notifications = players.map(player => ({\n  userId: player.userId,\n  type: 'session_migrated',\n  message: `Session has been migrated to a new server. Please reconnect.`,\n  newServerUrl: migrateData.targetServer,\n  sessionId\n}));\n\nreturn {\n  json: {\n    sessionId,\n    migrationCompleted: true,\n    notifications\n  }\n};"
+      },
+      "id": "complete-migration",
+      "name": "Complete Migration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 900]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, sessionId: $json.sessionId, migrationCompleted: true, notificationsSent: $json.notifications.length, newServer: 'target-server-url' } }}"
+      },
+      "id": "respond-migration-complete",
+      "name": "Respond Migration Complete",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 900]
+    }
+  ],
+  "connections": {
+    "Create Session Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Session Creation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Session Creation": {
+      "main": [
+        [
+          {
+            "node": "Validate Session Limits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Session Limits": {
+      "main": [
+        [
+          {
+            "node": "Create Session Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Limit Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Session Record": {
+      "main": [
+        [
+          {
+            "node": "Allocate Resources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allocate Resources": {
+      "main": [
+        [
+          {
+            "node": "Store Resource Allocation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Resource Allocation": {
+      "main": [
+        [
+          {
+            "node": "Initialize Session State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Session State": {
+      "main": [
+        [
+          {
+            "node": "Store Session State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Session State": {
+      "main": [
+        [
+          {
+            "node": "Setup Monitoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Setup Monitoring": {
+      "main": [
+        [
+          {
+            "node": "Store Monitoring Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Monitoring Config": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Join Session Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Join Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Join Request": {
+      "main": [
+        [
+          {
+            "node": "Add Player to Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Player to Session": {
+      "main": [
+        [
+          {
+            "node": "Update Session Players",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Session Players": {
+      "main": [
+        [
+          {
+            "node": "Allocate Player Resources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allocate Player Resources": {
+      "main": [
+        [
+          {
+            "node": "Update Resource Allocation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Resource Allocation": {
+      "main": [
+        [
+          {
+            "node": "Create Player State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Player State": {
+      "main": [
+        [
+          {
+            "node": "Update Session State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Session State": {
+      "main": [
+        [
+          {
+            "node": "Respond Join Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Migrate Session Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Migration Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Migration Request": {
+      "main": [
+        [
+          {
+            "node": "Mark Session Migrating",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Session Migrating": {
+      "main": [
+        [
+          {
+            "node": "Export Session Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Export Session Data": {
+      "main": [
+        [
+          {
+            "node": "Import to Target Server",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Import to Target Server": {
+      "main": [
+        [
+          {
+            "node": "Complete Migration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete Migration": {
+      "main": [
+        [
+          {
+            "node": "Respond Migration Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "America/New_York",
+    "saveManualExecutions": true,
+    "callerPolicyDefaultOption": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "id": "session-management",
+      "name": "Session Management"
+    },
+    {
+      "id": "multi-session",
+      "name": "Multi-Session"
+    },
+    {
+      "id": "resource-allocation",
+      "name": "Resource Allocation"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-23T10:00:00.000Z",
+  "versionId": "1"
+}

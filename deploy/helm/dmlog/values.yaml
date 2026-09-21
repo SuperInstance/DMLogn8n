@@ -1,0 +1,417 @@
+# Default values for DMLog Helm chart
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: "gp2-encrypted"
+
+# Common configuration
+replicaCount: 3
+image:
+  registry: docker.io
+  repository: dmlog
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Service account configuration
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod annotations and labels
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+  prometheus.io/path: "/metrics"
+
+podLabels:
+  app: dmlog
+
+# Security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+    - ALL
+
+# Application configuration
+config:
+  app:
+    name: "DMLog API"
+    version: "1.0.0"
+    environment: "production"
+    logLevel: "INFO"
+    debug: false
+
+  database:
+    host: "postgresql-service"
+    port: 5432
+    name: "dmlog_prod"
+    user: "dmlog_user"
+
+  redis:
+    host: "redis-service"
+    port: 6379
+    db: 0
+
+  qdrant:
+    host: "qdrant-service"
+    port: 6333
+
+  cors:
+    origins: ["https://app.dmlog.com", "https://api.dmlog.com"]
+
+  performance:
+    maxConnections: 100
+    connectionTimeout: 30
+    workers: 4
+    workerConnections: 1000
+
+# Service configuration
+service:
+  type: ClusterIP
+  ports:
+    http: 8000
+    metrics: 9090
+  annotations: {}
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+  hosts:
+    - host: api.dmlog.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: dmlog-tls-certificate
+      hosts:
+        - api.dmlog.com
+
+# Resource configuration
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+# Horizontal Pod Autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 4
+        periodSeconds: 15
+      selectPolicy: Max
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Node selector and tolerations
+nodeSelector:
+  node-type: application
+
+tolerations:
+  - key: "application"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - dmlog
+        topologyKey: kubernetes.io/hostname
+
+# Health checks
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+
+# Volumes
+volumes:
+  - name: tmp
+    emptyDir: {}
+
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+
+# Frontend configuration
+frontend:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: dmlog/frontend
+    tag: "latest"
+  service:
+    type: ClusterIP
+    ports:
+      http: 80
+  ingress:
+    enabled: true
+    hosts:
+      - host: app.dmlog.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: dmlog-frontend-tls
+        hosts:
+          - app.dmlog.com
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 64Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+# Database configuration
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: ""
+    username: dmlog_user
+    password: ""
+    database: dmlog_prod
+  primary:
+    persistence:
+      enabled: true
+      size: 100Gi
+      storageClass: gp2-encrypted
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+    configuration: |
+      max_connections = 200
+      shared_buffers = 256MB
+      effective_cache_size = 1GB
+      work_mem = 4MB
+      maintenance_work_mem = 64MB
+      wal_level = replica
+      max_wal_size = 1GB
+      min_wal_size = 80MB
+      checkpoint_completion_target = 0.9
+      random_page_cost = 1.1
+      effective_io_concurrency = 200
+      autovacuum = on
+      autovacuum_max_workers = 3
+      autovacuum_naptime = 1min
+
+# Redis configuration
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: ""
+  master:
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClass: gp2-encrypted
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+    configuration: |
+      maxmemory 400mb
+      maxmemory-policy allkeys-lru
+      save 900 1
+      save 300 10
+      save 60 10000
+      appendonly yes
+      appendfsync everysec
+      auto-aof-rewrite-percentage 100
+      auto-aof-rewrite-min-size 64mb
+
+# Monitoring configuration
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+  prometheusRule:
+    enabled: true
+    rules:
+    - alert: DMLogHighErrorRate
+      expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High error rate detected"
+        description: "Error rate is {{ $value }} errors per second"
+    - alert: DMLogHighMemoryUsage
+      expr: container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.8
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High memory usage detected"
+        description: "Memory usage is {{ $value | humanizePercentage }}"
+
+# Secrets management
+secrets:
+  enabled: true
+  existingSecret: ""
+  existingSecretPasswordKey: ""
+  databasePassword: ""
+  redisPassword: ""
+  secretKey: ""
+  openaiApiKey: ""
+  anthropicApiKey: ""
+  qdrantApiKey: ""
+  jwtSecret: ""
+  encryptionKey: ""
+
+# Environment-specific overrides
+environments:
+  development:
+    replicaCount: 1
+    config:
+      app:
+        environment: "development"
+        debug: true
+        logLevel: "DEBUG"
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+    postgresql:
+      primary:
+        persistence:
+          size: 10Gi
+    redis:
+      master:
+        persistence:
+          size: 1Gi
+
+  staging:
+    replicaCount: 2
+    config:
+      app:
+        environment: "staging"
+        debug: false
+        logLevel: "INFO"
+    resources:
+      limits:
+        cpu: 300m
+        memory: 384Mi
+      requests:
+        cpu: 150m
+        memory: 192Mi
+    postgresql:
+      primary:
+        persistence:
+          size: 20Gi
+    redis:
+      master:
+        persistence:
+          size: 5Gi
+
+  production:
+    replicaCount: 3
+    config:
+      app:
+        environment: "production"
+        debug: false
+        logLevel: "INFO"
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+    postgresql:
+      primary:
+        persistence:
+          size: 100Gi
+    redis:
+      master:
+        persistence:
+          size: 10Gi

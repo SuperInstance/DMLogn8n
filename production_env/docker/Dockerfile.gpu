@@ -1,0 +1,95 @@
+# GPU-enabled Dockerfile for ML Training Service
+FROM nvidia/cuda:11.8-runtime-ubuntu22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    CUDA_HOME=/usr/local/cuda \
+    PATH=/usr/local/cuda/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    PYTHONPATH=/app:$PYTHONPATH
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-pip \
+    python3.11-dev \
+    python3.11-venv \
+    build-essential \
+    curl \
+    git \
+    libpq-dev \
+    libhdf5-dev \
+    libssl-dev \
+    libffi-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Create Python 3.11 as default python
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 \
+    && update-alternatives --install /usr/bin/pip pip /usr/bin/pip3.11 1
+
+# Create non-root user
+RUN groupadd -r dmlog && useradd -r -g dmlog dmlog
+
+# Set work directory
+WORKDIR /app
+
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Upgrade pip and install core dependencies
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Copy requirements
+COPY ../../source_code/backend/requirements.txt .
+COPY production_env/docker/requirements.gpu.txt .
+
+# Install Python dependencies with GPU support
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir -r requirements.gpu.txt
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/models /app/data /app/tmp \
+    && chown -R dmlog:dmlog /app
+
+# Copy application code
+COPY --chown=dmlog:dmlog ../../source_code/backend/ .
+
+# Copy training service specific files
+COPY --chown=dmlog:dmlog production_env/docker/training_service.py /app/training_service.py
+COPY --chown=dmlog:dmlog production_env/docker/train.py /app/train.py
+
+# Switch to non-root user
+USER dmlog
+
+# Create startup script
+RUN echo '#!/bin/bash\n\
+echo "Starting ML Training Service..."\n\
+echo "CUDA Version: $(nvcc --version | grep release)"\n\
+echo "GPU Info:"\n\
+nvidia-smi\n\
+echo "Python Version: $(python --version)"\n\
+echo "PyTorch Version: $(python -c \"import torch; print(torch.__version__)\")"\n\
+echo "CUDA Available: $(python -c \"import torch; print(torch.cuda.is_available())\")"\n\
+if [ "$1" = "train" ]; then\n\
+    echo "Starting training job..."\n\
+    exec python train.py\n\
+else\n\
+    echo "Starting training API server..."\n\
+    exec uvicorn training_service:app --host 0.0.0.0 --port 8001\n\
+fi' > /app/start.sh && chmod +x /app/start.sh
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8001/health || exit 1
+
+# Expose ports
+EXPOSE 8001
+
+# Default command
+CMD ["/app/start.sh"]

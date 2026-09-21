@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dmlog
+  labels:
+    name: dmlog
+    environment: production
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dmlog-monitoring
+  labels:
+    name: dmlog-monitoring
+    environment: production
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dmlog-logging
+  labels:
+    name: dmlog-logging
+    environment: production

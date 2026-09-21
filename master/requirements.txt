@@ -1,0 +1,91 @@
+# DMLogn8n Master System Requirements
+
+# Core async framework
+aiohttp>=3.8.0
+aiofiles>=22.1.0
+asyncio-mqtt>=0.13.0
+
+# Data processing and validation
+jsonschema>=4.17.0
+pydantic>=1.10.0
+marshmallow>=3.19.0
+
+# Security and encryption
+cryptography>=38.0.0
+PyJWT>=2.6.0
+bcrypt>=4.0.0
+hmac>=1.0.0
+
+# Network and communication
+websockets>=10.4
+requests>=2.28.0
+urllib3>=1.26.0
+
+# System monitoring and metrics
+psutil>=5.9.0
+prometheus-client>=0.15.0
+statsd>=3.3.0
+
+# Database support (optional)
+redis>=4.3.0
+aioredis>=2.0.0
+asyncpg>=0.27.0
+
+# Configuration management
+PyYAML>=6.0
+python-dotenv>=0.19.0
+configparser>=5.3.0
+
+# Graph processing for dependencies
+networkx>=2.8.0
+
+# Time and date utilities
+python-dateutil>=2.8.0
+pytz>=2022.2.1
+
+# Logging and debugging
+colorlog>=6.7.0
+structlog>=22.1.0
+
+# Development and testing (optional)
+pytest>=7.1.0
+pytest-asyncio>=0.20.0
+pytest-cov>=3.0.0
+black>=22.6.0
+flake8>=5.0.0
+mypy>=0.971
+
+# Performance optimization
+orjson>=3.8.0
+ujson>=5.6.0
+
+# Rate limiting
+limits>=2.6.0
+ratelimit>=2.2.1
+
+# API documentation (optional)
+aiohttp-swagger>=1.0.0
+apispec>=5.2.0
+
+# Background task processing
+celery>=5.2.0
+dramatiq>=1.12.0
+
+# Caching
+aiocache>=0.11.0
+cachetools>=5.2.0
+
+# HTTP client extras
+httpx>=0.23.0
+aiohttp-retry>=2.8.0
+
+# WebSocket support
+socket.io>=5.2.0
+
+# Environment and deployment
+python-decouple>=3.6
+environs>=9.5.0
+
+# Security extras
+secure>=0.2.0
+itsdangerous>=2.1.0

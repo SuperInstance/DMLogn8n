@@ -1,0 +1,440 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    name: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+  labels:
+    app: prometheus
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: 'dmlog-production'
+        environment: 'production'
+
+    rule_files:
+      - "/etc/prometheus/rules/*.yml"
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+              - alertmanager:9093
+
+    scrape_configs:
+      # Prometheus itself
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      # Kubernetes API Server
+      - job_name: 'kubernetes-apiservers'
+        kubernetes_sd_configs:
+          - role: endpoints
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: default;kubernetes;https
+
+      # Node Exporter
+      - job_name: 'kubernetes-nodes'
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/${1}/proxy/metrics
+
+      # Kubelet
+      - job_name: 'kubernetes-kubelet'
+        kubernetes_sd_configs:
+          - role: node
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/${1}/proxy/metrics
+
+      # cAdvisor
+      - job_name: 'kubernetes-cadvisor'
+        kubernetes_sd_configs:
+          - role: node
+        scheme: https
+        metrics_path: /metrics/cadvisor
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+
+      # Kubernetes Pods
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+
+      # DMLog Application
+      - job_name: 'dmlog-backend'
+        kubernetes_sd_configs:
+          - role: endpoints
+          namespaces:
+            names:
+              - dmlog
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: backend-service
+          - source_labels: [__meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: metrics
+
+      # Nginx Ingress
+      - job_name: 'nginx-ingress'
+        kubernetes_sd_configs:
+          - role: endpoints
+          namespaces:
+            names:
+              - ingress-nginx
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: ingress-nginx-controller
+          - source_labels: [__meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: prometheus
+
+      # PostgreSQL Exporter
+      - job_name: 'postgresql-exporter'
+        kubernetes_sd_configs:
+          - role: endpoints
+          namespaces:
+            names:
+              - dmlog
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: postgresql-service
+          - source_labels: [__meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: metrics
+
+      # Redis Exporter
+      - job_name: 'redis-exporter'
+        kubernetes_sd_configs:
+          - role: endpoints
+          namespaces:
+            names:
+              - dmlog
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: redis-service
+          - source_labels: [__meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: metrics
+
+      # Node Exporter
+      - job_name: 'node-exporter'
+        kubernetes_sd_configs:
+          - role: endpoints
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: node-exporter
+          - source_labels: [__meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: metrics
+
+  recording_rules.yml: |
+    groups:
+      - name: dmlog.rules
+        rules:
+          # CPU usage
+          - record: instance:node_cpu_utilization:rate5m
+            expr: 100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+          # Memory usage
+          - record: instance:node_memory_utilization:ratio
+            expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100
+
+          # Disk usage
+          - record: instance:node_disk_utilization:ratio
+            expr: (1 - (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"})) * 100
+
+          # Network traffic
+          - record: instance:node_network_receive_bytes:rate5m
+            expr: rate(node_network_receive_bytes_total[5m]) * 8
+
+          - record: instance:node_network_transmit_bytes:rate5m
+            expr: rate(node_network_transmit_bytes_total[5m]) * 8
+
+          # Pod CPU usage
+          - record: namespace:pod_cpu_usage_seconds_total:rate5m
+            expr: sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{container!="POD",container!=""}[5m]))
+
+          # Pod memory usage
+          - record: namespace:pod_memory_usage_bytes:total
+            expr: sum by (namespace, pod) (container_memory_usage_bytes{container!="POD",container!=""})
+
+          # Application request rate
+          - record: dmlog:http_requests:rate5m
+            expr: sum(rate(http_requests_total[5m])) by (service, method, status)
+
+          # Application error rate
+          - record: dmlog:http_requests_error_rate:rate5m
+            expr: sum(rate(http_requests_total{status=~"5.."}[5m])) by (service) / sum(rate(http_requests_total[5m])) by (service) * 100
+
+          # Application response time
+          - record: dmlog:http_request_duration:histogram_quantile95
+            expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))
+
+          - record: dmlog:http_request_duration:histogram_quantile50
+            expr: histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))
+
+  alert_rules.yml: |
+    groups:
+      - name: dmlog.alerts
+        rules:
+          # Instance down
+          - alert: InstanceDown
+            expr: up == 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Instance {{ $labels.instance }} is down"
+              description: "Instance {{ $labels.instance }} has been down for more than 5 minutes."
+
+          # High CPU usage
+          - alert: HighCPUUsage
+            expr: instance:node_cpu_utilization:rate5m > 80
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High CPU usage on {{ $labels.instance }}"
+              description: "CPU usage is {{ $value }}% on {{ $labels.instance }}."
+
+          # High memory usage
+          - alert: HighMemoryUsage
+            expr: instance:node_memory_utilization:ratio > 85
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High memory usage on {{ $labels.instance }}"
+              description: "Memory usage is {{ $value }}% on {{ $labels.instance }}."
+
+          # Disk space low
+          - alert: DiskSpaceLow
+            expr: instance:node_disk_utilization:ratio > 85
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Disk space low on {{ $labels.instance }}"
+              description: "Disk usage is {{ $value }}% on {{ $labels.instance }}."
+
+          # Application high error rate
+          - alert: ApplicationHighErrorRate
+            expr: dmlog:http_requests_error_rate:rate5m > 10
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "High error rate in {{ $labels.service }}"
+              description: "Error rate is {{ $value }}% in {{ $labels.service }}."
+
+          # Application high response time
+          - alert: ApplicationHighResponseTime
+            expr: dmlog:http_request_duration:histogram_quantile95 > 2
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High response time in {{ $labels.service }}"
+              description: "95th percentile response time is {{ $value }}s in {{ $labels.service }}."
+
+          # Database connections high
+          - alert: DatabaseConnectionsHigh
+            expr: pg_stat_activity_count > 150
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High database connections"
+              description: "Database has {{ $value }} connections."
+
+          # Redis memory high
+          - alert: RedisMemoryHigh
+            expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Redis memory usage high"
+              description: "Redis memory usage is {{ $value | humanizePercentage }}."
+
+          # Pod crash looping
+          - alert: PodCrashLooping
+            expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash looping"
+              description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been restarting {{ $value }} times in the last 15 minutes."
+
+          # Pending pods
+          - alert: PodPending
+            expr: kube_pod_status_phase{phase="Pending"} == 1
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is pending"
+              description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been pending for more than 10 minutes."
+
+          # Node not ready
+          - alert: NodeNotReady
+            expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+            for: 10m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Node {{ $labels.node }} is not ready"
+              description: "Node {{ $labels.node }} has been not ready for more than 10 minutes."
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.40.0
+        args:
+          - '--config.file=/etc/prometheus/prometheus.yml'
+          - '--storage.tsdb.path=/prometheus/'
+          - '--web.console.libraries=/etc/prometheus/console_libraries'
+          - '--web.console.templates=/etc/prometheus/consoles'
+          - '--storage.tsdb.retention.time=30d'
+          - '--web.enable-lifecycle'
+        ports:
+        - containerPort: 9090
+          name: http
+        volumeMounts:
+        - name: prometheus-config-volume
+          mountPath: /etc/prometheus/
+        - name: prometheus-storage-volume
+          mountPath: /prometheus/
+        resources:
+          requests:
+            cpu: 200m
+            memory: 1000Mi
+          limits:
+            cpu: 1000m
+            memory: 2000Mi
+      volumes:
+      - name: prometheus-config-volume
+        configMap:
+          defaultMode: 420
+          name: prometheus-config
+      - name: prometheus-storage-volume
+        persistentVolumeClaim:
+          claimName: prometheus-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9090
+    targetPort: 9090
+    name: http
+  selector:
+    app: prometheus
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-pvc
+  namespace: monitoring
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp2-encrypted
+  resources:
+    requests:
+      storage: 100Gi

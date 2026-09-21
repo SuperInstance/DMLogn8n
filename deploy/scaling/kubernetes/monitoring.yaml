@@ -1,0 +1,654 @@
+---
+# Comprehensive Monitoring and Alerting for Scaling
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scaling-monitoring-config
+  namespace: dmlog
+  labels:
+    app: dmlog
+    component: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: dmlog-prod
+        environment: production
+
+    rule_files:
+      - "/etc/prometheus/rules/*.yml"
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+              - alertmanager:9093
+
+    scrape_configs:
+      # Kubernetes API Server
+      - job_name: 'kubernetes-apiservers'
+        kubernetes_sd_configs:
+        - role: endpoints
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: default;kubernetes;https
+
+      # Node Exporter
+      - job_name: 'kubernetes-nodes'
+        kubernetes_sd_configs:
+        - role: node
+        relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+        - target_label: __address__
+          replacement: kubernetes.default.svc:443
+        - source_labels: [__meta_kubernetes_node_name]
+          regex: (.+)
+          target_label: __metrics_path__
+          replacement: /api/v1/nodes/${1}/proxy/metrics
+
+      # Kube State Metrics
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+        - role: pod
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+          action: replace
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+          target_label: __address__
+        - action: labelmap
+          regex: __meta_kubernetes_pod_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: kubernetes_namespace
+        - source_labels: [__meta_kubernetes_pod_name]
+          action: replace
+          target_label: kubernetes_pod_name
+
+      # Application Metrics
+      - job_name: 'dmlog-backend'
+        kubernetes_sd_configs:
+        - role: endpoints
+          namespaces:
+            names:
+            - dmlog
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_name]
+          action: keep
+          regex: backend-service
+        - source_labels: [__meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: metrics
+
+      - job_name: 'dmlog-frontend'
+        kubernetes_sd_configs:
+        - role: endpoints
+          namespaces:
+            names:
+            - dmlog
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_name]
+          action: keep
+          regex: frontend-service
+        - source_labels: [__meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: metrics
+
+      # Custom Metrics for Scaling
+      - job_name: 'custom-scaling-metrics'
+        kubernetes_sd_configs:
+        - role: endpoints
+          namespaces:
+            names:
+            - dmlog
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_name]
+          action: keep
+          regex: (.*-metrics-service)
+        - source_labels: [__meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: metrics
+
+  rules.yml: |
+    groups:
+    - name: scaling.rules
+      rules:
+      # HPA Scaling Alerts
+      - alert: HPAReplicasMaxReached
+        expr: kube_hpa_status_current_replicas == kube_hpa_spec_max_replicas
+        for: 5m
+        labels:
+          severity: critical
+          component: scaling
+        annotations:
+          summary: "HPA {{ $labels.hpa }} has reached maximum replicas"
+          description: "HPA {{ $labels.hpa }} in namespace {{ $labels.namespace }} has reached its maximum replica count of {{ $value }}. Consider increasing max_replicas or optimizing resource usage."
+
+      - alert: HPAReplicasMinReached
+        expr: kube_hpa_status_current_replicas == kube_hpa_spec_min_replicas
+        for: 15m
+        labels:
+          severity: warning
+          component: scaling
+        annotations:
+          summary: "HPA {{ $labels.hpa }} at minimum replicas"
+          description: "HPA {{ $labels.hpa }} in namespace {{ $labels.namespace }} has been at minimum replica count for 15 minutes. Consider optimizing resource usage."
+
+      - alert: HPAUnableToScale
+        expr: kube_hpa_status_condition{condition="AbleToScale",status="false"} == 1
+        for: 5m
+        labels:
+          severity: critical
+          component: scaling
+        annotations:
+          summary: "HPA {{ $labels.hpa }} unable to scale"
+          description: "HPA {{ $labels.hpa }} in namespace {{ $labels.namespace }} is unable to scale for the last 5 minutes."
+
+      # Resource Utilization Alerts
+      - alert: HighCPUUtilization
+        expr: rate(container_cpu_usage_seconds_total{container!="POD",container!="pause"}[5m]) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+          component: resources
+        annotations:
+          summary: "High CPU utilization detected"
+          description: "CPU utilization is above 80% for pod {{ $labels.pod }} in namespace {{ $labels.namespace }} for more than 10 minutes."
+
+      - alert: HighMemoryUtilization
+        expr: container_memory_working_set_bytes{container!="POD",container!="pause"} / container_spec_memory_limit_bytes * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+          component: resources
+        annotations:
+          summary: "High memory utilization detected"
+          description: "Memory utilization is above 90% for pod {{ $labels.pod }} in namespace {{ $labels.namespace }} for more than 5 minutes."
+
+      - alert: PodOOMKilled
+        expr: increase(kube_pod_container_status_terminated_reason{reason="OOMKilled"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          component: resources
+        annotations:
+          summary: "Pod OOMKilled"
+          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} was OOMKilled. Consider increasing memory limits."
+
+      # Cluster Autoscaling Alerts
+      - alert: ClusterAutoscalerFailedToScale
+        expr: cluster_autoscaler_failed_nodes_count > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: cluster-scaling
+        annotations:
+          summary: "Cluster autoscaler failed to scale"
+          description: "Cluster autoscaler failed to scale up {{ $value }} nodes. Check autoscaler logs for details."
+
+      - alert: ClusterNodeCountHigh
+        expr: kube_node_status_condition{condition="Ready",status="true"} > 50
+        for: 30m
+        labels:
+          severity: warning
+          component: cluster-scaling
+        annotations:
+          summary: "High node count in cluster"
+          description: "Cluster has {{ $value }} ready nodes, which is higher than expected. Review scaling policies."
+
+      - alert: UnschedulablePods
+        expr: kube_pod_status_phase{phase="Pending"} > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: scheduling
+        annotations:
+          summary: "Unschedulable pods detected"
+          description: "{{ $value }} pods are in Pending state and cannot be scheduled. Check resource availability."
+
+      # Application Performance Alerts
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) * 100 > 5
+        for: 5m
+        labels:
+          severity: critical
+          component: application
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | printf \"%.2f\" }}% for service {{ $labels.service }} in namespace {{ $labels.namespace }}."
+
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: application
+        annotations:
+          summary: "High response time detected"
+          description: "95th percentile response time is {{ $value | printf \"%.2f\" }}s for service {{ $labels.service }}."
+
+      - alert: LowRequestRate
+        expr: rate(http_requests_total[5m]) < 0.1
+        for: 10m
+        labels:
+          severity: warning
+          component: application
+        annotations:
+          summary: "Low request rate detected"
+          description: "Request rate is only {{ $value | printf \"%.2f\" }} req/s for service {{ $labels.service }}."
+
+      # Load Balancer Health Alerts
+      - alert: LoadBalancerUnhealthyHosts
+        expr: aws_alb_unhealthy_host_count > 0
+        for: 2m
+        labels:
+          severity: critical
+          component: loadbalancer
+        annotations:
+          summary: "Unhealthy hosts detected in load balancer"
+          description: "Load balancer {{ $labels.load_balancer }} has {{ $value }} unhealthy hosts."
+
+      - alert: LoadBalancerHighLatency
+        expr: aws_alb_target_response_time_average > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: loadbalancer
+        annotations:
+          summary: "High latency in load balancer"
+          description: "Average response time is {{ $value | printf \"%.2f\" }}s for load balancer {{ $labels.load_balancer }}."
+
+      # Predictive Scaling Alerts
+      - alert: PredictiveScalingInaccurate
+        expr: predictive_scaling_accuracy < 0.7
+        for: 1h
+        labels:
+          severity: warning
+          component: predictive-scaling
+        annotations:
+          summary: "Predictive scaling accuracy is low"
+          description: "Predictive scaling accuracy is {{ $value | printf \"%.2f\" }}. Consider retraining the model."
+
+      - alert: ScalingEventFrequency
+        expr: increase(kube_hpa_status_replicas[1h]) > 10
+        for: 0m
+        labels:
+          severity: warning
+          component: scaling
+        annotations:
+          summary: "High scaling event frequency"
+          description: "HPA {{ $labels.hpa }} has scaled {{ $value }} times in the last hour. Consider adjusting scaling policies."
+
+      # Cost Optimization Alerts
+      - alert: HighResourceCost
+        expr: resource_cost_hourly > 50
+        for: 1h
+        labels:
+          severity: warning
+          component: cost
+        annotations:
+          summary: "High resource cost detected"
+          description: "Hourly resource cost is ${{ $value | printf \"%.2f\" }}. Consider optimization opportunities."
+
+      - alert: UnusedResources
+        expr: container_cpu_usage_seconds_total / container_spec_cpu_quota * 100 < 5
+        for: 1h
+        labels:
+          severity: info
+          component: cost
+        annotations:
+          summary: "Potentially unused resources detected"
+          description: "Pod {{ $labels.pod }} is using less than 5% of allocated CPU for more than 1 hour."
+
+---
+# Prometheus deployment with enhanced configuration
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-enhanced
+  namespace: monitoring
+  labels:
+    app: prometheus
+    component: enhanced-monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: prometheus
+      component: enhanced-monitoring
+  template:
+    metadata:
+      labels:
+        app: prometheus
+        component: enhanced-monitoring
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      serviceAccountName: prometheus
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.40.0
+        ports:
+        - containerPort: 9090
+          name: web
+        args:
+        - '--config.file=/etc/prometheus/prometheus.yml'
+        - '--storage.tsdb.path=/prometheus/'
+        - '--storage.tsdb.retention.time=30d'
+        - '--storage.tsdb.retention.size=50GB'
+        - '--web.console.libraries=/etc/prometheus/console_libraries'
+        - '--web.console.templates=/etc/prometheus/consoles'
+        - '--web.enable-lifecycle'
+        - '--web.enable-admin-api'
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/prometheus
+        - name: storage-volume
+          mountPath: /prometheus
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 2Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: 9090
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9090
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: config-volume
+        configMap:
+          name: scaling-monitoring-config
+      - name: storage-volume
+        persistentVolumeClaim:
+          claimName: prometheus-storage-pvc
+
+---
+# Alertmanager with enhanced routing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager-enhanced
+  namespace: monitoring
+  labels:
+    app: alertmanager
+    component: enhanced-monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: alertmanager
+      component: enhanced-monitoring
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+        component: enhanced-monitoring
+    spec:
+      serviceAccountName: alertmanager
+      containers:
+      - name: alertmanager
+        image: prom/alertmanager:v0.25.0
+        ports:
+        - containerPort: 9093
+          name: web
+        - containerPort: 9094
+          name: mesh
+        args:
+        - '--config.file=/etc/alertmanager/alertmanager.yml'
+        - '--storage.path=/alertmanager'
+        - '--web.external-url=http://alertmanager.monitoring.svc.cluster.local:9093'
+        - '--cluster.peer=alertmanager-enhanced-0.alertmanager-enhanced.monitoring.svc.cluster.local:9094'
+        - '--cluster.peer=alertmanager-enhanced-1.alertmanager-enhanced.monitoring.svc.cluster.local:9094'
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/alertmanager
+        - name: storage-volume
+          mountPath: /alertmanager
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: 9093
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9093
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: config-volume
+        configMap:
+          name: alertmanager-config
+      - name: storage-volume
+        persistentVolumeClaim:
+          claimName: alertmanager-storage-pvc
+
+---
+# Alertmanager configuration with enhanced routing
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+  labels:
+    app: alertmanager
+    component: enhanced-monitoring
+data:
+  alertmanager.yml: |
+    global:
+      smtp_smarthost: 'smtp.gmail.com:587'
+      smtp_from: 'alerts@dmlog.com'
+      smtp_auth_username: 'alerts@dmlog.com'
+      smtp_auth_password: 'your-password'
+      slack_api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+
+    templates:
+    - '/etc/alertmanager/templates/*.tmpl'
+
+    route:
+      group_by: ['alertname', 'cluster', 'service']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 1h
+      receiver: 'default-receiver'
+      routes:
+      # Critical alerts go to all channels
+      - match:
+          severity: critical
+        receiver: 'critical-alerts'
+        group_wait: 0s
+        repeat_interval: 5m
+        continue: true
+
+      # Scaling alerts go to DevOps team
+      - match:
+          component: scaling
+        receiver: 'scaling-team'
+        group_wait: 5s
+        repeat_interval: 30m
+
+      # Cost alerts go to Finance team
+      - match:
+          component: cost
+        receiver: 'finance-team'
+        group_wait: 30s
+        repeat_interval: 1h
+
+      # Application alerts go to Development team
+      - match:
+          component: application
+        receiver: 'development-team'
+        group_wait: 10s
+        repeat_interval: 15m
+
+    receivers:
+    - name: 'default-receiver'
+      email_configs:
+      - to: 'devops@dmlog.com'
+        subject: '[DMLog Alert] {{ .GroupLabels.alertname }}'
+        body: |
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Labels: {{ range .Labels.SortedPairs }}{{ .Name }}={{ .Value }} {{ end }}
+          {{ end }}
+
+    - name: 'critical-alerts'
+      email_configs:
+      - to: 'oncall@dmlog.com,management@dmlog.com'
+        subject: '[CRITICAL] {{ .GroupLabels.alertname }}'
+        body: |
+          CRITICAL ALERT - IMMEDIATE ATTENTION REQUIRED
+
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Severity: {{ .Labels.severity }}
+          Component: {{ .Labels.component }}
+          Time: {{ .StartsAt }}
+          {{ end }}
+      slack_configs:
+      - channel: '#alerts-critical'
+        title: '🚨 Critical Alert'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Severity:* {{ .Labels.severity }}
+          *Component:* {{ .Labels.component }}
+          {{ end }}
+
+    - name: 'scaling-team'
+      email_configs:
+      - to: 'scaling-team@dmlog.com'
+        subject: '[Scaling Alert] {{ .GroupLabels.alertname }}'
+      slack_configs:
+      - channel: '#scaling-alerts'
+        title: '⚡ Scaling Alert'
+
+    - name: 'finance-team'
+      email_configs:
+      - to: 'finance@dmlog.com'
+        subject: '[Cost Alert] {{ .GroupLabels.alertname }}'
+
+    - name: 'development-team'
+      email_configs:
+      - to: 'dev-team@dmlog.com'
+        subject: '[Application Alert] {{ .GroupLabels.alertname }}'
+      slack_configs:
+      - channel: '#app-alerts'
+        title: '🐛 Application Alert'
+
+    inhibit_rules:
+    # Inhibit non-critical alerts if critical alert is firing
+    - source_match:
+        severity: 'critical'
+      target_match:
+        severity: 'warning'
+      equal: ['alertname', 'cluster', 'service']
+
+---
+# Grafana dashboard import
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: monitoring
+  labels:
+    app: grafana
+    component: dashboards
+data:
+  scaling-dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "DMLog Scaling Dashboard",
+        "tags": ["dmlog", "scaling"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "title": "HPA Replica Count",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "kube_hpa_status_current_replicas",
+                "legendFormat": "{{ hpa }} - Current Replicas"
+              },
+              {
+                "expr": "kube_hpa_spec_max_replicas",
+                "legendFormat": "{{ hpa }} - Max Replicas"
+              }
+            ]
+          },
+          {
+            "title": "CPU Utilization",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(container_cpu_usage_seconds_total{container!=\"POD\"}[5m]) * 100",
+                "legendFormat": "{{ pod }} - CPU %"
+              }
+            ]
+          },
+          {
+            "title": "Memory Utilization",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "container_memory_working_set_bytes{container!=\"POD\"} / container_spec_memory_limit_bytes * 100",
+                "legendFormat": "{{ pod }} - Memory %"
+              }
+            ]
+          },
+          {
+            "title": "Scaling Events",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "increase(kube_hpa_status_replicas[1h])",
+                "legendFormat": "Scaling Events"
+              }
+            ]
+          }
+        ],
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "refresh": "30s"
+      }
+    }

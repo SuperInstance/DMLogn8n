@@ -1,0 +1,411 @@
+{
+  "name": "Dynamic Dungeon Generation Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dungeon-generate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Dungeon Generation Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [260, 300],
+      "webhookId": "dungeon-generator-webhook"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "algorithm",
+              "value": "={{$node[\"Dungeon Generation Webhook\"].json[\"body\"][\"algorithm\"] || \"roomCorridor\"}}"
+            },
+            {
+              "name": "theme",
+              "value": "={{$node[\"Dungeon Generation Webhook\"].json[\"body\"][\"theme\"] || \"classic\"}}"
+            },
+            {
+              "name": "width",
+              "value": "={{$node[\"Dungeon Generation Webhook\"].json[\"body\"][\"width\"] || 50}}"
+            },
+            {
+              "name": "height",
+              "value": "={{$node[\"Dungeon Generation Webhook\"].json[\"body\"][\"height\"] || 50}}"
+            },
+            {
+              "name": "floors",
+              "value": "={{$node[\"Dungeon Generation Webhook\"].json[\"body\"][\"floors\"] || 1}}"
+            },
+            {
+              "name": "difficulty",
+              "value": "={{$node[\"Dungeon Generation Webhook\"].json[\"body\"][\"difficulty\"] || 1}}"
+            },
+            {
+              "name": "playerLevel",
+              "value": "={{$node[\"Dungeon Generation Webhook\"].json[\"body\"][\"playerLevel\"] || 1}}"
+            },
+            {
+              "name": "seed",
+              "value": "={{$node[\"Dungeon Generation Webhook\"].json[\"body\"][\"seed\"] || Math.random()}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-params-1",
+      "name": "Set Generation Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3001/api/dungeons/validate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$node[\"Set Generation Parameters\"].json}}",
+        "options": {}
+      },
+      "id": "validate-params-1",
+      "name": "Validate Parameters",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{$node[\"Validate Parameters\"].json[\"validation\"][\"valid\"]}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-1",
+      "name": "Parameters Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3001/api/dungeons/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$node[\"Set Generation Parameters\"].json}}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "generate-dungeon-1",
+      "name": "Generate Dungeon",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1060, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{{\n  \"success\": false,\n  \"error\": {\n    \"message\": $node[\"Validate Parameters\"].json[\"validation\"][\"errors\"][0] || \"Invalid parameters\",\n    \"type\": \"validation_error\"\n  }\n}}}"
+      },
+      "id": "error-response-1",
+      "name": "Return Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1060, 400]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "dungeonId",
+              "value": "={{$node[\"Generate Dungeon\"].json[\"dungeon\"][\"id\"]}}"
+            },
+            {
+              "name": "generationTime",
+              "value": "={{Date.now() - parseInt($node[\"Dungeon Generation Webhook\"].json[\"body\"][\"startTime\"])}}"
+            },
+            {
+              "name": "status",
+              "value": "completed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-results-1",
+      "name": "Set Results",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1260, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{{\n  \"success\": true,\n  \"dungeon\": $node[\"Generate Dungeon\"].json[\"dungeon\"],\n  \"generationTime\": $node[\"Set Results\"].json[\"generationTime\"],\n  \"timestamp\": new Date().toISOString()\n}}}"
+      },
+      "id": "success-response-1",
+      "name": "Return Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1460, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3004/api/world/update",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{{\n  \"type\": \"dungeon_created\",\n  \"dungeonId\": $node[\"Generate Dungeon\"].json[\"dungeon\"][\"id\"],\n  \"theme\": $node[\"Set Generation Parameters\"].json[\"theme\"],\n  \"difficulty\": $node[\"Set Generation Parameters\"].json[\"difficulty\"],\n  \"floors\": $node[\"Generate Dungeon\"].json[\"dungeon\"][\"dimensions\"][\"floors\"]\n}}}",
+        "options": {}
+      },
+      "id": "update-world-1",
+      "name": "Update World State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1260, 100]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3003/api/quests/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{{\n  \"dungeonId\": $node[\"Generate Dungeon\"].json[\"dungeon\"][\"id\"],\n  \"theme\": $node[\"Set Generation Parameters\"].json[\"theme\"],\n  \"difficulty\": $node[\"Set Generation Parameters\"].json[\"difficulty\"],\n  \"playerLevel\": $node[\"Set Generation Parameters\"].json[\"playerLevel\"],\n  \"floors\": $node[\"Generate Dungeon\"].json[\"dungeon\"][\"dimensions\"][\"floors\"],\n  \"rooms\": $node[\"Generate Dungeon\"].json[\"dungeon\"][\"statistics\"][\"totalRooms\"]\n}}}",
+        "options": {}
+      },
+      "id": "generate-quests-1",
+      "name": "Generate Related Quests",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1460, 100]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "eventType",
+              "value": "dungeon_generation"
+            },
+            {
+              "name": "dungeonId",
+              "value": "={{$node[\"Generate Dungeon\"].json[\"dungeon\"][\"id\"]}}"
+            },
+            {
+              "name": "algorithm",
+              "value": "={{$node[\"Set Generation Parameters\"].json[\"algorithm\"]}}"
+            },
+            {
+              "name": "theme",
+              "value": "={{$node[\"Set Generation Parameters\"].json[\"theme\"]}}"
+            },
+            {
+              "name": "difficulty",
+              "value": "={{$node[\"Set Generation Parameters\"].json[\"difficulty\"]}}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{new Date().toISOString()}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-event-1",
+      "name": "Log Generation Event",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1660, 200]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "fileId": "={{$node[\"Get Log File\"].json[\"id\"]}}",
+        "data": "={{$node[\"Log Generation Event\"].json}}"
+      },
+      "id": "append-to-log-1",
+      "name": "Append to Generation Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 3,
+      "position": [1860, 200]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "fileId": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+        "sheetName": "DungeonGenerations"
+      },
+      "id": "get-log-file-1",
+      "name": "Get Log File",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 3,
+      "position": [1660, 100]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3002/api/combat/prepare-encounters",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{{\n  \"dungeonId\": $node[\"Generate Dungeon\"].json[\"dungeon\"][\"id\"],\n  \"enemies\": $node[\"Generate Dungeon\"].json[\"dungeon\"][\"floors\"].flatMap(floor => floor.spawns || []),\n  \"bosses\": $node[\"Generate Dungeon\"].json[\"dungeon\"][\"floors\"].flatMap(floor => floor.bosses || []),\n  \"difficulty\": $node[\"Set Generation Parameters\"].json[\"difficulty\"]\n}}}",
+        "options": {}
+      },
+      "id": "prepare-combat-1",
+      "name": "Prepare Combat Encounters",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1460, 300]
+    }
+  ],
+  "connections": {
+    "Dungeon Generation Webhook": {
+      "main": [
+        [
+          {
+            "node": "Set Generation Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Generation Parameters": {
+      "main": [
+        [
+          {
+            "node": "Validate Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Parameters": {
+      "main": [
+        [
+          {
+            "node": "Parameters Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parameters Valid?": {
+      "main": [
+        [
+          {
+            "node": "Generate Dungeon",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Dungeon": {
+      "main": [
+        [
+          {
+            "node": "Set Results",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update World State",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Related Quests",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Combat Encounters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Results": {
+      "main": [
+        [
+          {
+            "node": "Return Success Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Generation Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Generation Event": {
+      "main": [
+        [
+          {
+            "node": "Append to Generation Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Log File": {
+      "main": [
+        [
+          {
+            "node": "Append to Generation Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "createdAt": "2024-01-01T00:00:00.000Z",
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "1.0.0",
+  "triggerCount": 0,
+  "tags": [
+    {
+      "id": "tag-1",
+      "name": "Dungeon Generation"
+    }
+  ]
+}

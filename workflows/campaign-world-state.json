@@ -1,0 +1,446 @@
+{
+  "name": "Campaign World State - Persistent World Data Management",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "world/update",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "world-update-webhook",
+      "name": "World Update Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "world-update"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process world state update request\nconst worldData = $input.first().json;\nconst { \n  campaignId,\n  action, // 'update', 'create', 'get', 'delete'\n  locationChanges = [],\n  npcChanges = [],\n  factionChanges = [],\n  questChanges = [],\n  worldEvents = [],\n  timelineEvents = []\n} = worldData;\n\n// Validate required fields\nif (!campaignId || !action) {\n  throw new Error('Missing required fields: campaignId, action');\n}\n\n// Prepare operation data\nconst operationData = {\n  campaignId,\n  action,\n  timestamp: new Date().toISOString(),\n  locationChanges,\n  npcChanges,\n  factionChanges,\n  questChanges,\n  worldEvents,\n  timelineEvents,\n  metadata: {\n    processedBy: 'campaign-world-workflow',\n    version: '1.0'\n  }\n};\n\nreturn { json: operationData };"
+      },
+      "id": "process-world-update",
+      "name": "Process World Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "action-check",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "get",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "route-world-action",
+      "name": "Route World Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "lookup",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_WORLD_SHEET_ID }}",
+        "range": "Campaign_State!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-get-world",
+      "name": "Google Sheets - Get World",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [920, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_WORLD_SHEET_ID }}",
+        "range": "Campaign_State!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-update-world",
+      "name": "Google Sheets - Update World",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [920, 400],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process world state changes and calculate derived values\nconst worldData = $input.first().json;\nconst {\n  campaignId,\n  locationChanges,\n  npcChanges,\n  factionChanges,\n  questChanges,\n  worldEvents,\n  timelineEvents\n} = worldData;\n\n// Get current world state\nlet currentWorldState = {\n  campaignId,\n  locations: [],\n  npcs: [],\n  factions: [],\n  quests: [],\n  worldEvents: [],\n  timelineEvents: [],\n  currentInGameTime: 'Day 1, Morning',\n  worldStatus: 'active',\n  lastUpdated: new Date().toISOString()\n};\n\n// Load existing world data if available\nif ($input.length > 1 && $input[1].json && $input[1].json.values) {\n  const dataRow = $input[1].json.values.find(row => row[0] === campaignId);\n  \n  if (dataRow) {\n    currentWorldState = {\n      campaignId: dataRow[0],\n      locations: JSON.parse(dataRow[1] || '[]'),\n      npcs: JSON.parse(dataRow[2] || '[]'),\n      factions: JSON.parse(dataRow[3] || '[]'),\n      quests: JSON.parse(dataRow[4] || '[]'),\n      worldEvents: JSON.parse(dataRow[5] || '[]'),\n      timelineEvents: JSON.parse(dataRow[6] || '[]'),\n      currentInGameTime: dataRow[7] || 'Day 1, Morning',\n      worldStatus: dataRow[8] || 'active',\n      lastUpdated: dataRow[9] || new Date().toISOString()\n    };\n  }\n}\n\n// Process location changes\nlet updatedLocations = [...currentWorldState.locations];\nlocationChanges.forEach(change => {\n  const { locationId, action: locAction, data } = change;\n  const existingIndex = updatedLocations.findIndex(loc => loc.id === locationId);\n  \n  if (locAction === 'add' || locAction === 'create') {\n    if (existingIndex === -1) {\n      updatedLocations.push({\n        id: locationId,\n        name: data.name || locationId,\n        description: data.description || '',\n        type: data.type || 'location',\n        coordinates: data.coordinates || { x: 0, y: 0 },\n        connections: data.connections || [],\n        properties: data.properties || {},\n        discovered: data.discovered !== false,\n        lastVisited: data.lastVisited || null,\n        createdAt: new Date().toISOString()\n      });\n    }\n  } else if (locAction === 'update' && existingIndex >= 0) {\n    updatedLocations[existingIndex] = {\n      ...updatedLocations[existingIndex],\n      ...data,\n      lastModified: new Date().toISOString()\n    };\n  } else if (locAction === 'delete' && existingIndex >= 0) {\n    updatedLocations.splice(existingIndex, 1);\n  }\n});\n\n// Process NPC changes\nlet updatedNPCs = [...currentWorldState.npcs];\nnpcChanges.forEach(change => {\n  const { npcId, action: npcAction, data } = change;\n  const existingIndex = updatedNPCs.findIndex(npc => npc.id === npcId);\n  \n  if (npcAction === 'add' || npcAction === 'create') {\n    if (existingIndex === -1) {\n      updatedNPCs.push({\n        id: npcId,\n        name: data.name || npcId,\n        description: data.description || '',\n        race: data.race || 'unknown',\n        class: data.class || 'commoner',\n        level: data.level || 1,\n        location: data.location || 'unknown',\n        relationships: data.relationships || {},\n        faction: data.faction || 'neutral',\n        status: data.status || 'alive',\n        dialogue: data.dialogue || [],\n        inventory: data.inventory || [],\n        properties: data.properties || {},\n        createdAt: new Date().toISOString()\n      });\n    }\n  } else if (npcAction === 'update' && existingIndex >= 0) {\n    updatedNPCs[existingIndex] = {\n      ...updatedNPCs[existingIndex],\n      ...data,\n      lastModified: new Date().toISOString()\n    };\n  } else if (npcAction === 'delete' && existingIndex >= 0) {\n    updatedNPCs.splice(existingIndex, 1);\n  }\n});\n\n// Process faction changes\nlet updatedFactions = [...currentWorldState.factions];\nfactionChanges.forEach(change => {\n  const { factionId, action: facAction, data } = change;\n  const existingIndex = updatedFactions.findIndex(fac => fac.id === factionId);\n  \n  if (facAction === 'add' || facAction === 'create') {\n    if (existingIndex === -1) {\n      updatedFactions.push({\n        id: factionId,\n        name: data.name || factionId,\n        description: data.description || '',\n        type: data.type || 'organization',\n        alignment: data.alignment || 'neutral',\n        reputation: data.reputation || 0,\n        members: data.members || [],\n        territories: data.territories || [],\n        relationships: data.relationships || {},\n        resources: data.resources || {},\n        goals: data.goals || [],\n        createdAt: new Date().toISOString()\n      });\n    }\n  } else if (facAction === 'update' && existingIndex >= 0) {\n    updatedFactions[existingIndex] = {\n      ...updatedFactions[existingIndex],\n      ...data,\n      lastModified: new Date().toISOString()\n    };\n  } else if (facAction === 'delete' && existingIndex >= 0) {\n    updatedFactions.splice(existingIndex, 1);\n  }\n});\n\n// Process quest changes\nlet updatedQuests = [...currentWorldState.quests];\nquestChanges.forEach(change => {\n  const { questId, action: questAction, data } = change;\n  const existingIndex = updatedQuests.findIndex(quest => quest.id === questId);\n  \n  if (questAction === 'add' || questAction === 'create') {\n    if (existingIndex === -1) {\n      updatedQuests.push({\n        id: questId,\n        name: data.name || questId,\n        description: data.description || '',\n        type: data.type || 'main',\n        status: data.status || 'available',\n        difficulty: data.difficulty || 'normal',\n        objectives: data.objectives || [],\n        rewards: data.rewards || {},\n        prerequisites: data.prerequisites || [],\n        location: data.location || 'unknown',\n        giver: data.giver || 'unknown',\n        timeLimit: data.timeLimit || null,\n        progress: data.progress || 0,\n        completedObjectives: data.completedObjectives || [],\n        createdAt: new Date().toISOString()\n      });\n    }\n  } else if (questAction === 'update' && existingIndex >= 0) {\n    updatedQuests[existingIndex] = {\n      ...updatedQuests[existingIndex],\n      ...data,\n      lastModified: new Date().toISOString()\n    };\n  } else if (questAction === 'delete' && existingIndex >= 0) {\n    updatedQuests.splice(existingIndex, 1);\n  }\n});\n\n// Process world events\nlet updatedWorldEvents = [...currentWorldState.worldEvents, ...worldEvents].map(event => ({\n  ...event,\n  id: event.id || `event_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n  timestamp: event.timestamp || new Date().toISOString()\n}));\n\n// Process timeline events\nlet updatedTimelineEvents = [...currentWorldState.timelineEvents, ...timelineEvents].map(event => ({\n  ...event,\n  id: event.id || `timeline_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n  timestamp: event.timestamp || new Date().toISOString()\n}));\n\n// Calculate world statistics\nconst worldStats = {\n  totalLocations: updatedLocations.length,\n  discoveredLocations: updatedLocations.filter(loc => loc.discovered).length,\n  totalNPCs: updatedNPCs.length,\n  aliveNPCs: updatedNPCs.filter(npc => npc.status === 'alive').length,\n  totalFactions: updatedFactions.length,\n  activeQuests: updatedQuests.filter(quest => ['available', 'active', 'in_progress'].includes(quest.status)).length,\n  completedQuests: updatedQuests.filter(quest => quest.status === 'completed').length,\n  totalWorldEvents: updatedWorldEvents.length,\n  recentEvents: updatedWorldEvents.filter(event => {\n    const eventTime = new Date(event.timestamp);\n    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);\n    return eventTime > dayAgo;\n  }).length\n};\n\n// Prepare updated world state\nconst updatedWorldState = {\n  campaignId,\n  locations: updatedLocations,\n  npcs: updatedNPCs,\n  factions: updatedFactions,\n  quests: updatedQuests,\n  worldEvents: updatedWorldEvents,\n  timelineEvents: updatedTimelineEvents,\n  currentInGameTime: currentWorldState.currentInGameTime,\n  worldStatus: currentWorldState.worldStatus,\n  worldStats,\n  lastUpdated: new Date().toISOString(),\n  metadata: {\n    locationChanges: locationChanges.length,\n    npcChanges: npcChanges.length,\n    factionChanges: factionChanges.length,\n    questChanges: questChanges.length,\n    newWorldEvents: worldEvents.length,\n    newTimelineEvents: timelineEvents.length,\n    processedBy: 'world-state-processor'\n  }\n};\n\nreturn { json: updatedWorldState };"
+      },
+      "id": "process-world-changes",
+      "name": "Process World Changes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_WORLD_SHEET_ID }}",
+        "range": "Campaign_State!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-create-world",
+      "name": "Google Sheets - Create World",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [920, 600],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format world state data for Google Sheets\nconst worldData = $input.first().json;\n\n// Prepare row data in the correct order for Google Sheets\nconst rowData = [\n  worldData.campaignId,\n  JSON.stringify(worldData.locations),\n  JSON.stringify(worldData.npcs),\n  JSON.stringify(worldData.factions),\n  JSON.stringify(worldData.quests),\n  JSON.stringify(worldData.worldEvents),\n  JSON.stringify(worldData.timelineEvents),\n  worldData.currentInGameTime,\n  worldData.worldStatus,\n  worldData.lastUpdated\n];\n\nreturn {\n  json: {\n    range: 'Campaign_State!A:J',\n    values: [rowData]\n  }\n};"
+      },
+      "id": "format-world-for-sheets",
+      "name": "Format World for Sheets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Send real-time world update to WebSocket system\nconst worldData = $input.first().json;\nconst { campaignId, metadata } = worldData;\n\n// Prepare WebSocket broadcast payload\nconst broadcastPayload = {\n  type: 'world_update',\n  data: {\n    campaignId,\n    worldStats: worldData.worldStats,\n    currentInGameTime: worldData.currentInGameTime,\n    worldStatus: worldData.worldStatus,\n    recentChanges: {\n      locations: metadata.locationChanges || 0,\n      npcs: metadata.npcChanges || 0,\n      factions: metadata.factionChanges || 0,\n      quests: metadata.questChanges || 0,\n      worldEvents: metadata.newWorldEvents || 0,\n      timelineEvents: metadata.newTimelineEvents || 0\n    },\n    lastUpdated: worldData.lastUpdated\n  },\n  channels: [`campaign_${campaignId}`, 'world_updates', 'dm_updates'],\n  timestamp: new Date().toISOString()\n};\n\n// Send to WebSocket system\nfetch('http://localhost:5678/webhook/websocket/broadcast', {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json'\n  },\n  body: JSON.stringify(broadcastPayload)\n}).catch(error => {\n  console.error('Failed to broadcast world update:', error);\n});\n\nreturn { json: { broadcast: 'sent', campaignId } };"
+      },
+      "id": "broadcast-world-update",
+      "name": "Broadcast World Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: true,\n  campaignId: $json.campaignId,\n  worldStats: $json.worldStats,\n  currentInGameTime: $json.currentInGameTime,\n  worldStatus: $json.worldStatus,\n  lastUpdated: $json.lastUpdated,\n  metadata: $json.metadata\n} }}"
+      },
+      "id": "world-success-response",
+      "name": "World Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1580, 400]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "world/relationships",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "relationships-webhook",
+      "name": "Relationships Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 800],
+      "webhookId": "world-relationships"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process relationship matrix updates\nconst relationshipData = $input.first().json;\nconst { \n  campaignId,\n  relationshipType, // 'npc-npc', 'npc-faction', 'faction-faction', 'character-npc'\n  entityId1,\n  entityId2,\n  relationshipChange, // 'improve', 'deteriorate', 'set'\n  value,\n  reason = ''\n} = relationshipData;\n\n// Validate required fields\nif (!campaignId || !relationshipType || !entityId1 || !entityId2) {\n  throw new Error('Missing required fields for relationship update');\n}\n\n// Prepare relationship update data\nconst relationshipUpdate = {\n  campaignId,\n  relationshipType,\n  entityId1,\n  entityId2,\n  relationshipChange,\n  value,\n  reason,\n  timestamp: new Date().toISOString(),\n  action: 'relationship_update'\n};\n\nreturn { json: relationshipUpdate };"
+      },
+      "id": "process-relationship-update",
+      "name": "Process Relationship Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 800]
+    },
+    {
+      "parameters": {
+        "operation": "lookup",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_WORLD_SHEET_ID }}",
+        "range": "Relationship_Matrix!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-get-relationships",
+      "name": "Google Sheets - Get Relationships",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [680, 800],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate relationship matrix updates\nconst relationshipData = $input.first().json;\nconst {\n  campaignId,\n  relationshipType,\n  entityId1,\n  entityId2,\n  relationshipChange,\n  value,\n  reason\n} = relationshipData;\n\n// Get current relationships\nlet currentRelationships = [];\nif ($input.length > 1 && $input[1].json && $input[1].json.values) {\n  currentRelationships = $input[1].json.values.filter(row => row[0] === campaignId).map(row => ({\n    campaignId: row[0],\n    relationshipType: row[1],\n    entityId1: row[2],\n    entityId2: row[3],\n    value: parseInt(row[4]) || 0,\n    history: JSON.parse(row[5] || '[]')\n  }));\n}\n\n// Find existing relationship\nconst existingIndex = currentRelationships.findIndex(\n  rel => rel.relationshipType === relationshipType &&\n         ((rel.entityId1 === entityId1 && rel.entityId2 === entityId2) ||\n          (rel.entityId1 === entityId2 && rel.entityId2 === entityId1))\n);\n\nlet updatedRelationship;\nif (existingIndex >= 0) {\n  // Update existing relationship\n  const currentRel = currentRelationships[existingIndex];\n  let newValue = currentRel.value;\n  \n  if (relationshipChange === 'improve') {\n    newValue = Math.min(100, currentRel.value + value);\n  } else if (relationshipChange === 'deteriorate') {\n    newValue = Math.max(-100, currentRel.value - value);\n  } else if (relationshipChange === 'set') {\n    newValue = Math.max(-100, Math.min(100, value));\n  }\n  \n  const historyEntry = {\n    timestamp: new Date().toISOString(),\n    change: relationshipChange,\n    oldValue: currentRel.value,\n    newValue: newValue,\n    reason: reason || `Relationship changed via ${relationshipChange}`\n  };\n  \n  updatedRelationship = {\n    ...currentRel,\n    value: newValue,\n    history: [...currentRel.history, historyEntry]\n  };\n  \n  currentRelationships[existingIndex] = updatedRelationship;\n} else {\n  // Create new relationship\n  let newValue = 0;\n  if (relationshipChange === 'set') {\n    newValue = Math.max(-100, Math.min(100, value));\n  } else if (relationshipChange === 'improve') {\n    newValue = value;\n  } else if (relationshipChange === 'deteriorate') {\n    newValue = -value;\n  }\n  \n  updatedRelationship = {\n    campaignId,\n    relationshipType,\n    entityId1,\n    entityId2,\n    value: newValue,\n    history: [{\n      timestamp: new Date().toISOString(),\n      change: relationshipChange,\n      oldValue: 0,\n      newValue: newValue,\n      reason: reason || `Initial relationship established via ${relationshipChange}`\n    }]\n  };\n  \n  currentRelationships.push(updatedRelationship);\n}\n\n// Generate relationship summary\nconst relationshipSummary = {\n  campaignId,\n  relationshipType,\n  entity1: entityId1,\n  entity2: entityId2,\n  currentValue: updatedRelationship.value,\n  status: updatedRelationship.value > 50 ? 'friendly' : \n           updatedRelationship.value < -50 ? 'hostile' : 'neutral',\n  recentChange: updatedRelationship.history[updatedRelationship.history.length - 1],\n  totalHistory: updatedRelationship.history.length\n};\n\nreturn { json: { updatedRelationships: currentRelationships, summary: relationshipSummary } };"
+      },
+      "id": "calculate-relationship-updates",
+      "name": "Calculate Relationship Updates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 800]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_WORLD_SHEET_ID }}",
+        "range": "Relationship_Matrix!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-update-relationships",
+      "name": "Google Sheets - Update Relationships",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1140, 800],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: true,\n  relationship: $json.summary,\n  timestamp: new Date().toISOString()\n} }}"
+      },
+      "id": "relationship-success-response",
+      "name": "Relationship Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1360, 800]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Data validation for world state operations\nconst worldData = $input.first().json;\nconst validationErrors = [];\n\n// Validate campaign ID format\nif (!worldData.campaignId || typeof worldData.campaignId !== 'string') {\n  validationErrors.push('Invalid campaign ID format');\n}\n\n// Validate world status\nif (worldData.worldStatus) {\n  const validStatuses = ['active', 'paused', 'completed', 'archived'];\n  if (!validStatuses.includes(worldData.worldStatus)) {\n    validationErrors.push('Invalid world status');\n  }\n}\n\n// Validate locations array\nif (worldData.locations && !Array.isArray(worldData.locations)) {\n  validationErrors.push('Locations must be an array');\n} else if (worldData.locations) {\n  worldData.locations.forEach((loc, index) => {\n    if (!loc.id) validationErrors.push(`Location at index ${index} missing ID`);\n    if (!loc.name) validationErrors.push(`Location at index ${index} missing name`);\n  });\n}\n\n// Validate NPCs array\nif (worldData.npcs && !Array.isArray(worldData.npcs)) {\n  validationErrors.push('NPCs must be an array');\n} else if (worldData.npcs) {\n  worldData.npcs.forEach((npc, index) => {\n    if (!npc.id) validationErrors.push(`NPC at index ${index} missing ID`);\n    if (!npc.name) validationErrors.push(`NPC at index ${index} missing name`);\n  });\n}\n\n// Validate factions array\nif (worldData.factions && !Array.isArray(worldData.factions)) {\n  validationErrors.push('Factions must be an array');\n} else if (worldData.factions) {\n  worldData.factions.forEach((faction, index) => {\n    if (!faction.id) validationErrors.push(`Faction at index ${index} missing ID`);\n    if (!faction.name) validationErrors.push(`Faction at index ${index} missing name`);\n  });\n}\n\n// Validate quests array\nif (worldData.quests && !Array.isArray(worldData.quests)) {\n  validationErrors.push('Quests must be an array');\n} else if (worldData.quests) {\n  worldData.quests.forEach((quest, index) => {\n    if (!quest.id) validationErrors.push(`Quest at index ${index} missing ID`);\n    if (!quest.name) validationErrors.push(`Quest at index ${index} missing name`);\n  });\n}\n\n// Return validation result\nif (validationErrors.length > 0) {\n  return {\n    json: {\n      valid: false,\n      errors: validationErrors,\n      campaignId: worldData.campaignId\n    }\n  };\n}\n\nreturn {\n  json: {\n    valid: true,\n    worldData,\n    campaignId: worldData.campaignId\n  }\n};"
+      },
+      "id": "validate-world-data",
+      "name": "Validate World Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 600]
+    }
+  ],
+  "connections": {
+    "World Update Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate World Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process World Update": {
+      "main": [
+        [
+          {
+            "node": "Route World Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route World Action": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Get World",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process World Changes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Get World": {
+      "main": [
+        [
+          {
+            "node": "Process World Changes",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Process World Changes": {
+      "main": [
+        [
+          {
+            "node": "Format World for Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format World for Sheets": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Update World",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Update World": {
+      "main": [
+        [
+          {
+            "node": "Broadcast World Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Broadcast World Update": {
+      "main": [
+        [
+          {
+            "node": "World Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Relationships Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Relationship Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Relationship Update": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Get Relationships",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Get Relationships": {
+      "main": [
+        [
+          {
+            "node": "Calculate Relationship Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Relationship Updates": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Update Relationships",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Update Relationships": {
+      "main": [
+        [
+          {
+            "node": "Relationship Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate World Data": {
+      "main": [
+        [
+          {
+            "node": "Process World Update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "World Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "world-management",
+      "name": "World Management"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "campaign-data",
+      "name": "Campaign Data"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "google-sheets",
+      "name": "Google Sheets"
+    }
+  ],
+  "triggerCount": 2,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

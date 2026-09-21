@@ -1,0 +1,548 @@
+# RabbitMQ Configuration for DMLogn8n Message Queue System
+# This file contains all configuration options for RabbitMQ backend
+
+# RabbitMQ Connection Settings
+rabbitmq:
+  # Connection parameters
+  host: "localhost"
+  port: 5672
+  username: "dmlogn8n"
+  password: "your_password_here"
+  virtual_host: "/dmlogn8n"
+
+  # SSL Configuration
+  ssl_enabled: false
+  # ssl_context: null  # Provide SSL context object if needed
+
+  # Connection timeouts and retries
+  heartbeat: 600
+  connection_timeout: 30
+  retry_delay: 5
+  max_retries: 10
+  blocked_connection_timeout: 300
+
+  # Performance tuning
+  publisher_confirms: true
+  frame_max: 131072
+  heartbeat_timeout: 600
+
+  # Client properties
+  client_properties:
+    service: "DMLogn8n"
+    version: "1.0.0"
+    component: "MessageBroker"
+    description: "DMLogn8n Multi-Agent Platform Message Broker"
+
+# Exchange Configuration
+exchanges:
+  # Default exchange
+  default:
+    name: "default"
+    type: "topic"
+    durable: true
+    auto_delete: false
+    internal: false
+    arguments: {}
+
+  # Agent communication exchange
+  agent_exchange:
+    name: "agent.exchange"
+    type: "topic"
+    durable: true
+    auto_delete: false
+    internal: false
+    arguments:
+      alternate-exchange: "agent.alternate"
+
+  # Game events exchange
+  game_exchange:
+    name: "game.exchange"
+    type: "topic"
+    durable: true
+    auto_delete: false
+    internal: false
+    arguments: {}
+
+  # System events exchange
+  system_exchange:
+    name: "system.exchange"
+    type: "topic"
+    durable: true
+    auto_delete: false
+    internal: false
+    arguments: {}
+
+  # Dialogue events exchange
+  dialogue_exchange:
+    name: "dialogue.exchange"
+    type: "topic"
+    durable: true
+    auto_delete: false
+    internal: false
+    arguments: {}
+
+  # Combat events exchange
+  combat_exchange:
+    name: "combat.exchange"
+    type: "topic"
+    durable: true
+    auto_delete: false
+    internal: false
+    arguments: {}
+
+  # Dead letter exchange
+  dead_letter_exchange:
+    name: "dead.letter.exchange"
+    type: "topic"
+    durable: true
+    auto_delete: false
+    internal: false
+    arguments: {}
+
+# Queue Configuration
+queues:
+  # Agent queues
+  agent_inbox_template:
+    name_template: "agent.{agent_id}.inbox"
+    durable: true
+    auto_delete: false
+    exclusive: false
+    arguments:
+      x-message-ttl: 300000  # 5 minutes
+      x-max-length: 1000
+      x-dead-letter-exchange: "dead.letter.exchange"
+      x-dead-letter-routing-key: "agent.dlq"
+      x-max-priority: 10
+
+  agent_response_template:
+    name_template: "agent.{agent_id}.responses"
+    durable: true
+    auto_delete: false
+    exclusive: false
+    arguments:
+      x-message-ttl: 600000  # 10 minutes
+      x-max-length: 500
+
+  agent_group_template:
+    name_template: "agent.group.{group_id}.members"
+    durable: true
+    auto_delete: false
+    exclusive: false
+    arguments:
+      x-message-ttl: 300000
+
+  # Game queues
+  game_state_template:
+    name_template: "game.{game_id}.state"
+    durable: true
+    auto_delete: false
+    exclusive: false
+    arguments:
+      x-message-ttl: 600000
+      x-max-length: 5000
+
+  game_events_template:
+    name_template: "game.{game_id}.events"
+    durable: true
+    auto_delete: false
+    exclusive: false
+    arguments:
+      x-message-ttl: 300000
+      x-max-length: 10000
+
+  # System queues
+  system_alerts:
+    name: "system.alerts"
+    durable: true
+    auto_delete: false
+    exclusive: false
+    arguments:
+      x-message-ttl: 86400000  # 24 hours
+      x-max-length: 10000
+      x-max-priority: 10
+
+  system_health:
+    name: "system.health"
+    durable: true
+    auto_delete: false
+    exclusive: false
+    arguments:
+      x-message-ttl: 86400000
+      x-max-length: 5000
+
+  system_metrics:
+    name: "system.metrics"
+    durable: true
+    auto_delete: false
+    exclusive: false
+    arguments:
+      x-message-ttl: 86400000
+      x-max-length: 5000
+
+  system_security:
+    name: "system.security"
+    durable: true
+    auto_delete: false
+    exclusive: false
+    arguments:
+      x-message-ttl: 86400000
+      x-max-length: 10000
+      x-max-priority: 10
+
+  # Dialogue queues
+  dialogue_events_template:
+    name_template: "dialogue.{instance_id}.events"
+    durable: true
+    auto_delete: false
+    exclusive: false
+    arguments:
+      x-message-ttl: 600000
+      x-max-length: 5000
+
+  dialogue_sessions_template:
+    name_template: "dialogue.{instance_id}.sessions"
+    durable: true
+    auto_delete: false
+    exclusive: false
+    arguments:
+      x-message-ttl: 3600000
+      x-max-length: 1000
+
+  # Combat queues
+  combat_events_template:
+    name_template: "combat.{instance_id}.events"
+    durable: true
+    auto_delete: false
+    exclusive: false
+    arguments:
+      x-message-ttl: 600000
+      x-max-length: 5000
+
+  combat_encounters_template:
+    name_template: "combat.{instance_id}.encounters"
+    durable: true
+    auto_delete: false
+    exclusive: false
+    arguments:
+      x-message-ttl: 3600000
+      x-max-length: 1000
+
+  # Dead letter queues
+  dead_letter_agent_template:
+    name_template: "agent.{agent_id}.dlq"
+    durable: true
+    auto_delete: false
+    exclusive: false
+    arguments:
+      x-message-ttl: 604800000  # 7 days
+
+  dead_letter_system:
+    name: "dead.letter.queue"
+    durable: true
+    auto_delete: false
+    exclusive: false
+    arguments:
+      x-message-ttl: 604800000
+
+# Queue Bindings (routing patterns)
+bindings:
+  # Agent exchange bindings
+  agent_direct:
+    exchange: "agent.exchange"
+    queue_template: "agent.{agent_id}.inbox"
+    routing_key_template: "agent.{agent_id}.#"
+
+  agent_broadcast:
+    exchange: "agent.exchange"
+    queue_template: "agent.{agent_id}.inbox"
+    routing_key: "agent.broadcast.*"
+
+  agent_group:
+    exchange: "agent.exchange"
+    queue_template: "agent.group.{group_id}.members"
+    routing_key_template: "agent.group.{group_id}.#"
+
+  # Game exchange bindings
+  game_state:
+    exchange: "game.exchange"
+    queue_template: "game.{game_id}.state"
+    routing_key: "game.state.update"
+
+  game_events:
+    exchange: "game.exchange"
+    queue_template: "game.{game_id}.events"
+    routing_key_template: "game.event.#"
+
+  # System exchange bindings
+  system_alerts:
+    exchange: "system.exchange"
+    queue: "system.alerts"
+    routing_key_template: "system.alert.#"
+
+  system_health:
+    exchange: "system.exchange"
+    queue: "system.health"
+    routing_key_template: "system.health.#"
+
+  system_metrics:
+    exchange: "system.exchange"
+    queue: "system.metrics"
+    routing_key_template: "system.metrics.#"
+
+  system_security:
+    exchange: "system.exchange"
+    queue: "system.security"
+    routing_key_template: "system.security.#"
+
+  # Dialogue exchange bindings
+  dialogue_events:
+    exchange: "dialogue.exchange"
+    queue_template: "dialogue.{instance_id}.events"
+    routing_key_template: "dialogue.event.#"
+
+  dialogue_sessions:
+    exchange: "dialogue.exchange"
+    queue_template: "dialogue.{instance_id}.sessions"
+    routing_key_template: "dialogue.session.#"
+
+  # Combat exchange bindings
+  combat_events:
+    exchange: "combat.exchange"
+    queue_template: "combat.{instance_id}.events"
+    routing_key_template: "combat.event.#"
+
+  combat_encounters:
+    exchange: "combat.exchange"
+    queue_template: "combat.{instance_id}.encounters"
+    routing_key_template: "combat.encounter.#"
+
+  # Dead letter bindings
+  dead_letter:
+    exchange: "dead.letter.exchange"
+    queue: "dead.letter.queue"
+    routing_key: "#"
+
+# Consumer Configuration
+consumers:
+  # Default consumer settings
+  default:
+    prefetch_count: 10
+    auto_ack: false
+    exclusive: false
+    arguments: {}
+
+  # Agent consumers
+  agent_consumer:
+    prefetch_count: 20
+    auto_ack: false
+    exclusive: false
+    arguments:
+      x-priority: 5
+
+  # Game consumers
+  game_consumer:
+    prefetch_count: 50
+    auto_ack: false
+    exclusive: false
+    arguments:
+      x-priority: 3
+
+  # System consumers
+  system_consumer:
+    prefetch_count: 100
+    auto_ack: false
+    exclusive: false
+    arguments:
+      x-priority: 1
+
+  # Dialogue consumers
+  dialogue_consumer:
+    prefetch_count: 30
+    auto_ack: false
+    exclusive: false
+    arguments:
+      x-priority: 4
+
+  # Combat consumers
+  combat_consumer:
+    prefetch_count: 40
+    auto_ack: false
+    exclusive: false
+    arguments:
+      x-priority: 4
+
+# Policies and Federation (advanced features)
+policies:
+  # HA policy for critical queues
+  ha_policy:
+    name: "ha-all"
+    pattern: "^(system\\.|agent\\.|game\\.).*"
+    definition:
+      ha-mode: "all"
+      ha-sync-mode: "automatic"
+      ha-sync-batch-size: 10
+
+  # TTL policy for queues
+  ttl_policy:
+    name: "ttl-policy"
+    pattern: ".*\\.temp\\..*"
+    definition:
+      message-ttl: 60000
+      expires: 300000
+
+  # Queue length limits
+  length_limits:
+    name: "length-limits"
+    pattern: ".*\\.events\\..*"
+    definition:
+      maxlen: 10000
+      overflow: "drop-head"
+
+# Federation and Shovel (for distributed setups)
+federation:
+  # Federation upstreams
+  upstreams:
+    dmlogn8n_cluster_1:
+      uri: "amqp://user:pass@cluster1.example.com"
+      prefetch-count: 1000
+      reconnect-delay: 5
+      ack-mode: "on-confirm"
+      trust-user-id: false
+
+  # Federation policies
+  policies:
+    federate_exchanges:
+      name: "federate-exchanges"
+      pattern: "^amq\\."
+      definition:
+        federation-upstream: "dmlogn8n_cluster_1"
+
+# Monitoring and Management
+monitoring:
+  # Enable Prometheus metrics
+  prometheus_enabled: true
+  prometheus_port: 9090
+
+  # Management plugin settings
+  management_enabled: true
+  management_port: 15672
+
+  # Health check intervals
+  health_check_interval: 30
+  connection_check_interval: 10
+
+  # Alert thresholds
+  alert_thresholds:
+    queue_size_warning: 1000
+    queue_size_critical: 5000
+    message_rate_warning: 100
+    connection_count_warning: 100
+
+# Performance Tuning
+performance:
+  # Memory settings
+  vm_memory_high_watermark: 0.6
+  vm_memory_high_watermark_paging_ratio: 0.4
+
+  # Disk settings
+  disk_free_limit: "1GB"
+  disk_free_limit_absolute: "1GB"
+
+  # Flow control
+  credit_flow_default_credit: 2000
+  credit_flow_limit: 800
+
+  # Connection settings
+  max_frame_size: 131072
+  heartbeat: 600
+  handshake_timeout: 10000
+
+# Security Settings
+security:
+  # Authentication
+  authentication_backends:
+    - "rabbit_auth_backend_internal"
+    - "rabbit_auth_backend_ldap"
+
+  # Authorization
+  authorization_backends:
+    - "rabbit_auth_backend_internal"
+
+  # SSL/TLS
+  ssl_options:
+    certfile: "/path/to/cert.pem"
+    keyfile: "/path/to/key.pem"
+    cacertfile: "/path/to/ca.pem"
+    verify: "verify_peer"
+    fail_if_no_peer_cert: true
+
+  # Access control
+  loopback_users:
+    - "guest"
+
+  # Cluster communication
+  cluster_heartbeat: 10000
+  cluster_keepalive_interval: 10000
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  file: "/var/log/rabbitmq/rabbitmq.log"
+  rotation:
+    file_count: 10
+    file_size: 10485760  # 10MB
+
+  # Categories
+  categories:
+    connection: "INFO"
+    channel: "INFO"
+    queue: "INFO"
+    exchange: "INFO"
+    federation: "WARNING"
+    shovel: "WARNING"
+
+# Development and Testing
+development:
+  # Test environment settings
+  test_mode: false
+  mock_external_connections: false
+
+  # Debug options
+  debug_messages: false
+  trace_operations: false
+  log_all_operations: false
+
+  # Performance testing
+  enable_perf_hooks: false
+  perf_log_interval: 60
+
+# Environment-specific overrides
+environments:
+  development:
+    rabbitmq:
+      host: "localhost"
+      port: 5672
+      username: "dev_user"
+      password: "dev_password"
+      virtual_host: "/dev"
+
+  staging:
+    rabbitmq:
+      host: "staging-rabbitmq.example.com"
+      port: 5672
+      username: "staging_user"
+      password: "staging_password"
+      virtual_host: "/staging"
+      ssl_enabled: true
+
+  production:
+    rabbitmq:
+      host: "prod-rabbitmq.example.com"
+      port: 5672
+      username: "prod_user"
+      password: "prod_password"
+      virtual_host: "/production"
+      ssl_enabled: true
+      heartbeat: 300
+      max_retries: 20
+      publisher_confirms: true

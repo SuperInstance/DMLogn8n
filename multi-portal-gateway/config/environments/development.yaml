@@ -1,0 +1,407 @@
+# Development Environment Configuration for DMLogn8n Multi-Agent Platform
+# This configuration is optimized for local development and testing
+
+environment: development
+debug: true
+log_level: DEBUG
+
+# Database Configuration
+database:
+  databases:
+    # Main application database (SQLite for development)
+    main:
+      name: main
+      type: sqlite
+      credentials:
+        username: ""
+        password: ""
+        host: ""
+        port: 0
+        database: "./data/dmlogn8n_dev.db"
+      pool:
+        min_connections: 1
+        max_connections: 5
+        connection_timeout: 30
+        idle_timeout: 300
+      enabled: true
+      read_only: false
+      options:
+        check_same_thread: false
+        echo: true
+        pool_pre_ping: true
+
+    # Redis cache for development
+    cache:
+      name: cache
+      type: redis
+      credentials:
+        username: ""
+        password: "${REDIS_PASSWORD:}"
+        host: "${REDIS_HOST:localhost}"
+        port: ${REDIS_PORT:6379}
+        database: "0"
+      pool:
+        min_connections: 1
+        max_connections: 10
+        connection_timeout: 5
+        idle_timeout: 300
+      enabled: true
+      options:
+        decode_responses: true
+        socket_connect_timeout: 5
+        socket_timeout: 5
+
+  default_database: main
+
+  # Connection clusters (if using multiple databases)
+  clusters:
+    main_cluster:
+      name: main_cluster
+      primary: main
+      replicas: []
+      load_balancing_strategy: round_robin
+      failover_timeout: 30
+      health_check_interval: 10
+
+# AI Models Configuration
+ai_models:
+  models:
+    # OpenAI GPT-4 for development
+    gpt4_dev:
+      name: gpt4_dev
+      provider: openai
+      model_id: gpt-4-turbo-preview
+      model_type: chat
+      capabilities:
+        - text_generation
+        - code_generation
+        - reasoning
+        - function_calling
+      credentials:
+        api_key: "${OPENAI_API_KEY}"
+        organization_id: "${OPENAI_ORG_ID:}"
+      parameters:
+        temperature: 0.7
+        max_tokens: 2048
+        top_p: 1.0
+        frequency_penalty: 0.0
+        presence_penalty: 0.0
+      rate_limiting:
+        requests_per_minute: 100
+        tokens_per_minute: 50000
+        concurrent_requests: 2
+      caching:
+        enabled: true
+        ttl_seconds: 1800
+        max_cache_size: 100
+      enabled: true
+      priority: 10
+      cost_per_input_token: 0.01
+      cost_per_output_token: 0.03
+      tags: ["development", "chat", "reasoning"]
+
+    # Claude 3 for development
+    claude3_dev:
+      name: claude3_dev
+      provider: anthropic
+      model_id: claude-3-sonnet-20240229
+      model_type: chat
+      capabilities:
+        - text_generation
+        - code_generation
+        - reasoning
+        - multimodal
+      credentials:
+        api_key: "${ANTHROPIC_API_KEY}"
+      parameters:
+        temperature: 0.7
+        max_tokens: 4096
+        top_p: 1.0
+      rate_limiting:
+        requests_per_minute: 50
+        tokens_per_minute: 40000
+        concurrent_requests: 2
+      caching:
+        enabled: true
+        ttl_seconds: 1800
+        max_cache_size: 100
+      enabled: true
+      priority: 8
+      cost_per_input_token: 0.003
+      cost_per_output_token: 0.015
+      tags: ["development", "chat", "multimodal"]
+
+    # Text embedding model
+    text_embedding_dev:
+      name: text_embedding_dev
+      provider: openai
+      model_id: text-embedding-ada-002
+      model_type: embedding
+      capabilities:
+        - text_generation
+      credentials:
+        api_key: "${OPENAI_API_KEY}"
+      parameters:
+        temperature: 0.0
+      rate_limiting:
+        requests_per_minute: 500
+      caching:
+        enabled: true
+        ttl_seconds: 3600
+        max_cache_size: 500
+      enabled: true
+      priority: 5
+      cost_per_input_token: 0.0001
+      tags: ["development", "embedding"]
+
+    # Local Ollama model (optional)
+    ollama_llama2:
+      name: ollama_llama2
+      provider: ollama
+      model_id: llama2
+      model_type: chat
+      capabilities:
+        - text_generation
+        - reasoning
+      credentials:
+        api_base: "http://localhost:11434"
+      parameters:
+        temperature: 0.7
+        max_tokens: 1024
+      rate_limiting:
+        requests_per_minute: 60
+        concurrent_requests: 1
+      caching:
+        enabled: true
+        ttl_seconds: 600
+        max_cache_size: 50
+      enabled: false
+      priority: 3
+      tags: ["development", "local", "llm"]
+
+  pools:
+    chat_models:
+      name: chat_models
+      models: ["gpt4_dev", "claude3_dev"]
+      strategy: round_robin
+      health_check_interval: 60
+      failure_threshold: 3
+      recovery_threshold: 2
+
+  default_models:
+    chat: gpt4_dev
+    embedding: text_embedding_dev
+
+  global_settings:
+    default_timeout: 30
+    max_retries: 3
+    retry_delay: 1.0
+
+# Monitoring Configuration
+monitoring:
+  enabled: true
+  backend: prometheus
+  namespace: dmlogn8n
+  service_name: dmlogn8n_dev
+  version: 1.0.0
+  environment: development
+  sample_rate: 0.1  # Sample 10% of metrics in development
+
+  prometheus:
+    port: 9090
+    metrics_path: /metrics
+    job_name: dmlogn8n_dev
+    instance_name: "${HOSTNAME:localhost}"
+
+  logging:
+    level: DEBUG
+    format: plain_text
+    console_output: true
+    structured_logging: false
+    include_timestamps: true
+    include_hostname: false
+    include_process_id: false
+    async_logging: false
+
+    # Logger-specific settings
+    loggers:
+      "":
+        level: DEBUG
+        handlers: [console, file]
+      "uvicorn":
+        level: INFO
+        handlers: [console]
+      "sqlalchemy":
+        level: WARNING
+        handlers: [console]
+
+    handlers:
+      console:
+        class: StreamHandler
+        level: DEBUG
+        formatter: simple
+        stream: ext://sys.stdout
+
+      file:
+        class: RotatingFileHandler
+        level: DEBUG
+        formatter: detailed
+        filename: ./logs/dmlogn8n_dev.log
+        maxBytes: 10485760  # 10MB
+        backupCount: 5
+
+    formatters:
+      simple:
+        format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+      detailed:
+        format: "%(asctime)s - %(name)s - %(levelname)s - %(module)s - %(funcName)s - %(message)s"
+
+  health_check:
+    enabled: true
+    port: 8080
+    path: /health
+    check_interval: 30
+    timeout: 5
+    failure_threshold: 3
+    success_threshold: 2
+
+    checks:
+      database:
+        type: database
+        database: main
+        timeout: 5
+
+      redis:
+        type: endpoint
+        endpoint: "http://localhost:6379"
+        timeout: 3
+
+      disk_space:
+        type: command
+        command: "df -h / | tail -1 | awk '{print $5}' | sed 's/%//'"
+
+  metrics:
+    request_count:
+      name: http_requests_total
+      type: counter
+      description: Total number of HTTP requests
+      labels:
+        method: ""
+        status: ""
+        endpoint: ""
+
+    request_duration:
+      name: http_request_duration_seconds
+      type: histogram
+      description: HTTP request duration in seconds
+      buckets: [0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+
+    active_connections:
+      name: active_connections
+      type: gauge
+      description: Number of active connections
+      labels:
+        type: ""
+
+    model_usage:
+      name: model_usage_total
+      type: counter
+      description: Total number of model API calls
+      labels:
+        model: ""
+        provider: ""
+        type: ""
+
+    model_tokens:
+      name: model_tokens_total
+      type: counter
+      description: Total number of tokens processed
+      labels:
+        model: ""
+        provider: ""
+        type: ""
+
+  alert_rules:
+    high_error_rate:
+      name: high_error_rate
+      description: High error rate detected
+      condition: 'rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.1'
+      severity: warning
+      for_duration: 2m
+      labels:
+        service: dmlogn8n_dev
+      annotations:
+        summary: "High error rate on dmlogn8n development"
+        description: "Error rate is above 10% for the last 2 minutes"
+
+    model_api_errors:
+      name: model_api_errors
+      description: Model API errors detected
+      condition: 'rate(model_usage_total{status="error"}[5m]) > 5'
+      severity: critical
+      for_duration: 1m
+      labels:
+        service: dmlogn8n_dev
+      annotations:
+        summary: "Model API errors are high"
+        description: "More than 5 model API errors per minute"
+
+  notification_channels:
+    console:
+      name: console
+      type: webhook
+      enabled: true
+      settings:
+        url: "http://localhost:8080/webhook/alerts"
+        method: POST
+
+  performance_monitoring: true
+  trace_collection: false  # Disabled in development
+  error_tracking: true
+
+# Application Settings
+app:
+  name: DMLogn8n Multi-Agent Platform
+  version: 1.0.0
+  description: Development instance of DMLogn8n multi-agent platform
+
+  # Server settings
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1
+  reload: true
+
+  # Security settings
+  secret_key: "${SECRET_KEY:dev-secret-key-change-in-production}"
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8080"
+  cors_methods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - OPTIONS
+  cors_headers:
+    - "*"
+
+  # Development features
+  debug_toolbar: true
+  profiling: true
+  auto_reload: true
+
+  # Testing settings
+  test_mode: false
+  mock_external_apis: false
+
+# Feature Flags
+features:
+  enable_config_watcher: true
+  enable_metrics: true
+  enable_health_checks: true
+  enable_model_caching: true
+  enable_rate_limiting: true
+  enable_secret_management: false
+  enable_api_key_rotation: false
+  enable_audit_logging: false

@@ -1,0 +1,738 @@
+# Apache Kafka Configuration for DMLogn8n Message Queue System
+# This file contains all configuration options for Kafka backend
+
+# Kafka Connection Settings
+kafka:
+  # Bootstrap servers
+  bootstrap_servers:
+    - "localhost:9092"
+    # - "kafka-2.example.com:9092"
+    # - "kafka-3.example.com:9092"
+
+  # Client identification
+  client_id: "dmlogn8n-client"
+  group_id: "dmlogn8n-group"
+
+  # Security protocols
+  security_protocol: "PLAINTEXT"  # PLAINTEXT, SASL_PLAINTEXT, SASL_SSL, SSL
+
+  # SASL Authentication (if enabled)
+  sasl_mechanism: null  # PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, GSSAPI
+  sasl_username: null
+  sasl_password: null
+  sasl_kerberos_service_name: "kafka"
+  sasl_kerberos_domain_name: null
+
+  # SSL/TLS Configuration
+  ssl_enabled: false
+  ssl_check_hostname: true
+  ssl_cafile: null
+  ssl_certfile: null
+  ssl_keyfile: null
+  ssl_password: null
+  ssl_crlfile: null
+  ssl_ciphers: null
+  ssl_endpoint_identification_algorithm: "https"
+
+  # Producer Configuration
+  compression_type: "none"  # none, gzip, snappy, lz4, zstd
+  acks: "leader"  # 0 (none), 1 (leader), -1 (all)
+  retries: 3
+  retry_backoff_ms: 100
+  batch_size: 16384
+  linger_ms: 0
+  buffer_memory: 33554432  # 32MB
+  max_request_size: 1048576  # 1MB
+  request_timeout_ms: 30000
+  delivery_timeout_ms: 120000
+  enable_idempotence: false
+  max_in_flight_requests_per_connection: 5
+
+  # Consumer Configuration
+  auto_offset_reset: "latest"  # earliest, latest, none
+  enable_auto_commit: true
+  auto_commit_interval_ms: 5000
+  max_poll_records: 500
+  max_poll_interval_ms: 300000  # 5 minutes
+  session_timeout_ms: 10000
+  heartbeat_interval_ms: 3000
+  consumer_timeout_ms: 100
+  fetch_min_bytes: 1
+  fetch_max_wait_ms: 500
+  fetch_max_bytes: 52428800  # 50MB
+  max_partition_fetch_bytes: 1048576  # 1MB
+
+  # Partition assignment strategy
+  partition_assignment_strategy:
+    - "RangeAssignor"
+    - "RoundRobinAssignor"
+    - "StickyAssignor"
+    - "CooperativeStickyAssignor"
+
+  # Network configuration
+  metadata_max_age_ms: 300000
+  reconnect_backoff_ms: 50
+  reconnect_backoff_max_ms: 1000
+  retry_backoff_max_ms: 1000
+  connections_max_idle_ms: 540000
+
+  # Topic configuration
+  topic_auto_create: true
+  topic_auto_create_partitions: 1
+  topic_auto_create_replication_factor: 1
+  topic_auto_create_config:
+    cleanup.policy: "delete"
+    retention.ms: "604800000"  # 7 days
+    segment.ms: "86400000"  # 1 day
+    segment.bytes: "1073741824"  # 1GB
+    compression.type: "producer"
+    max.message.bytes: "1048576"  # 1MB
+
+# Topic Definitions
+topics:
+  # Agent communication topics
+  agent_communication:
+    name: "agent.communication"
+    partitions: 6
+    replication_factor: 3
+    config:
+      cleanup.policy: "delete"
+      retention.ms: "3600000"  # 1 hour
+      segment.ms: "3600000"
+      compression.type: "lz4"
+      max.message.bytes: "1048576"
+
+  agent_direct_template:
+    name_template: "agent.direct.{agent_id}"
+    partitions: 3
+    replication_factor: 2
+    config:
+      cleanup.policy: "delete"
+      retention.ms: "1800000"  # 30 minutes
+      segment.ms: "1800000"
+      compression.type: "lz4"
+      max.message.bytes: "524288"  # 512KB
+
+  agent_group_template:
+    name_template: "agent.group.{group_id}"
+    partitions: 4
+    replication_factor: 2
+    config:
+      cleanup.policy: "delete"
+      retention.ms: "3600000"  # 1 hour
+      segment.ms: "3600000"
+      compression.type: "lz4"
+      max.message.bytes: "1048576"
+
+  # Game event topics
+  game_events_template:
+    name_template: "game.events.{game_id}"
+    partitions: 8
+    replication_factor: 3
+    config:
+      cleanup.policy: "delete"
+      retention.ms: "7200000"  # 2 hours
+      segment.ms: "3600000"
+      compression.type: "snappy"
+      max.message.bytes: "2097152"  # 2MB
+
+  game_state_template:
+    name_template: "game.state.{game_id}"
+    partitions: 3
+    replication_factor: 2
+    config:
+      cleanup.policy: "compact"
+      segment.ms: "86400000"  # 1 day
+      compression.type: "lz4"
+      max.message.bytes: "1048576"
+      min.cleanable.dirty.ratio: "0.5"
+      delete.retention.ms: "604800000"  # 7 days
+
+  # System event topics
+  system_alerts:
+    name: "system.alerts"
+    partitions: 3
+    replication_factor: 3
+    config:
+      cleanup.policy: "delete"
+      retention.ms: "604800000"  # 7 days
+      segment.ms: "86400000"  # 1 day
+      compression.type: "lz4"
+      max.message.bytes: "524288"  # 512KB
+
+  system_metrics:
+    name: "system.metrics"
+    partitions: 6
+    replication_factor: 2
+    config:
+      cleanup.policy: "delete"
+      retention.ms: "86400000"  # 1 day
+      segment.ms: "3600000"  # 1 hour
+      compression.type: "snappy"
+      max.message.bytes: "1048576"
+
+  system_health:
+    name: "system.health"
+    partitions: 3
+    replication_factor: 2
+    config:
+      cleanup.policy: "delete"
+      retention.ms: "86400000"  # 1 day
+      segment.ms: "3600000"
+      compression.type: "lz4"
+      max.message.bytes: "524288"  # 512KB
+
+  # Dialogue event topics
+  dialogue_events_template:
+    name_template: "dialogue.events.{instance_id}"
+    partitions: 4
+    replication_factor: 2
+    config:
+      cleanup.policy: "delete"
+      retention.ms: "3600000"  # 1 hour
+      segment.ms: "1800000"  # 30 minutes
+      compression.type: "lz4"
+      max.message.bytes: "1048576"
+
+  dialogue_sessions_template:
+    name_template: "dialogue.sessions.{instance_id}"
+    partitions: 3
+    replication_factor: 2
+    config:
+      cleanup.policy: "compact"
+      segment.ms: "86400000"  # 1 day
+      compression.type: "lz4"
+      max.message.bytes: "1048576"
+      min.cleanable.dirty.ratio: "0.3"
+
+  # Combat event topics
+  combat_events_template:
+    name_template: "combat.events.{instance_id}"
+    partitions: 6
+    replication_factor: 2
+    config:
+      cleanup.policy: "delete"
+      retention.ms: "3600000"  # 1 hour
+      segment.ms: "1800000"  # 30 minutes
+      compression.type: "snappy"
+      max.message.bytes: "2097152"  # 2MB
+
+  combat_encounters_template:
+    name_template: "combat.encounters.{instance_id}"
+    partitions: 3
+    replication_factor: 2
+    config:
+      cleanup.policy: "compact"
+      segment.ms: "86400000"  # 1 day
+      compression.type: "lz4"
+      max.message.bytes: "1048576"
+      min.cleanable.dirty.ratio: "0.3"
+
+  # Dead letter topic
+  dead_letter:
+    name: "dead.letter"
+    partitions: 3
+    replication_factor: 3
+    config:
+      cleanup.policy: "delete"
+      retention.ms: "2592000000"  # 30 days
+      segment.ms: "604800000"  # 7 days
+      compression.type: "gzip"
+      max.message.bytes: "10485760"  # 10MB
+
+  # Audit log topic
+  audit_log:
+    name: "audit.log"
+    partitions: 6
+    replication_factor: 3
+    config:
+      cleanup.policy: "delete"
+      retention.ms: "7776000000"  # 90 days
+      segment.ms: "86400000"  # 1 day
+      compression.type: "gzip"
+      max.message.bytes: "1048576"
+
+# Consumer Group Definitions
+consumer_groups:
+  # Agent processing groups
+  agent_processors:
+    group_id: "agent-processors"
+    topics:
+      - "agent.communication"
+      - "agent.direct.*"
+      - "agent.group.*"
+    config:
+      auto_offset_reset: "latest"
+      enable_auto_commit: true
+      max_poll_records: 50
+      session_timeout_ms: 30000
+      heartbeat_interval_ms: 10000
+
+  agent_monitors:
+    group_id: "agent-monitors"
+    topics:
+      - "agent.communication"
+    config:
+      auto_offset_reset: "earliest"
+      enable_auto_commit: true
+      max_poll_records: 100
+
+  # Game processing groups
+  game_processors:
+    group_id: "game-processors"
+    topics:
+      - "game.events.*"
+    config:
+      auto_offset_reset: "latest"
+      enable_auto_commit: false
+      max_poll_records: 100
+      session_timeout_ms: 60000
+
+  game_state_managers:
+    group_id: "game-state-managers"
+    topics:
+      - "game.state.*"
+    config:
+      auto_offset_reset: "earliest"
+      enable_auto_commit: false
+      max_poll_records: 50
+
+  # System monitoring groups
+  system_alert_processors:
+    group_id: "system-alert-processors"
+    topics:
+      - "system.alerts"
+    config:
+      auto_offset_reset: "latest"
+      enable_auto_commit: true
+      max_poll_records: 200
+
+  system_metric_collectors:
+    group_id: "system-metric-collectors"
+    topics:
+      - "system.metrics"
+    config:
+      auto_offset_reset: "latest"
+      enable_auto_commit: true
+      max_poll_records: 500
+
+  # Dialogue processing groups
+  dialogue_processors:
+    group_id: "dialogue-processors"
+    topics:
+      - "dialogue.events.*"
+    config:
+      auto_offset_reset: "latest"
+      enable_auto_commit: false
+      max_poll_records: 50
+
+  dialogue_managers:
+    group_id: "dialogue-managers"
+    topics:
+      - "dialogue.sessions.*"
+    config:
+      auto_offset_reset: "earliest"
+      enable_auto_commit: false
+      max_poll_records: 20
+
+  # Combat processing groups
+  combat_processors:
+    group_id: "combat-processors"
+    topics:
+      - "combat.events.*"
+    config:
+      auto_offset_reset: "latest"
+      enable_auto_commit: false
+      max_poll_records: 100
+
+  combat_managers:
+    group_id: "combat-managers"
+    topics:
+      - "combat.encounters.*"
+    config:
+      auto_offset_reset: "earliest"
+      enable_auto_commit: false
+      max_poll_records: 30
+
+  # Dead letter processing
+  dlq_processors:
+    group_id: "dlq-processors"
+    topics:
+      - "dead.letter"
+    config:
+      auto_offset_reset: "earliest"
+      enable_auto_commit: false
+      max_poll_records: 50
+
+  # Audit processors
+  audit_processors:
+    group_id: "audit-processors"
+    topics:
+      - "audit.log"
+    config:
+      auto_offset_reset: "earliest"
+      enable_auto_commit: true
+      max_poll_records: 200
+
+# Schema Registry Configuration
+schema_registry:
+  # Schema registry URL
+  url: "http://localhost:8081"
+
+  # Authentication (if needed)
+  basic_auth:
+    username: null
+    password: null
+
+  # SSL configuration
+  ssl:
+    enabled: false
+    cafile: null
+    certfile: null
+    keyfile: null
+
+  # Schema configuration
+  auto_register_schemas: true
+  subject_name_strategy: "TopicRecordNameStrategy"
+  compatibility_level: "BACKWARD"
+
+  # Schema cache
+  cache_size: 1000
+  cache_ttl_ms: 60000  # 1 minute
+
+# Message Serialization
+serialization:
+  # Default serialization format
+  default_format: "json"
+
+  # Supported formats
+  formats:
+    json:
+      content_type: "application/json"
+      schema_registry_enabled: false
+      compression: null
+
+    avro:
+      content_type: "application/avro"
+      schema_registry_enabled: true
+      compression: null
+
+    protobuf:
+      content_type: "application/protobuf"
+      schema_registry_enabled: true
+      compression: null
+
+    json_schema:
+      content_type: "application/json+schema"
+      schema_registry_enabled: true
+      compression: null
+
+  # Compression
+  compression:
+    enabled: false
+    type: "gzip"  # gzip, snappy, lz4, zstd
+    level: 6
+
+# Performance Tuning
+performance:
+  # Producer performance
+  producer:
+    # Batch settings
+    batch_size: 32768
+    linger_ms: 5
+
+    # Memory settings
+    buffer_memory: 67108864  # 64MB
+    max_block_ms: 60000
+
+    # Compression settings
+    compression_type: "lz4"
+    compression_level: 6
+
+  # Consumer performance
+  consumer:
+    # Fetch settings
+    fetch_min_bytes: 1024
+    fetch_max_wait_ms: 500
+    fetch_max_bytes: 104857600  # 100MB
+    max_partition_fetch_bytes: 1048576  # 1MB
+
+    # Processing settings
+    max_poll_records: 1000
+    max_poll_interval_ms: 300000
+
+    # Network settings
+    connections_max_idle_ms: 540000
+
+  # Broker settings
+  broker:
+    # Socket settings
+    socket.receive.buffer.bytes: 102400
+    socket.send.buffer.bytes: 102400
+    socket.request.max.bytes: 104857600  # 100MB
+
+    # Thread settings
+    num.network.threads: 8
+    num.io.threads: 16
+
+    # Queue settings
+    queued.max.requests: 500
+    queued.max.requests.bytes: -1
+
+# Monitoring and Metrics
+monitoring:
+  # Enable monitoring
+  enabled: true
+
+  # Metrics collection
+  metrics_interval: 60  # seconds
+  collect_producer_metrics: true
+  collect_consumer_metrics: true
+  collect_broker_metrics: true
+
+  # JMX metrics
+  jmx:
+    enabled: true
+    port: 9999
+    hostname: "localhost"
+
+  # Prometheus metrics
+  prometheus:
+    enabled: true
+    port: 9092
+    endpoint: "/metrics"
+
+  # Alerting thresholds
+  alerts:
+    consumer_lag_warning: 1000
+    consumer_lag_critical: 5000
+    producer_error_rate_warning: 0.01  # 1%
+    producer_error_rate_critical: 0.05  # 5%
+    broker_throughput_warning: 10000
+    broker_throughput_critical: 50000
+
+# High Availability and Replication
+replication:
+  # Cluster configuration
+  cluster_id: "dmlogn8n-kafka-cluster"
+  broker_id: 1
+
+  # Replication settings
+  default.replication.factor: 3
+  min.insync.replicas: 2
+  replica.lag.time.max.ms: 30000
+  replica.socket.timeout.ms: 30000
+  replica.fetch.wait.max.ms: 500
+  replica.fetch.max.bytes: 1048576
+
+  # Unclean leader election
+  unclean.leader.election.enable: false
+
+  # Controller settings
+  controller.quorum.voters: 1
+  controller.quorum.fetch.timeout.ms: 2000
+  controller.socket.timeout.ms: 30000
+
+# Security Configuration
+security:
+  # Inter-broker communication
+  inter.broker.listener.name: "PLAINTEXT"
+  inter.broker.protocol.version: "3.4.0"
+  inter.broker.security.protocol: "PLAINTEXT"
+
+  # Listeners
+  listeners:
+    - name: "PLAINTEXT"
+      host: "0.0.0.0"
+      port: 9092
+    - name: "SSL"
+      host: "0.0.0.0"
+      port: 9093
+
+  # SSL configuration
+  ssl:
+    enabled: false
+    keystore.location: null
+    keystore.password: null
+    key.password: null
+    truststore.location: null
+    truststore.password: null
+    secure.random.implementation: "SHA1PRNG"
+    ssl.cipher.suites: null
+    ssl.protocol: "TLSv1.2"
+    ssl.enabled.protocols: "TLSv1.2,TLSv1.3"
+    ssl.keystore.type: "JKS"
+    ssl.truststore.type: "JKS"
+    ssl.endpoint.identification.algorithm: "https"
+    ssl.secure.random.implementation: "SHA1PRNG"
+
+  # SASL configuration
+  sasl:
+    enabled.mechanisms: "PLAIN,SCRAM-SHA-256,SCRAM-SHA-512"
+    mechanism.inter.broker.protocol: "PLAIN"
+    client.callback.handler.class: null
+    jaas.config: null
+
+  # Authorization
+  authorizer.class.name: null
+    # "kafka.security.authorizer.AclAuthorizer"
+  super.users: "User:admin"
+  principal.builder.class: null
+
+# Logging Configuration
+logging:
+  # Log level
+  level: "INFO"
+
+  # Log4j configuration
+  log4j:
+    root:
+      level: "INFO"
+      appenders:
+        console:
+          type: "Console"
+          layout:
+            type: "PatternLayout"
+            pattern: "%d{ISO8601} %p %c{1} [%t] %m%n"
+
+        file:
+          type: "RollingFile"
+          file: "/var/log/kafka/server.log"
+          append: true
+          layout:
+            type: "PatternLayout"
+            pattern: "%d{ISO8601} %p %c{1} [%t] %m%n"
+          policy:
+            type: "SizeBasedTriggeringPolicy"
+            size: "100MB"
+          strategy:
+            type: "DefaultRolloverStrategy"
+            max: 10
+
+  # Logger categories
+  loggers:
+    kafka:
+      level: "INFO"
+      additivity: false
+      appenders:
+        - "console"
+        - "file"
+
+    org.apache.kafka:
+      level: "INFO"
+      additivity: false
+      appenders:
+        - "console"
+        - "file"
+
+# Backup and Recovery
+backup:
+  # Cluster backups
+  enabled: false
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention_days: 30
+
+  # Backup destination
+  destination: "s3://kafka-backups/dmlogn8n/"
+  encryption: true
+
+  # MirrorMaker for replication
+  mirrormaker:
+    enabled: false
+    source_cluster:
+      bootstrap.servers: "source-kafka.example.com:9092"
+    target_cluster:
+      bootstrap.servers: "target-kafka.example.com:9092"
+    topics:
+      - ".*"
+    replication_factor: 3
+
+# Development and Testing
+development:
+  # Test environment settings
+  test_mode: false
+  auto_create_topics: true
+
+  # Debug options
+  debug_mode: false
+  verbose_logging: false
+
+  # Performance testing
+  benchmark_enabled: false
+  benchmark_topics:
+    - name: "benchmark.test"
+      partitions: 6
+      replication_factor: 1
+
+# Environment-specific overrides
+environments:
+  development:
+    kafka:
+      bootstrap_servers:
+        - "localhost:9092"
+      client_id: "dmlogn8n-dev"
+      group_id: "dmlogn8n-dev-group"
+      compression_type: "none"
+      acks: "leader"
+      topic_auto_create: true
+      topic_auto_create_replication_factor: 1
+    monitoring:
+      enabled: true
+      metrics_interval: 30
+
+  staging:
+    kafka:
+      bootstrap_servers:
+        - "staging-kafka-1.example.com:9092"
+        - "staging-kafka-2.example.com:9092"
+        - "staging-kafka-3.example.com:9092"
+      client_id: "dmlogn8n-staging"
+      group_id: "dmlogn8n-staging-group"
+      security_protocol: "SASL_SSL"
+      sasl_mechanism: "SCRAM-SHA-256"
+      sasl_username: "staging_user"
+      sasl_password: "staging_password"
+      ssl_enabled: true
+      topic_auto_create_replication_factor: 2
+      acks: "all"
+      enable_idempotence: true
+    replication:
+      default.replication.factor: 2
+      min.insync.replicas: 1
+
+  production:
+    kafka:
+      bootstrap_servers:
+        - "prod-kafka-1.example.com:9092"
+        - "prod-kafka-2.example.com:9092"
+        - "prod-kafka-3.example.com:9092"
+        - "prod-kafka-4.example.com:9092"
+        - "prod-kafka-5.example.com:9092"
+        - "prod-kafka-6.example.com:9092"
+      client_id: "dmlogn8n-prod"
+      group_id: "dmlogn8n-prod-group"
+      security_protocol: "SASL_SSL"
+      sasl_mechanism: "SCRAM-SHA-256"
+      sasl_username: "prod_user"
+      sasl_password: "prod_password"
+      ssl_enabled: true
+      topic_auto_create_replication_factor: 3
+      acks: "all"
+      enable_idempotence: true
+      retries: 10
+      retry_backoff_ms: 200
+      request_timeout_ms: 60000
+      delivery_timeout_ms: 300000
+    replication:
+      default.replication.factor: 3
+      min.insync.replicas: 2
+      unclean.leader.election.enable: false
+    backup:
+      enabled: true
+      schedule: "0 3 * * *"
+    monitoring:
+      enabled: true
+      prometheus:
+        enabled: true
+      alerts:
+        enabled: true

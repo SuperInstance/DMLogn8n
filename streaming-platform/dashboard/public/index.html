@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D&D Streaming Platform - Analytics Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-dice-d20"></i>
+                    <h1>D&D Streaming Platform</h1>
+                </div>
+                <div class="header-actions">
+                    <div class="live-status" id="liveStatus">
+                        <span class="status-indicator offline"></span>
+                        <span class="status-text">Offline</span>
+                    </div>
+                    <button class="btn btn-primary" id="startStreamBtn">
+                        <i class="fas fa-play"></i> Start Stream
+                    </button>
+                    <button class="btn btn-danger" id="stopStreamBtn" style="display: none;">
+                        <i class="fas fa-stop"></i> Stop Stream
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <nav class="nav">
+                    <ul class="nav-list">
+                        <li class="nav-item active">
+                            <a href="#" class="nav-link" data-section="overview">
+                                <i class="fas fa-chart-line"></i>
+                                <span>Overview</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-section="streaming">
+                                <i class="fas fa-broadcast-tower"></i>
+                                <span>Streaming</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-section="engagement">
+                                <i class="fas fa-comments"></i>
+                                <span>Engagement</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-section="monetization">
+                                <i class="fas fa-dollar-sign"></i>
+                                <span>Monetization</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-section="content">
+                                <i class="fas fa-film"></i>
+                                <span>Content</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-section="settings">
+                                <i class="fas fa-cog"></i>
+                                <span>Settings</span>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            </aside>
+
+            <!-- Dashboard Content -->
+            <div class="content">
+                <!-- Overview Section -->
+                <section class="section active" id="overview">
+                    <div class="section-header">
+                        <h2>Dashboard Overview</h2>
+                        <div class="date-range">
+                            <select id="dateRange">
+                                <option value="today">Today</option>
+                                <option value="week">This Week</option>
+                                <option value="month" selected>This Month</option>
+                                <option value="year">This Year</option>
+                                <option value="custom">Custom Range</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Key Metrics -->
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-icon">
+                                <i class="fas fa-eye"></i>
+                            </div>
+                            <div class="metric-content">
+                                <div class="metric-value" id="totalViewers">0</div>
+                                <div class="metric-label">Total Viewers</div>
+                                <div class="metric-change positive">
+                                    <i class="fas fa-arrow-up"></i> +12.5%
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="metric-card">
+                            <div class="metric-icon">
+                                <i class="fas fa-dollar-sign"></i>
+                            </div>
+                            <div class="metric-content">
+                                <div class="metric-value" id="totalRevenue">$0</div>
+                                <div class="metric-label">Total Revenue</div>
+                                <div class="metric-change positive">
+                                    <i class="fas fa-arrow-up"></i> +8.3%
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="metric-card">
+                            <div class="metric-icon">
+                                <i class="fas fa-users"></i>
+                            </div>
+                            <div class="metric-content">
+                                <div class="metric-value" id="subscribers">0</div>
+                                <div class="metric-label">Subscribers</div>
+                                <div class="metric-change positive">
+                                    <i class="fas fa-arrow-up"></i> +5.2%
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="metric-card">
+                            <div class="metric-icon">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="metric-content">
+                                <div class="metric-value" id="streamHours">0</div>
+                                <div class="metric-label">Stream Hours</div>
+                                <div class="metric-change neutral">
+                                    <i class="fas fa-minus"></i> 0%
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Charts -->
+                    <div class="charts-grid">
+                        <div class="chart-container">
+                            <h3>Revenue Over Time</h3>
+                            <canvas id="revenueChart"></canvas>
+                        </div>
+
+                        <div class="chart-container">
+                            <h3>Viewer Analytics</h3>
+                            <canvas id="viewerChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Recent Activity -->
+                    <div class="activity-feed">
+                        <h3>Recent Activity</h3>
+                        <div class="activity-list" id="activityList">
+                            <!-- Activity items will be populated here -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Streaming Section -->
+                <section class="section" id="streaming">
+                    <div class="section-header">
+                        <h2>Streaming Control</h2>
+                    </div>
+
+                    <div class="stream-control-panel">
+                        <div class="control-group">
+                            <h3>Scene Control</h3>
+                            <div class="scene-buttons" id="sceneButtons">
+                                <!-- Scene buttons will be populated here -->
+                            </div>
+                        </div>
+
+                        <div class="control-group">
+                            <h3>Stream Status</h3>
+                            <div class="status-grid">
+                                <div class="status-item">
+                                    <label>Bitrate</label>
+                                    <div class="status-value" id="bitrate">0 kbps</div>
+                                </div>
+                                <div class="status-item">
+                                    <label>FPS</label>
+                                    <div class="status-value" id="fps">0</div>
+                                </div>
+                                <div class="status-item">
+                                    <label>Dropped Frames</label>
+                                    <div class="status-value" id="droppedFrames">0</div>
+                                </div>
+                                <div class="status-item">
+                                    <label>CPU Usage</label>
+                                    <div class="status-value" id="cpuUsage">0%</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="control-group">
+                            <h3>Platform Status</h3>
+                            <div class="platform-status" id="platformStatus">
+                                <!-- Platform status will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Engagement Section -->
+                <section class="section" id="engagement">
+                    <div class="section-header">
+                        <h2>Audience Engagement</h2>
+                    </div>
+
+                    <div class="engagement-metrics">
+                        <div class="metric-card">
+                            <div class="metric-icon">
+                                <i class="fas fa-comment"></i>
+                            </div>
+                            <div class="metric-content">
+                                <div class="metric-value" id="totalMessages">0</div>
+                                <div class="metric-label">Chat Messages</div>
+                            </div>
+                        </div>
+
+                        <div class="metric-card">
+                            <div class="metric-icon">
+                                <i class="fas fa-poll"></i>
+                            </div>
+                            <div class="metric-content">
+                                <div class="metric-value" id="totalPolls">0</div>
+                                <div class="metric-label">Polls Created</div>
+                            </div>
+                        </div>
+
+                        <div class="metric-card">
+                            <div class="metric-icon">
+                                <i class="fas fa-dice"></i>
+                            </div>
+                            <div class="metric-content">
+                                <div class="metric-value" id="totalRolls">0</div>
+                                <div class="metric-label">Dice Rolls</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chat-preview">
+                        <h3>Live Chat</h3>
+                        <div class="chat-messages" id="chatMessages">
+                            <!-- Chat messages will appear here -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Monetization Section -->
+                <section class="section" id="monetization">
+                    <div class="section-header">
+                        <h2>Revenue Analytics</h2>
+                    </div>
+
+                    <div class="revenue-breakdown">
+                        <div class="breakdown-chart">
+                            <h3>Revenue Sources</h3>
+                            <canvas id="revenueSourceChart"></canvas>
+                        </div>
+
+                        <div class="top-donors">
+                            <h3>Top Donors</h3>
+                            <div class="donor-list" id="topDonorsList">
+                                <!-- Donor list will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="recent-donations">
+                        <h3>Recent Donations</h3>
+                        <div class="donation-list" id="recentDonations">
+                            <!-- Recent donations will be populated here -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Content Section -->
+                <section class="section" id="content">
+                    <div class="section-header">
+                        <h2>Content Management</h2>
+                    </div>
+
+                    <div class="content-controls">
+                        <button class="btn btn-secondary" id="generateHighlightsBtn">
+                            <i class="fas fa-magic"></i> Generate Highlights
+                        </button>
+                        <button class="btn btn-secondary" id="createThumbnailBtn">
+                            <i class="fas fa-image"></i> Create Thumbnail
+                        </button>
+                    </div>
+
+                    <div class="highlights-section">
+                        <h3>Stream Highlights</h3>
+                        <div class="highlights-grid" id="highlightsGrid">
+                            <!-- Highlights will be populated here -->
+                        </div>
+                    </div>
+
+                    <div class="recordings-section">
+                        <h3>Recent Recordings</h3>
+                        <div class="recordings-list" id="recordingsList">
+                            <!-- Recordings will be populated here -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Settings Section -->
+                <section class="section" id="settings">
+                    <div class="section-header">
+                        <h2>Settings</h2>
+                    </div>
+
+                    <div class="settings-panel">
+                        <div class="setting-group">
+                            <h3>Streaming Platforms</h3>
+                            <div class="form-group">
+                                <label>Twitch Connected</label>
+                                <input type="checkbox" id="twitchConnected">
+                            </div>
+                            <div class="form-group">
+                                <label>YouTube Connected</label>
+                                <input type="checkbox" id="youtubeConnected">
+                            </div>
+                            <div class="form-group">
+                                <label>Facebook Connected</label>
+                                <input type="checkbox" id="facebookConnected">
+                            </div>
+                        </div>
+
+                        <div class="setting-group">
+                            <h3>OBS Studio</h3>
+                            <div class="form-group">
+                                <label>WebSocket URL</label>
+                                <input type="text" id="obsUrl" value="ws://localhost:4444">
+                            </div>
+                            <div class="form-group">
+                                <label>Password</label>
+                                <input type="password" id="obsPassword">
+                            </div>
+                            <button class="btn btn-secondary" id="testOBSConnection">Test Connection</button>
+                        </div>
+
+                        <div class="setting-group">
+                            <h3>Notifications</h3>
+                            <div class="form-group">
+                                <label>Donation Alerts</label>
+                                <input type="checkbox" id="donationAlerts" checked>
+                            </div>
+                            <div class="form-group">
+                                <label>New Follower Alerts</label>
+                                <input type="checkbox" id="followerAlerts" checked>
+                            </div>
+                            <div class="form-group">
+                                <label>Subscriber Alerts</label>
+                                <input type="checkbox" id="subscriberAlerts" checked>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal" id="notificationModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="notificationTitle">Notification</h3>
+                <button class="modal-close" id="closeModal">&times;</button>
+            </div>
+            <div class="modal-body" id="notificationBody">
+                <!-- Notification content -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="modalConfirm">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

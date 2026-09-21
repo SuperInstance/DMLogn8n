@@ -1,0 +1,401 @@
+{
+  "name": "Pattern Recognition Library - Identify Successful Automation Patterns",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pattern-recognition",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-pattern-recognition",
+      "name": "Pattern Recognition Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "pattern-recognition-library"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse pattern recognition request\nconst request = $input.first().json;\n\n// Required fields validation\nif (!request.operation_type) {\n  return [{\n    json: {\n      error: 'Missing required field: operation_type',\n      valid_operations: ['identify_patterns', 'match_pattern', 'learn_success', 'analyze_trends', 'recommend_patterns'],\n      status: 'invalid_request'\n    }\n  }];\n}\n\n// Build request context\nconst context = {\n  operation_type: request.operation_type,\n  character_id: request.character_id || 'unknown',\n  session_id: request.session_id || 'unknown',\n  timestamp: new Date().toISOString(),\n  input_data: request.input_data || {},\n  analysis_context: {\n    search_scope: request.search_scope || 'all_characters',\n    time_period: request.time_period || 'last_30_days',\n    success_threshold: request.success_threshold || 0.7,\n    pattern_complexity: request.pattern_complexity || 'all',\n    character_class_filter: request.character_class_filter || null,\n    automation_type_filter: request.automation_type_filter || null\n  },\n  options: {\n    include_explanations: request.include_explanations !== false,\n    include_code_examples: request.include_code_examples !== false,\n    include_performance_metrics: request.include_performance_metrics !== false,\n    learning_mode: request.learning_mode || 'adaptive',\n    confidence_threshold: request.confidence_threshold || 0.6\n  }\n};\n\nreturn [{\n  json: context\n}];"
+      },
+      "id": "code-parse-pattern-request",
+      "name": "Parse Pattern Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.operation_type }}",
+              "rightValue": "identify_patterns",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-route-operation",
+      "name": "Route Operation Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle pattern identification operation\nconst request = $input.first().json;\n\nif (!request.input_data.scenario_description) {\n  return [{\n    json: {\n      error: 'Missing required field: input_data.scenario_description',\n      status: 'invalid_data'\n    }\n  }];\n}\n\n// Extract scenario features\nconst scenarioFeatures = {\n  description: request.input_data.scenario_description,\n  character_class: request.input_data.character_class || 'unknown',\n  character_level: request.input_data.character_level || 1,\n  party_composition: request.input_data.party_composition || [],\n  environment: request.input_data.environment || 'unknown',\n  available_resources: request.input_data.available_resources || {},\n  constraints: request.input_data.constraints || [],\n  objectives: request.input_data.objectives || [],\n  urgency_level: request.input_data.urgency_level || 'normal'\n};\n\n// Predefined pattern templates\nconst patternTemplates = {\n  protection: {\n    scenarios: ['party_taking_damage', 'low_health_member', 'incoming_threat', 'defensive_position'],\n    triggers: ['health_below_threshold', 'threat_detected', 'party_in_danger', 'character_under_attack'],\n    actions: ['cast_protection_spell', 'use_defensive_ability', 'intercept_attack', 'heal_party_member'],\n    success_factors: ['timing', 'resource_management', 'threat_assessment', 'positioning']\n  },\n  combat: {\n    scenarios: ['multiple_enemies', 'single_powerful_enemy', 'boss_encounter', 'ambush_situation'],\n    triggers: ['combat_started', 'enemy_detected', 'health_below_threshold', 'opportunity_arises'],\n    actions: ['attack_primary_target', 'use_special_ability', 'buff_allies', 'debuff_enemies'],\n    success_factors: ['target_prioritization', 'resource_efficiency', 'timing', 'positioning']\n  },\n  healing: {\n    scenarios: ['party_member_injured', 'multiple_injuries', 'status_conditions', 'prevention_needed'],\n    triggers: ['health_below_threshold', 'condition_detected', 'combat_ended', 'danger_detected'],\n    actions: ['cast_healing_spell', 'remove_condition', 'apply_buff', 'preventive_healing'],\n    success_factors: ['prioritization', 'efficiency', 'timing', 'resource_management']\n  },\n  utility: {\n    scenarios: ['obstacle_encountered', 'puzzle_situation', 'information_needed', 'preparation_required'],\n    triggers: ['obstacle_detected', 'puzzle_presented', 'information_gaps', 'downtime_available'],\n    actions: ['use_utility_skill', 'cast_utility_spell', 'analyze_situation', 'prepare_resources'],\n    success_factors: ['creativity', 'efficiency', 'timing', 'resource_utilization']\n  }\n};\n\n// Identify likely pattern type\nconst likelyPatternType = identifyPatternType(scenarioFeatures, patternTemplates);\n\nfunction identifyPatternType(scenario, templates) {\n  const description = scenario.description.toLowerCase();\n  const scores = {};\n  \n  for (const [type, template] of Object.entries(templates)) {\n    let score = 0;\n    \n    // Score based on scenario keywords\n    template.scenarios.forEach(scenario_keyword => {\n      if (description.includes(scenario_keyword.replace('_', ' '))) {\n        score += 2;\n      }\n    });\n    \n    // Score based on objectives\n    scenario.objectives.forEach(objective => {\n      if (type === 'protection' && (objective.includes('protect') || objective.includes('defend'))) score += 2;\n      if (type === 'combat' && (objective.includes('attack') || objective.includes('damage'))) score += 2;\n      if (type === 'healing' && (objective.includes('heal') || objective.includes('restore'))) score += 2;\n      if (type === 'utility' && (objective.includes('help') || objective.includes('solve'))) score += 2;\n    });\n    \n    // Score based on class\n    if (scenario.character_class) {\n      if (type === 'protection' && ['fighter', 'paladin', 'cleric'].includes(scenario.character_class.toLowerCase())) score += 1;\n      if (type === 'combat' && ['fighter', 'paladin', 'ranger', 'rogue'].includes(scenario.character_class.toLowerCase())) score += 1;\n      if (type === 'healing' && ['cleric', 'druid', 'paladin'].includes(scenario.character_class.toLowerCase())) score += 1;\n      if (type === 'utility' && ['wizard', 'rogue', 'bard'].includes(scenario.character_class.toLowerCase())) score += 1;\n    }\n    \n    scores[type] = score;\n  }\n  \n  // Return the pattern type with highest score\n  return Object.keys(scores).reduce((a, b) => scores[a] > scores[b] ? a : b);\n}\n\nreturn [{\n  json: {\n    ...request,\n    operation: 'identify_patterns',\n    scenario_features: scenarioFeatures,\n    likely_pattern_type: likelyPatternType,\n    pattern_templates: patternTemplates,\n    search_strategy: 'semantic_similarity_and_template_matching'\n  }\n}];"
+      },
+      "id": "code-handle-identify",
+      "name": "Handle Pattern Identification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle pattern matching operation\nconst request = $input.first().json;\n\nif (!request.input_data.current_situation) {\n  return [{\n    json: {\n      error: 'Missing required field: input_data.current_situation',\n      status: 'invalid_data'\n    }\n  }];\n}\n\n// Extract situation features\nconst situationFeatures = {\n  current_situation: request.input_data.current_situation,\n  character_state: request.input_data.character_state || {},\n  environment_state: request.input_data.environment_state || {},\n  party_state: request.input_data.party_state || {},\n  available_resources: request.input_data.available_resources || {},\n  recent_events: request.input_data.recent_events || [],\n  immediate_needs: request.input_data.immediate_needs || []\n};\n\n// Pattern matching criteria\nconst matchingCriteria = {\n  similarity_threshold: request.options.confidence_threshold || 0.6,\n  max_results: request.input_data.max_results || 5,\n  include_failed_patterns: request.input_data.include_failed_patterns || false,\n  weighting_factors: {\n    situation_similarity: 0.4,\n    character_similarity: 0.3,\n    outcome_success: 0.2,\n    recent_success: 0.1\n  }\n};\n\nreturn [{\n  json: {\n    ...request,\n    operation: 'match_pattern',\n    situation_features: situationFeatures,\n    matching_criteria: matchingCriteria,\n    search_strategy: 'multi_factor_similarity_matching'\n  }\n}];"
+      },
+      "id": "code-handle-match",
+      "name": "Handle Pattern Matching",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle success learning operation\nconst request = $input.first().json;\n\nif (!request.input_data.execution_result) {\n  return [{\n    json: {\n      error: 'Missing required field: input_data.execution_result',\n      status: 'invalid_data'\n    }\n  }];\n}\n\n// Extract execution result features\nconst executionFeatures = {\n  pattern_id: request.input_data.pattern_id || generatePatternId(request.input_data),\n  execution_result: request.input_data.execution_result,\n  success_metrics: {\n    primary_goal_achieved: request.input_data.execution_result.success || false,\n    effectiveness_score: request.input_data.execution_result.effectiveness_score || 0,\n    execution_time: request.input_data.execution_result.execution_time || 0,\n    resource_efficiency: request.input_data.execution_result.resource_efficiency || 0,\n    user_satisfaction: request.input_data.execution_result.user_satisfaction || 0\n  },\n  context_factors: {\n    character_level: request.input_data.character_level || 1,\n    party_size: request.input_data.party_size || 1,\n    difficulty_level: request.input_data.difficulty_level || 'normal',\n    environmental_factors: request.input_data.environmental_factors || []\n  },\n  learning_data: {\n    unexpected_outcomes: request.input_data.execution_result.unexpected_outcomes || [],\n    user_feedback: request.input_data.execution_result.user_feedback || '',\n    improvement_suggestions: request.input_data.execution_result.improvement_suggestions || []\n  }\n};\n\nfunction generatePatternId(inputData) {\n  const crypto = require('crypto');\n  const hash = crypto.createHash('md5');\n  const patternString = JSON.stringify({\n    situation: inputData.current_situation,\n    actions: inputData.actions_taken,\n    character_class: inputData.character_class\n  });\n  return hash.update(patternString).digest('hex').substring(0, 8);\n}\n\n// Calculate learning value\nconst learningValue = {\n  overall_score: calculateOverallScore(executionFeatures.success_metrics),\n  pattern_strength: calculatePatternStrength(executionFeatures),\n  transferability: calculateTransferability(executionFeatures),\n  improvement_potential: calculateImprovementPotential(executionFeatures)\n};\n\nfunction calculateOverallScore(metrics) {\n  return (\n    (metrics.primary_goal_achieved ? 0.4 : 0) +\n    (metrics.effectiveness_score * 0.3) +\n    (metrics.resource_efficiency * 0.2) +\n    (metrics.user_satisfaction * 0.1)\n  );\n}\n\nfunction calculatePatternStrength(features) {\n  const base_score = learningValue.overall_score;\n  \n  // Adjust for context factors\n  if (features.context_factors.difficulty_level === 'hard') base_score += 0.1;\n  if (features.context_factors.party_size > 3) base_score += 0.1;\n  if (features.learning_data.user_feedback.includes('excellent')) base_score += 0.2;\n  \n  return Math.min(base_score, 1.0);\n}\n\nfunction calculateTransferability(features) {\n  let transferability = 0.5; // Base transferability\n  \n  // Higher transferability for general patterns\n  if (features.context_factors.party_size <= 4) transferability += 0.2;\n  if (features.context_factors.difficulty_level !== 'legendary') transferability += 0.2;\n  if (features.learning_data.unexpected_outcomes.length === 0) transferability += 0.1;\n  \n  return Math.min(transferability, 1.0);\n}\n\nfunction calculateImprovementPotential(features) {\n  let potential = 0;\n  \n  if (features.success_metrics.effectiveness_score < 0.8) potential += 0.3;\n  if (features.success_metrics.resource_efficiency < 0.7) potential += 0.3;\n  if (features.learning_data.improvement_suggestions.length > 0) potential += 0.2;\n  if (features.learning_data.user_feedback.includes('improve')) potential += 0.2;\n  \n  return Math.min(potential, 1.0);\n}\n\nreturn [{\n  json: {\n    ...request,\n    operation: 'learn_success',\n    execution_features: executionFeatures,\n    learning_value: learningValue,\n    learning_strategy: 'reinforcement_and_adaptation'\n  }\n}];"
+      },
+      "id": "code-handle-learning",
+      "name": "Handle Success Learning",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Retrieve existing pattern data from knowledge base\nconst request = $input.first().json;\n\n// Simulate knowledge base retrieval\nconst existingPatterns = {\n  protection_patterns: [\n    {\n      pattern_id: 'prot_001',\n      name: 'Tank Shield Response',\n      description: 'Automatically protect party member when health drops below 30%',\n      success_rate: 0.85,\n      usage_count: 45,\n      character_classes: ['fighter', 'paladin'],\n      complexity: 'medium',\n      triggers: ['ally_health_low'],\n      actions: ['use_protection_ability'],\n      performance_metrics: {\n        avg_response_time: 1.2,\n        avg_effectiveness: 0.88,\n        resource_efficiency: 0.75\n      }\n    },\n    {\n      pattern_id: 'prot_002',\n      name: 'Proactive Healing Buff',\n      description: 'Pre-cast protection spells before dangerous encounters',\n      success_rate: 0.92,\n      usage_count: 28,\n      character_classes: ['cleric', 'paladin'],\n      complexity: 'high',\n      triggers: ['danger_detected', 'combat_imminent'],\n      actions: ['cast_protection_spell', 'apply_party_buff'],\n      performance_metrics: {\n        avg_response_time: 2.5,\n        avg_effectiveness: 0.91,\n        resource_efficiency: 0.82\n      }\n    }\n  ],\n  combat_patterns: [\n    {\n      pattern_id: 'comb_001',\n      name: 'Focus Fire Coordination',\n      description: 'Coordinate party attacks on single high-priority target',\n      success_rate: 0.78,\n      usage_count: 67,\n      character_classes: ['fighter', 'ranger', 'rogue'],\n      complexity: 'medium',\n      triggers: ['high_priority_target', 'multiple_enemies'],\n      actions: ['coordinate_attack', 'use_high_damage_ability'],\n      performance_metrics: {\n        avg_response_time: 0.8,\n        avg_effectiveness: 0.82,\n        resource_efficiency: 0.79\n      }\n    }\n  ],\n  healing_patterns: [\n    {\n      pattern_id: 'heal_001',\n      name: 'Triage Healing System',\n      description: 'Prioritize healing based on injury severity and role importance',\n      success_rate: 0.89,\n      usage_count: 93,\n      character_classes: ['cleric', 'druid'],\n      complexity: 'high',\n      triggers: ['party_injury', 'combat_healing_needed'],\n      actions: ['assess_injuries', 'prioritize_healing', 'cast_optimal_spell'],\n      performance_metrics: {\n        avg_response_time: 1.5,\n        avg_effectiveness: 0.91,\n        resource_efficiency: 0.84\n      }\n    }\n  ]\n};\n\nreturn [{\n  json: {\n    ...request,\n    existing_patterns: existingPatterns,\n    knowledge_base_status: 'available',\n    pattern_count: Object.values(existingPatterns).flat().length\n  }\n}];"
+      },
+      "id": "code-retrieve-patterns",
+      "name": "Retrieve Existing Patterns",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create AI pattern analysis prompt\nconst request = $input.first().json;\n\nconst analysisPrompt = `\nYou are an expert Pattern Recognition AI that analyzes automation patterns for D&D characters. Your task is to analyze the pattern operation and provide intelligent insights.\n\n## Operation: ${request.operation}\n## Character ID: ${request.character_id}\n## Session ID: ${request.session_id}\n\n${request.scenario_features ? `\n## Scenario Features:\n- Description: ${request.scenario_features.description}\n- Character Class: ${request.scenario_features.character_class}\n- Character Level: ${request.scenario_features.character_level}\n- Objectives: ${request.scenario_features.objectives.join(', ')}\n- Likely Pattern Type: ${request.likely_pattern_type}\n` : ''}\n\n${request.situation_features ? `\n## Situation Features:\n- Current Situation: ${request.situation_features.current_situation}\n- Immediate Needs: ${request.situation_features.immediate_needs.join(', ')}\n- Available Resources: ${JSON.stringify(request.situation_features.available_resources)}\n` : ''}\n\n${request.execution_features ? `\n## Execution Features:\n- Pattern ID: ${request.execution_features.pattern_id}\n- Success: ${request.execution_features.success_metrics.primary_goal_achieved}\n- Effectiveness Score: ${request.execution_features.success_metrics.effectiveness_score}\n- User Feedback: ${request.execution_features.learning_data.user_feedback}\n` : ''}\n\n## Existing Patterns in Knowledge Base:\n${request.existing_patterns ? Object.entries(request.existing_patterns).map(([type, patterns]) => \n  `\\n### ${type.toUpperCase()}:\\n${patterns.map(p => \n    `- ${p.name}: ${p.description} (Success Rate: ${p.success_rate * 100}%)`).join('\\n')}`).join('\\n') : 'No existing patterns available'}\n\n## Analysis Required:\nBased on the operation type, provide detailed analysis:\n\n${request.operation === 'identify_patterns' ? `\nFor pattern identification, analyze:\n1. Best matching patterns from the knowledge base\n2. Pattern applicability to current scenario\n3. Success probability for each pattern\n4. Required adaptations and modifications\n5. Implementation recommendations\n` : ''}\n\n${request.operation === 'match_pattern' ? `\nFor pattern matching, analyze:\n1. Most similar patterns to current situation\n2. Similarity scores and matching criteria\n3. Contextual differences and adaptations needed\n4. Risk assessment for each match\n5. Recommended pattern selection strategy\n` : ''}\n\n${request.operation === 'learn_success' ? `\nFor success learning, analyze:\n1. Pattern performance and success factors\n2. Learning insights and improvements needed\n3. Pattern generalization opportunities\n4. Knowledge base updates required\n5. Future application recommendations\n` : ''}\n\n## Response Format (JSON):\n{\n  \"analysis_summary\": \"Brief overview of pattern analysis results\",\n  \"identified_patterns\": [\n    {\n      \"pattern_id\": \"pattern identifier\",\n      \"pattern_name\": \"descriptive pattern name\",\n      \"match_score\": 0.95,\n      \"applicability\": \"high/medium/low\",\n      \"success_probability\": 0.88,\n      \"required_adaptations\": [\"modifications needed\"],\n      \"implementation_complexity\": \"simple/medium/complex\",\n      \"resource_requirements\": [\"resources needed\"],\n      \"risk_factors\": [\"potential risks\"],\n      \"recommendations\": [\"specific recommendations\"]\n    }\n  ],\n  \"pattern_insights\": {\n    \"common_success_factors\": [\"elements that lead to success\"],\n    \"failure_patterns\": [\"patterns that often fail\"],\n    \"optimization_opportunities\": [\"ways to improve patterns\"],\n    \"contextual_dependencies\": [\"factors that affect pattern performance\"]\n  },\n  \"learning_recommendations\": {\n    \"new_patterns_to_create\": [\"suggestions for new patterns\"],\n    \"existing_patterns_to_update\": [\"patterns that need modification\"],\n    \"knowledge_gaps\": [\"areas where more patterns are needed\"],\n    \"research_suggestions\": [\"areas for further investigation\"]\n  },\n  \"next_steps\": [\"recommended follow-up actions\"]\n}\n\nFocus on actionable insights that improve pattern recognition and matching accuracy while ensuring character success.`;\n\nreturn [{\n  json: {\n    ...request,\n    deepseek_prompt: analysisPrompt,\n    analysis_type: 'pattern_recognition'\n  }\n}];"
+      },
+      "id": "code-pattern-analysis-prompt",
+      "name": "Create Pattern Analysis Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer sk-3b0251d9943549a2b475eb9e57e46ee6"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "deepseek-chat"
+            },
+            {
+              "name": "messages",
+              "value": "=[{\"role\": \"user\", \"content\": \"{{ $json.deepseek_prompt }}\"}]"
+            },
+            {
+              "name": "max_tokens",
+              "value": "=2000"
+            },
+            {
+              "name": "temperature",
+              "value": "=0.4"
+            },
+            {
+              "name": "response_format",
+              "value": "={\"type\": \"json_object\"}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-pattern-analysis",
+      "name": "AI Pattern Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process AI pattern analysis results\nconst aiResponse = $input.first().json;\nconst originalRequest = items.find(item => item.json.deepseek_prompt)?.json;\n\nif (!aiResponse.choices || !aiResponse.choices[0]?.message?.content) {\n  return [{\n    json: {\n      error: 'Invalid AI response from pattern analysis',\n      status: 'ai_error'\n    }\n  }];\n}\n\ntry {\n  const analysisResult = JSON.parse(aiResponse.choices[0].message.content);\n  \n  // Enhance analysis with additional metadata\n  const enhancedAnalysis = {\n    analysis_id: generateAnalysisId(),\n    operation_type: originalRequest.operation,\n    character_id: originalRequest.character_id,\n    session_id: originalRequest.session_id,\n    timestamp: new Date().toISOString(),\n    pattern_analysis_result: analysisResult,\n    pattern_recommendations: generatePatternRecommendations(analysisResult, originalRequest),\n    learning_insights: extractLearningInsights(analysisResult),\n    knowledge_base_updates: determineKnowledgeBaseUpdates(analysisResult),\n    confidence_scores: calculateConfidenceScores(analysisResult),\n    implementation_readiness: assessImplementationReadiness(analysisResult),\n    metadata: {\n      ai_provider: 'deepseek',\n      model: 'deepseek-chat',\n      tokens_used: aiResponse.usage?.total_tokens || 0,\n      patterns_analyzed: originalRequest.existing_patterns?.pattern_count || 0,\n      analysis_depth: originalRequest.options?.include_explanations ? 'detailed' : 'standard'\n    }\n  };\n  \n  function generateAnalysisId() {\n    return 'pr_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);\n  }\n  \n  function generatePatternRecommendations(analysis, request) {\n    const recommendations = [];\n    \n    if (analysis.identified_patterns && analysis.identified_patterns.length > 0) {\n      const topPattern = analysis.identified_patterns[0];\n      recommendations.push({\n        type: 'implement_pattern',\n        pattern_id: topPattern.pattern_id,\n        pattern_name: topPattern.pattern_name,\n        confidence: topPattern.match_score,\n        complexity: topPattern.implementation_complexity,\n        estimated_success: topPattern.success_probability,\n        priority: topPattern.applicability === 'high' ? 'immediate' : 'normal'\n      });\n    }\n    \n    if (analysis.learning_recommendations?.new_patterns_to_create) {\n      analysis.learning_recommendations.new_patterns_to_create.forEach(pattern => {\n        recommendations.push({\n          type: 'create_pattern',\n          description: pattern,\n          priority: 'research'\n        });\n      });\n    }\n    \n    return recommendations;\n  }\n  \n  function extractLearningInsights(analysis) {\n    return {\n      success_factors: analysis.pattern_insights?.common_success_factors || [],\n      failure_patterns: analysis.pattern_insights?.failure_patterns || [],\n      optimization_opportunities: analysis.pattern_insights?.optimization_opportunities || [],\n      contextual_factors: analysis.pattern_insights?.contextual_dependencies || []\n    };\n  }\n  \n  function determineKnowledgeBaseUpdates(analysis) {\n    return {\n      new_patterns_needed: analysis.learning_recommendations?.new_patterns_to_create || [],\n      patterns_to_update: analysis.learning_recommendations?.existing_patterns_to_update || [],\n      knowledge_gaps: analysis.learning_recommendations?.knowledge_gaps || [],\n      research_priorities: analysis.learning_recommendations?.research_suggestions || []\n    };\n  }\n  \n  function calculateConfidenceScores(analysis) {\n    const scores = {};\n    \n    if (analysis.identified_patterns && analysis.identified_patterns.length > 0) {\n      const avgMatchScore = analysis.identified_patterns.reduce((sum, p) => sum + p.match_score, 0) / analysis.identified_patterns.length;\n      scores.overall_confidence = avgMatchScore;\n      scores.pattern_match_confidence = avgMatchScore;\n      scores.analysis_confidence = 0.85; // AI confidence\n    } else {\n      scores.overall_confidence = 0.3;\n      scores.pattern_match_confidence = 0.1;\n      scores.analysis_confidence = 0.85;\n    }\n    \n    return scores;\n  }\n  \n  function assessImplementationReadiness(analysis) {\n    const readiness = {\n      can_implement_immediately: false,\n      requires_adaptation: false,\n      requires_research: false,\n      overall_readiness: 'low'\n    };\n    \n    if (analysis.identified_patterns && analysis.identified_patterns.length > 0) {\n      const topPattern = analysis.identified_patterns[0];\n      if (topPattern.applicability === 'high' && topPattern.implementation_complexity === 'simple') {\n        readiness.can_implement_immediately = true;\n        readiness.overall_readiness = 'high';\n      } else if (topPattern.required_adaptations && topPattern.required_adaptations.length > 0) {\n        readiness.requires_adaptation = true;\n        readiness.overall_readiness = 'medium';\n      }\n    } else {\n      readiness.requires_research = true;\n      readiness.overall_readiness = 'low';\n    }\n    \n    return readiness;\n  }\n  \n  return [{\n    json: enhancedAnalysis\n  }];\n  \n} catch (error) {\n  return [{\n    json: {\n      error: 'Failed to process pattern analysis',\n      details: error.message,\n      raw_response: aiResponse.choices[0].message.content,\n      status: 'processing_error'\n    }\n  }];\n}"
+      },
+      "id": "code-process-pattern-analysis",
+      "name": "Process Pattern Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Update pattern knowledge base\nconst analysis = $input.first().json;\n\nif (analysis.knowledge_base_updates.new_patterns_needed.length > 0 || \n    analysis.knowledge_base_updates.patterns_to_update.length > 0) {\n  \n  const knowledgeUpdate = {\n    update_id: generateUpdateId(),\n    analysis_id: analysis.analysis_id,\n    character_id: analysis.character_id,\n    session_id: analysis.session_id,\n    timestamp: new Date().toISOString(),\n    update_type: 'pattern_knowledge_update',\n    updates: {\n      new_patterns: analysis.knowledge_base_updates.new_patterns_needed.map(pattern => ({\n        pattern_description: pattern,\n        source_character_id: analysis.character_id,\n        source_session_id: analysis.session_id,\n        confidence: analysis.confidence_scores.overall_confidence,\n        status: 'pending_creation'\n      })),\n      updated_patterns: analysis.knowledge_base_updates.patterns_to_update.map(pattern => ({\n        pattern_name: pattern,\n        update_reason: 'performance_optimization',\n        suggested_improvements: analysis.learning_insights.optimization_opportunities,\n        status: 'pending_update'\n      }))\n    },\n    learning_data: {\n      success_factors_learned: analysis.learning_insights.success_factors,\n      failure_patterns_identified: analysis.learning_insights.failure_patterns,\n      optimization_opportunities: analysis.learning_insights.optimization_opportunities\n    }\n  };\n  \n  function generateUpdateId() {\n    return 'kbu_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);\n  }\n  \n  return [{\n    json: {\n      ...analysis,\n      knowledge_update: knowledgeUpdate\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    ...analysis,\n    knowledge_update: {\n      message: 'No knowledge base updates required',\n      update_id: null\n    }\n  }\n}];"
+      },
+      "id": "code-update-knowledge-base",
+      "name": "Update Knowledge Base",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare final pattern recognition response\nconst analysis = $input.first().json;\n\nconst response = {\n  status: 'success',\n  timestamp: new Date().toISOString(),\n  analysis_id: analysis.analysis_id,\n  operation_type: analysis.operation_type,\n  character_id: analysis.character_id,\n  session_id: analysis.session_id,\n  pattern_analysis: {\n    summary: analysis.pattern_analysis_result.analysis_summary,\n    patterns_identified: analysis.pattern_analysis_result.identified_patterns?.length || 0,\n    top_recommendation: analysis.pattern_analysis_result.identified_patterns?.[0] || null,\n    confidence_scores: analysis.confidence_scores\n  },\n  implementation_readiness: {\n    ready_to_implement: analysis.implementation_readiness.can_implement_immediately,\n    requires_adaptation: analysis.implementation_readiness.requires_adaptation,\n    requires_research: analysis.implementation_readiness.requires_research,\n    overall_readiness: analysis.implementation_readiness.overall_readiness\n  },\n  pattern_recommendations: analysis.pattern_recommendations,\n  learning_insights: analysis.learning_insights,\n  knowledge_base_updates: {\n    new_patterns_needed: analysis.knowledge_base_updates.new_patterns_needed.length,\n    patterns_to_update: analysis.knowledge_base_updates.patterns_to_update.length,\n    knowledge_gaps_identified: analysis.knowledge_base_updates.knowledge_gaps.length\n  },\n  next_steps: analysis.pattern_analysis_result.next_steps,\n  metadata: {\n    tokens_used: analysis.metadata.tokens_used,\n    patterns_analyzed: analysis.metadata.patterns_analyzed,\n    analysis_depth: analysis.metadata.analysis_depth,\n    ai_provider: analysis.metadata.ai_provider\n  }\n};\n\nreturn [{\n  json: response\n}];"
+      },
+      "id": "code-prepare-response",
+      "name": "Prepare Final Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.webhookResponse",
+      "typeVersion": 1,
+      "position": [2440, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Error handling\nconst error = $input.first().json;\n\nconst errorResponse = {\n  status: 'error',\n  timestamp: new Date().toISOString(),\n  error: error.error || 'Pattern recognition failed',\n  details: error.details || 'No additional details available',\n  operation_type: error.operation_type || 'unknown',\n  character_id: error.character_id || 'unknown',\n  session_id: error.session_id || 'unknown',\n  suggestions: [\n    'Check the input data format and completeness',\n    'Ensure operation type is valid',\n    'Verify that scenario or situation information is provided',\n    'Try with a more specific description'\n  ]\n};\n\nreturn [{\n  json: errorResponse\n}];"
+      },
+      "id": "code-error-handling",
+      "name": "Error Handling",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 600]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "webhook-error-response",
+      "name": "Send Error Response",
+      "type": "n8n-nodes-base.webhookResponse",
+      "typeVersion": 1,
+      "position": [2000, 600]
+    }
+  ],
+  "connections": {
+    "Pattern Recognition Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Pattern Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Pattern Request": {
+      "main": [
+        [
+          {
+            "node": "Route Operation Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Operation Type": {
+      "main": [
+        [
+          {
+            "node": "Handle Pattern Identification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Handle Pattern Matching",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Handle Success Learning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Pattern Identification": {
+      "main": [
+        [
+          {
+            "node": "Retrieve Existing Patterns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Pattern Matching": {
+      "main": [
+        [
+          {
+            "node": "Retrieve Existing Patterns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Success Learning": {
+      "main": [
+        [
+          {
+            "node": "Retrieve Existing Patterns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve Existing Patterns": {
+      "main": [
+        [
+          {
+            "node": "Create Pattern Analysis Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Pattern Analysis Prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Pattern Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Pattern Analysis": {
+      "main": [
+        [
+          {
+            "node": "Process Pattern Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Pattern Analysis": {
+      "main": [
+        [
+          {
+            "node": "Update Knowledge Base",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Knowledge Base": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Final Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handling": {
+      "main": [
+        [
+          {
+            "node": "Send Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T15:15:00.000Z",
+      "updatedAt": "2024-10-23T15:15:00.000Z",
+      "id": "pattern-recognition",
+      "name": "Pattern Recognition"
+    },
+    {
+      "createdAt": "2024-10-23T15:15:00.000Z",
+      "updatedAt": "2024-10-23T15:15:00.000Z",
+      "id": "success-learning",
+      "name": "Success Learning"
+    },
+    {
+      "createdAt": "2024-10-23T15:15:00.000Z",
+      "updatedAt": "2024-10-23T15:15:00.000Z",
+      "id": "knowledge-base",
+      "name": "Knowledge Base"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T15:15:00.000Z",
+  "versionId": "1"
+}

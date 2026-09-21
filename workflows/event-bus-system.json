@@ -1,0 +1,717 @@
+{
+  "name": "Event Bus System - Game Event Orchestration",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "event/publish",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "event-publish-webhook",
+      "name": "Event Publish Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "event-publish"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process and validate incoming event\nconst eventData = $input.first().json;\nconst { eventType, sessionId, source, payload, priority = 'normal', metadata = {} } = eventData;\n\n// Validate required fields\nif (!eventType || !sessionId || !source) {\n  throw new Error('Missing required fields: eventType, sessionId, source');\n}\n\n// Generate unique event ID\nconst eventId = `evt_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;\n\n// Event schema validation\nconst validEventTypes = [\n  'player_action',\n  'dm_action',\n  'combat_event',\n  'dialogue_event',\n  'system_event',\n  'ai_agent_event',\n  'voice_event',\n  'session_event',\n  'error_event'\n];\n\nif (!validEventTypes.includes(eventType)) {\n  throw new Error(`Invalid event type: ${eventType}`);\n}\n\n// Priority validation\nconst validPriorities = ['low', 'normal', 'high', 'critical'];\nif (!validPriorities.includes(priority)) {\n  throw new Error(`Invalid priority: ${priority}`);\n}\n\n// Create event object\nconst event = {\n  eventId,\n  eventType,\n  sessionId,\n  source, // 'player', 'dm', 'ai_agent', 'system'\n  payload,\n  priority,\n  metadata: {\n    ...metadata,\n    timestamp: new Date().toISOString(),\n    version: '1.0'\n  },\n  routing: {\n    targets: [], // Will be populated by routing logic\n    filters: [], // Event filters\n    retries: 0,\n    maxRetries: 3\n  }\n};\n\nreturn { json: event };"
+      },
+      "id": "process-event",
+      "name": "Process Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "documentId": "={{ $json.eventId }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "eventId",
+              "fieldValue": "={{ $json.eventId }}"
+            },
+            {
+              "fieldName": "eventType",
+              "fieldValue": "={{ $json.eventType }}"
+            },
+            {
+              "fieldName": "sessionId",
+              "fieldValue": "={{ $json.sessionId }}"
+            },
+            {
+              "fieldName": "source",
+              "fieldValue": "={{ $json.source }}"
+            },
+            {
+              "fieldName": "payload",
+              "fieldValue": "={{ $json.payload }}"
+            },
+            {
+              "fieldName": "priority",
+              "fieldValue": "={{ $json.priority }}"
+            },
+            {
+              "fieldName": "metadata",
+              "fieldValue": "={{ $json.metadata }}"
+            },
+            {
+              "fieldName": "routing",
+              "fieldValue": "={{ $json.routing }}"
+            },
+            {
+              "fieldName": "status",
+              "fieldValue": "pending"
+            },
+            {
+              "fieldName": "createdAt",
+              "fieldValue": "={{ $json.metadata.timestamp }}"
+            }
+          ]
+        }
+      },
+      "id": "store-event",
+      "name": "Store Event",
+      "type": "n8n-nodes-base.googleFirestore",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Determine event routing and targets\nconst eventData = $input.first().json;\nconst { eventType, sessionId, source, payload } = eventData;\n\n// Get session information\nconst sessionInfo = await $getGoogleFirestoreItem('game_sessions', sessionId);\nconst participants = sessionInfo?.players || [];\n\n// Build routing configuration\nconst routing = {\n  ...eventData.routing,\n  targets: [],\n  filters: buildEventFilters(eventType, payload)\n};\n\n// Determine targets based on event type and source\nswitch (eventType) {\n  case 'player_action':\n    routing.targets = buildPlayerActionTargets(participants, source, payload);\n    break;\n  case 'dm_action':\n    routing.targets = buildDMActionTargets(participants, payload);\n    break;\n  case 'combat_event':\n    routing.targets = buildCombatEventTargets(participants, payload);\n    break;\n  case 'dialogue_event':\n    routing.targets = buildDialogueEventTargets(participants, payload);\n    break;\n  case 'system_event':\n    routing.targets = buildSystemEventTargets(participants, payload);\n    break;\n  case 'ai_agent_event':\n    routing.targets = buildAIEventTargets(participants, payload);\n    break;\n  case 'voice_event':\n    routing.targets = buildVoiceEventTargets(participants, payload);\n    break;\n  case 'session_event':\n    routing.targets = buildSessionEventTargets(participants, payload);\n    break;\n  case 'error_event':\n    routing.targets = buildErrorEventTargets(participants, payload);\n    break;\n}\n\nfunction buildEventFilters(eventType, payload) {\n  const filters = [];\n  \n  // Add role-based filters\n  if (payload.requiresDM) {\n    filters.push({ type: 'role', value: 'game_master' });\n  }\n  \n  if (payload.requiresPlayer) {\n    filters.push({ type: 'role', value: 'player' });\n  }\n  \n  // Add permission-based filters\n  if (payload.requiredPermissions) {\n    payload.requiredPermissions.forEach(perm => {\n      filters.push({ type: 'permission', value: perm });\n    });\n  }\n  \n  return filters;\n}\n\nfunction buildPlayerActionTargets(participants, source, payload) {\n  const targets = [];\n  \n  // Always include DM\n  const dm = participants.find(p => p.role === 'game_master');\n  if (dm) {\n    targets.push({\n      userId: dm.userId,\n      type: 'websocket',\n      endpoint: `/session/${sessionId}/dm`,\n      filters: ['dm_notifications']\n    });\n  }\n  \n  // Include other players (unless private)\n  if (!payload.isPrivate) {\n    participants\n      .filter(p => p.userId !== source && p.role === 'player')\n      .forEach(player => {\n        targets.push({\n          userId: player.userId,\n          type: 'websocket',\n          endpoint: `/session/${sessionId}/player/${player.userId}`,\n          filters: ['player_notifications']\n        });\n      });\n  }\n  \n  // Include AI agents if applicable\n  if (payload.requiresAIResponse) {\n    targets.push({\n      type: 'ai_agent',\n      endpoint: `/ai/agent/respond`,\n      filters: ['ai_processing']\n    });\n  }\n  \n  return targets;\n}\n\nfunction buildDMActionTargets(participants, payload) {\n  // DM actions typically broadcast to all players\n  return participants\n    .filter(p => p.role === 'player')\n    .map(player => ({\n      userId: player.userId,\n      type: 'websocket',\n      endpoint: `/session/${sessionId}/player/${player.userId}`,\n      filters: ['dm_actions']\n    }));\n}\n\nfunction buildCombatEventTargets(participants, payload) {\n  const targets = [];\n  \n  // Combat events go to all participants in combat\n  const combatParticipants = payload.combatParticipants || participants;\n  \n  combatParticipants.forEach(participant => {\n    targets.push({\n      userId: participant.userId,\n      type: 'websocket',\n      endpoint: `/session/${sessionId}/combat`,\n      filters: ['combat_events']\n    });\n  });\n  \n  // Also include AI agents for combat logic\n  targets.push({\n    type: 'ai_agent',\n    endpoint: `/ai/combat/process`,\n    filters: ['combat_ai']\n  });\n  \n  return targets;\n}\n\nfunction buildDialogueEventTargets(participants, payload) {\n  const targets = [];\n  \n  // Dialogue events go to relevant participants\n  if (payload.targetType === 'all') {\n    participants.forEach(player => {\n      targets.push({\n        userId: player.userId,\n        type: 'websocket',\n        endpoint: `/session/${sessionId}/dialogue`,\n        filters: ['dialogue_events']\n      });\n    });\n  } else if (payload.targetType === 'specific' && payload.targetUsers) {\n    payload.targetUsers.forEach(targetUserId => {\n      const player = participants.find(p => p.userId === targetUserId);\n      if (player) {\n        targets.push({\n          userId: targetUserId,\n          type: 'websocket',\n          endpoint: `/session/${sessionId}/dialogue`,\n          filters: ['dialogue_events']\n        });\n      }\n    });\n  }\n  \n  return targets;\n}\n\nfunction buildSystemEventTargets(participants, payload) {\n  // System events go to all relevant services\n  const targets = [];\n  \n  // Notify monitoring system\n  targets.push({\n    type: 'service',\n    service: 'monitoring',\n    endpoint: '/monitoring/events',\n    filters: ['system_events']\n  });\n  \n  // Notify logging system\n  targets.push({\n    type: 'service',\n    service: 'logging',\n    endpoint: '/logging/events',\n    filters: ['system_events']\n  });\n  \n  // If it's user-visible, notify participants\n  if (payload.userVisible) {\n    participants.forEach(player => {\n      targets.push({\n        userId: player.userId,\n        type: 'websocket',\n        endpoint: `/session/${sessionId}/system`,\n        filters: ['system_notifications']\n      });\n    });\n  }\n  \n  return targets;\n}\n\nfunction buildAIEventTargets(participants, payload) {\n  const targets = [];\n  \n  // AI events typically go to DM for oversight\n  const dm = participants.find(p => p.role === 'game_master');\n  if (dm) {\n    targets.push({\n      userId: dm.userId,\n      type: 'websocket',\n      endpoint: `/session/${sessionId}/dm`,\n      filters: ['ai_events']\n    });\n  }\n  \n  // Also go to AI monitoring service\n  targets.push({\n    type: 'service',\n    service: 'ai_monitoring',\n    endpoint: '/ai/monitoring/events',\n    filters: ['ai_events']\n  });\n  \n  return targets;\n}\n\nfunction buildVoiceEventTargets(participants, payload) {\n  // Voice events go to participants in voice channel\n  const voiceParticipants = participants.filter(p => \n    payload.voiceChannelParticipants?.includes(p.userId)\n  );\n  \n  return voiceParticipants.map(player => ({\n    userId: player.userId,\n    type: 'websocket',\n    endpoint: `/session/${sessionId}/voice`,\n    filters: ['voice_events']\n  }));\n}\n\nfunction buildSessionEventTargets(participants, payload) {\n  // Session events go to all participants\n  return participants.map(player => ({\n    userId: player.userId,\n    type: 'websocket',\n    endpoint: `/session/${sessionId}/session`,\n    filters: ['session_events']\n  }));\n}\n\nfunction buildErrorEventTargets(participants, payload) {\n  const targets = [];\n  \n  // Error events go to monitoring and logging\n  targets.push({\n    type: 'service',\n    service: 'monitoring',\n    endpoint: '/monitoring/errors',\n    filters: ['error_events']\n  });\n  \n  targets.push({\n    type: 'service',\n    service: 'logging',\n    endpoint: '/logging/errors',\n    filters: ['error_events']\n  });\n  \n  // If user-visible error, notify DM\n  if (payload.userVisible) {\n    const dm = participants.find(p => p.role === 'game_master');\n    if (dm) {\n      targets.push({\n        userId: dm.userId,\n        type: 'websocket',\n        endpoint: `/session/${sessionId}/dm`,\n        filters: ['error_notifications']\n      });\n    }\n  }\n  \n  return targets;\n}\n\nreturn {\n  json: {\n    ...eventData,\n    routing\n  }\n};"
+      },
+      "id": "determine-routing",
+      "name": "Determine Event Routing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": "={{ $json.eventId }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "routing",
+              "fieldValue": "={{ $json.routing }}"
+            }
+          ]
+        }
+      },
+      "id": "update-event-routing",
+      "name": "Update Event Routing",
+      "type": "n8n-nodes-base.googleFirestore",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter and route events to targets\nconst eventData = $input.first().json;\nconst { eventId, routing, payload, priority } = eventData;\n\n// Apply filters to targets\nconst filteredTargets = routing.targets.filter(target => {\n  if (!target.filters || target.filters.length === 0) {\n    return true;\n  }\n  \n  // Check if event passes all filters for this target\n  return target.filters.every(filter => {\n    switch (filter.type) {\n      case 'role':\n        return checkRoleFilter(filter.value, payload);\n      case 'permission':\n        return checkPermissionFilter(filter.value, payload);\n      case 'event_type':\n        return checkEventTypeFilter(filter.value, eventData.eventType);\n      default:\n        return true;\n    }\n  });\n});\n\nfunction checkRoleFilter(requiredRole, payload) {\n  // Check if payload requires specific role\n  return payload.requiredRole !== requiredRole;\n}\n\nfunction checkPermissionFilter(requiredPermission, payload) {\n  // Check if payload requires specific permission\n  return !payload.requiredPermissions || \n         !payload.requiredPermissions.includes(requiredPermission);\n}\n\nfunction checkEventTypeFilter(allowedType, eventType) {\n  return eventType === allowedType;\n}\n\n// Sort targets by priority\nconst sortedTargets = filteredTargets.sort((a, b) => {\n  const priorityOrder = { critical: 0, high: 1, normal: 2, low: 3 };\n  return priorityOrder[priority] - priorityOrder[priority];\n});\n\nreturn sortedTargets.map(target => ({\n  json: {\n    eventId,\n    target,\n    eventData,\n    attemptNumber: 1\n  }\n}));"
+      },
+      "id": "filter-and-route-events",
+      "name": "Filter and Route Events",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "websocket-target",
+              "leftValue": "={{ $json.target.type }}",
+              "rightValue": "websocket",
+              "operator": {
+n                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "ai-agent-target",
+              "leftValue": "={{ $json.target.type }}",
+              "rightValue": "ai_agent",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "service-target",
+              "leftValue": "={{ $json.target.type }}",
+              "rightValue": "service",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        }
+      },
+      "id": "route-by-target-type",
+      "name": "Route by Target Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.target.endpoint }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Event-ID",
+              "value": "={{ $json.eventId }}"
+            },
+            {
+              "name": "X-Event-Type",
+              "value": "={{ $json.eventData.eventType }}"
+            },
+            {
+              "name": "X-Session-ID",
+              "value": "={{ $json.eventData.sessionId }}"
+            },
+            {
+              "name": "X-Priority",
+              "value": "={{ $json.eventData.priority }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event",
+              "value": "={{ $json.eventData }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "send-websocket-event",
+      "name": "Send WebSocket Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1780, 180]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.target.endpoint }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Event-ID",
+              "value": "={{ $json.eventId }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.aiServiceApi.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event",
+              "value": "={{ $json.eventData }}"
+            },
+            {
+              "name": "sessionId",
+              "value": "={{ $json.eventData.sessionId }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "send-ai-agent-event",
+      "name": "Send AI Agent Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.target.endpoint }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Event-ID",
+              "value": "={{ $json.eventId }}"
+            },
+            {
+              "name": "X-Service-Name",
+              "value": "={{ $json.target.service }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event",
+              "value": "={{ $json.eventData }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "send-service-event",
+      "name": "Send Service Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1780, 420]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Track event delivery and handle failures\nconst deliveryResult = $input.first().json;\nconst { eventId, target, eventData, attemptNumber } = deliveryResult;\n\nconst deliveryRecord = {\n  eventId,\n  targetId: target.userId || target.service || target.type,\n  targetType: target.type,\n  endpoint: target.endpoint,\n  attemptNumber,\n  delivered: true,\n  deliveredAt: new Date().toISOString(),\n  response: deliveryResult.response || null,\n  error: deliveryResult.error || null\n};\n\n// Update event delivery status\nawait $setGoogleFirestoreItem('event_deliveries', `${eventId}_${target.type}_${target.userId || target.service}`, deliveryRecord);\n\n// Update main event record\nconst eventRecord = await $getGoogleFirestoreItem('events', eventId);\nconst completedDeliveries = (eventRecord.completedDeliveries || 0) + 1;\nconst totalTargets = eventRecord.routing.targets.length;\n\nconst eventUpdates = {\n  completedDeliveries,\n  status: completedDeliveries >= totalTargets ? 'completed' : 'processing',\n  lastDelivery: new Date().toISOString()\n};\n\nawait $setGoogleFirestoreItem('events', eventId, eventUpdates);\n\nreturn {\n  json: {\n    eventId,\n    deliveryRecord,\n    progress: {\n      completed: completedDeliveries,\n      total: totalTargets,\n      percentage: Math.round((completedDeliveries / totalTargets) * 100)\n    }\n  }\n};"
+      },
+      "id": "track-delivery",
+      "name": "Track Delivery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, eventId: $json.eventId, status: $json.eventData.status, progress: $json.progress, message: 'Event published successfully' } }}"
+      },
+      "id": "respond-to-publisher",
+      "name": "Respond to Publisher",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "event/subscribe",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "subscribe-webhook",
+      "name": "Event Subscribe Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 600],
+      "webhookId": "event-subscribe"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process event subscription request\nconst subscriptionData = $input.first().json;\nconst { sessionId, userId, eventTypes, filters = {}, endpoint } = subscriptionData;\n\n// Validate required fields\nif (!sessionId || !userId || !eventTypes || !Array.isArray(eventTypes)) {\n  throw new Error('Missing required fields: sessionId, userId, eventTypes (array)');\n}\n\n// Generate subscription ID\nconst subscriptionId = `sub_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;\n\n// Create subscription record\nconst subscription = {\n  subscriptionId,\n  sessionId,\n  userId,\n  eventTypes,\n  filters,\n  endpoint,\n  status: 'active',\n  createdAt: new Date().toISOString(),\n  lastEvent: null,\n  eventCount: 0\n};\n\nreturn { json: subscription };"
+      },
+      "id": "process-subscription",
+      "name": "Process Subscription",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "documentId": "={{ $json.subscriptionId }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "subscriptionId",
+              "fieldValue": "={{ $json.subscriptionId }}"
+            },
+            {
+              "fieldName": "sessionId",
+              "fieldValue": "={{ $json.sessionId }}"
+            },
+            {
+              "fieldName": "userId",
+              "fieldValue": "={{ $json.userId }}"
+            },
+            {
+              "fieldName": "eventTypes",
+              "fieldValue": "={{ $json.eventTypes }}"
+            },
+            {
+              "fieldName": "filters",
+              "fieldValue": "={{ $json.filters }}"
+            },
+            {
+              "fieldName": "endpoint",
+              "fieldValue": "={{ $json.endpoint }}"
+            },
+            {
+              "fieldName": "status",
+              "fieldValue": "={{ $json.status }}"
+            },
+            {
+              "fieldName": "createdAt",
+              "fieldValue": "={{ $json.createdAt }}"
+            },
+            {
+              "fieldName": "lastEvent",
+              "fieldValue": "={{ $json.lastEvent }}"
+            },
+            {
+              "fieldName": "eventCount",
+              "fieldValue": "={{ $json.eventCount }}"
+            }
+          ]
+        }
+      },
+      "id": "store-subscription",
+      "name": "Store Subscription",
+      "type": "n8n-nodes-base.googleFirestore",
+      "typeVersion": 1,
+      "position": [680, 600]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, subscriptionId: $json.subscriptionId, eventTypes: $json.eventTypes, status: 'active', message: 'Subscription created successfully' } }}"
+      },
+      "id": "respond-subscription-success",
+      "name": "Respond Subscription Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "event/replay",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "replay-webhook",
+      "name": "Event Replay Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 900],
+      "webhookId": "event-replay"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process event replay request\nconst replayData = $input.first().json;\nconst { sessionId, userId, eventId, timeRange, eventTypes, filters = {} } = replayData;\n\n// Validate request parameters\nif (!sessionId || !userId) {\n  throw new Error('Missing required fields: sessionId, userId');\n}\n\nif (!eventId && !timeRange) {\n  throw new Error('Either eventId or timeRange must be provided');\n}\n\n// Build query for events\nlet query = {\n  sessionId,\n  status: 'completed'\n};\n\nif (eventId) {\n  query.eventId = eventId;\n}\n\nif (timeRange) {\n  query.metadata = {\n    timestamp: {\n      $gte: timeRange.start,\n      $lte: timeRange.end\n    }\n  };\n}\n\nif (eventTypes && eventTypes.length > 0) {\n  query.eventType = { $in: eventTypes };\n}\n\n// Get events to replay\nconst events = await queryEvents(query);\n\n// Filter events based on user permissions and filters\nconst filteredEvents = events.filter(event => {\n  return canUserAccessEvent(userId, event, filters);\n});\n\nfunction canUserAccessEvent(userId, event, filters) {\n  // Check if user has permission to access this event\n  // This would involve checking user role, session participation, etc.\n  return true; // Placeholder - implement actual permission logic\n}\n\nasync function queryEvents(query) {\n  // Query events from database\n  // This would use actual database query logic\n  return []; // Placeholder\n}\n\nreturn {\n  json: {\n    sessionId,\n    userId,\n    replayId: `replay_${Date.now()}`,\n    events: filteredEvents,\n    totalCount: filteredEvents.length,\n    query,\n    replayStarted: new Date().toISOString()\n  }\n};"
+      },
+      "id": "process-replay-request",
+      "name": "Process Replay Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 900]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "documentId": "={{ $json.replayId }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "replayId",
+              "fieldValue": "={{ $json.replayId }}"
+            },
+            {
+              "fieldName": "sessionId",
+              "fieldValue": "={{ $json.sessionId }}"
+            },
+            {
+              "fieldName": "userId",
+              "fieldValue": "={{ $json.userId }}"
+            },
+            {
+              "fieldName": "events",
+              "fieldValue": "={{ $json.events }}"
+            },
+            {
+              "fieldName": "totalCount",
+              "fieldValue": "={{ $json.totalCount }}"
+            },
+            {
+              "fieldName": "query",
+              "fieldValue": "={{ $json.query }}"
+            },
+            {
+              "fieldName": "status",
+              "fieldValue": "active"
+            },
+            {
+              "fieldName": "startedAt",
+              "fieldValue": "={{ $json.replayStarted }}"
+            }
+          ]
+        }
+      },
+      "id": "store-replay",
+      "name": "Store Replay",
+      "type": "n8n-nodes-base.googleFirestore",
+      "typeVersion": 1,
+      "position": [680, 900]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, replayId: $json.replayId, eventCount: $json.totalCount, status: 'active', message: 'Replay started successfully' } }}"
+      },
+      "id": "respond-replay-success",
+      "name": "Respond Replay Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 900]
+    }
+  ],
+  "connections": {
+    "Event Publish Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Event": {
+      "main": [
+        [
+          {
+            "node": "Store Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Event": {
+      "main": [
+        [
+          {
+            "node": "Determine Event Routing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Event Routing": {
+      "main": [
+        [
+          {
+            "node": "Update Event Routing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Event Routing": {
+      "main": [
+        [
+          {
+            "node": "Filter and Route Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter and Route Events": {
+      "main": [
+        [
+          {
+            "node": "Route by Target Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Target Type": {
+      "main": [
+        [
+          {
+            "node": "Send WebSocket Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send AI Agent Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Service Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WebSocket Event": {
+      "main": [
+        [
+          {
+            "node": "Track Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send AI Agent Event": {
+      "main": [
+        [
+          {
+            "node": "Track Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Service Event": {
+      "main": [
+        [
+          {
+            "node": "Track Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Delivery": {
+      "main": [
+        [
+          {
+            "node": "Respond to Publisher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Event Subscribe Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Subscription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Subscription": {
+      "main": [
+        [
+          {
+            "node": "Store Subscription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Subscription": {
+      "main": [
+        [
+          {
+            "node": "Respond Subscription Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Event Replay Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Replay Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Replay Request": {
+      "main": [
+        [
+          {
+            "node": "Store Replay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Replay": {
+      "main": [
+        [
+          {
+            "node": "Respond Replay Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "America/New_York",
+    "saveManualExecutions": true,
+    "callerPolicyDefaultOption": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "id": "event-bus",
+      "name": "Event Bus"
+    },
+    {
+      "id": "orchestration",
+      "name": "Orchestration"
+    },
+    {
+      "id": "routing",
+      "name": "Routing"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-23T10:00:00.000Z",
+  "versionId": "1"
+}

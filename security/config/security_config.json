@@ -1,0 +1,273 @@
+{
+  "system": {
+    "version": "2.0.0",
+    "name": "DMLogn8n Security Scanner System",
+    "description": "Advanced security vulnerability scanning and management system",
+    "author": "DMLogn8n Security Team",
+    "license": "MIT"
+  },
+  "database": {
+    "path": "/home/activeloguser/DMLogn8n/security/data/",
+    "backup_enabled": true,
+    "backup_frequency_hours": 24,
+    "backup_retention_days": 90
+  },
+  "logging": {
+    "level": "INFO",
+    "path": "/home/activeloguser/DMLogn8n/security/logs/",
+    "rotation_size_mb": 100,
+    "retention_days": 30,
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  },
+  "notifications": {
+    "email": {
+      "enabled": false,
+      "smtp_server": "localhost",
+      "smtp_port": 587,
+      "use_tls": true,
+      "username": "",
+      "password": "",
+      "from_address": "security@dmlogn8n.local",
+      "recipients": ["admin@dmlogn8n.local"]
+    },
+    "slack": {
+      "enabled": false,
+      "webhook_url": "",
+      "channel": "#security-alerts",
+      "username": "SecurityBot"
+    },
+    "webhook": {
+      "enabled": false,
+      "url": "",
+      "timeout_seconds": 30,
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer YOUR_TOKEN"
+      }
+    }
+  },
+  "vulnerability_scanner": {
+    "enabled": true,
+    "auto_scan": false,
+    "scan_interval_hours": 24,
+    "max_concurrent_scans": 5,
+    "timeout_minutes": 30,
+    "nvd_api_key": null,
+    "github_token": null,
+    "cache_expiry_hours": 24,
+    "include_dev_dependencies": false,
+    "license_check": true,
+    "outdated_check": true
+  },
+  "dependency_checker": {
+    "enabled": true,
+    "auto_check": false,
+    "check_interval_hours": 12,
+    "max_concurrent_requests": 10,
+    "supported_ecosystems": ["npm", "pip", "maven", "gradle", "composer", "nuget", "go", "ruby", "cargo"],
+    "cache_expiry_hours": 24,
+    "include_dev_dependencies": false,
+    "license_check": true,
+    "security_advisory_sources": ["nvd", "osv", "github"]
+  },
+  "code_analyzer": {
+    "enabled": true,
+    "auto_analyze": false,
+    "analyze_interval_hours": 24,
+    "max_file_size_mb": 10,
+    "max_workers": 4,
+    "exclude_patterns": ["*.min.js", "*.min.css", "node_modules/*", ".git/*", "__pycache__/*"],
+    "include_test_files": false,
+    "deep_analysis": true,
+    "taint_analysis": true,
+    "dataflow_analysis": true,
+    "confidence_threshold": "MEDIUM",
+    "severity_threshold": "LOW",
+    "supported_languages": ["python", "javascript", "typescript", "java", "php", "c", "cpp", "csharp", "go", "ruby"]
+  },
+  "network_scanner": {
+    "enabled": true,
+    "auto_scan": false,
+    "scan_interval_hours": 48,
+    "max_concurrent_scans": 3,
+    "port_scan_timeout": 5,
+    "service_detection_timeout": 10,
+    "vulnerability_scan_timeout": 30,
+    "default_ports": "1-1000",
+    "deep_scan": true,
+    "aggressive_scan": false,
+    "scan_dns_servers": true,
+    "check_ssl_certificates": true,
+    "test_web_applications": true,
+    "dos_testing": false,
+    "exclude_networks": ["127.0.0.0/8", "169.254.0.0/16"],
+    "max_hosts_per_scan": 254,
+    "rate_limit": 100
+  },
+  "patch_manager": {
+    "enabled": true,
+    "auto_patch_enabled": false,
+    "auto_patch_critical": true,
+    "auto_patch_high": false,
+    "test_before_apply": true,
+    "backup_before_patch": true,
+    "max_concurrent_patches": 3,
+    "patch_timeout_minutes": 30,
+    "test_timeout_minutes": 10,
+    "backup_retention_days": 30,
+    "rollback_timeout_minutes": 5,
+    "maintenance_window": {
+      "start": "02:00",
+      "end": "04:00",
+      "timezone": "UTC"
+    },
+    "excluded_paths": [
+      "/home/activeloguser/DMLogn8n/security/scanner/",
+      "/home/activeloguser/DMLogn8n/security/logs/",
+      "/home/activeloguser/DMLogn8n/security/backups/"
+    ]
+  },
+  "security_monitor": {
+    "enabled": true,
+    "monitoring_interval_seconds": 5,
+    "max_events_per_minute": 1000,
+    "alert_retention_days": 30,
+    "enable_ml_detection": true,
+    "enable_network_monitoring": true,
+    "enable_process_monitoring": true,
+    "enable_file_monitoring": true,
+    "enable_log_monitoring": true,
+    "monitored_files": [
+      "/etc/passwd",
+      "/etc/shadow",
+      "/etc/hosts",
+      "/home/activeloguser/DMLogn8n/.env",
+      "/home/activeloguser/DMLogn8n/config.json"
+    ],
+    "process_whitelist": [
+      "python", "node", "npm", "nginx", "apache2", "systemd"
+    ],
+    "suspicious_processes": [
+      "nc", "netcat", "tcpdump", "wireshark", "nmap"
+    ],
+    "log_sources": [
+      "/var/log/auth.log",
+      "/var/log/syslog",
+      "/home/activeloguser/DMLogn8n/logs/*.log"
+    ],
+    "rate_limits": {
+      "login_attempts": 5,
+      "connection_attempts": 100,
+      "time_window": 300
+    }
+  },
+  "penetration_tester": {
+    "enabled": true,
+    "safety_enabled": true,
+    "production_protection": true,
+    "max_concurrent_tests": 3,
+    "default_timeout_seconds": 30,
+    "request_delay": 0.5,
+    "max_payload_size": 1024,
+    "allowed_payload_types": ["sql", "xss", "command", "file"],
+    "authorization_required": true,
+    "legal_disclaimer": "This penetration testing tool is for authorized security testing only. Users must have explicit written permission from the system owner. Unauthorized testing is illegal and unethical.",
+    "excluded_ranges": [
+      "127.0.0.0/8",
+      "169.254.0.0/16",
+      "224.0.0.0/4"
+    ]
+  },
+  "compliance_checker": {
+    "enabled": true,
+    "auto_assessment": false,
+    "assessment_frequency_days": 365,
+    "evidence_retention_days": 2555,
+    "notify_on_failure": true,
+    "integration_with_scanner": true,
+    "required_standards": ["OWASP_TOP_10", "PCI_DSS"],
+    "optional_standards": ["ISO_27001", "NIST_CSF", "SOC_2"],
+    "custom_controls": true,
+    "risk_scoring_enabled": true,
+    "automated_evidence_collection": true
+  },
+  "security_policies": {
+    "password_policy": {
+      "min_length": 12,
+      "require_uppercase": true,
+      "require_lowercase": true,
+      "require_numbers": true,
+      "require_special_chars": true,
+      "max_age_days": 90,
+      "prevent_reuse": 5
+    },
+    "access_control": {
+      "max_login_attempts": 5,
+      "lockout_duration_minutes": 30,
+      "session_timeout_minutes": 60,
+      "require_mfa": true,
+      "mfa_methods": ["totp", "sms", "email"]
+    },
+    "data_protection": {
+      "encryption_at_rest": true,
+      "encryption_in_transit": true,
+      "data_classification": ["public", "internal", "confidential", "restricted"],
+      "retention_days": {
+        "public": 2555,
+        "internal": 1825,
+        "confidential": 2555,
+        "restricted": 3650
+      }
+    },
+    "network_security": {
+      "firewall_enabled": true,
+      "intrusion_detection": true,
+      "intrusion_prevention": true,
+      "vpn_required": true,
+      "segmentation_enabled": true
+    }
+  },
+  "reporting": {
+    "auto_generate": true,
+    "generation_frequency_hours": 24,
+    "formats": ["json", "html", "pdf"],
+    "recipients": ["admin@dmlogn8n.local"],
+    "include_executive_summary": true,
+    "include_technical_details": true,
+    "include_recommendations": true,
+    "include_remediation_plan": true
+  },
+  "integrations": {
+    "siem": {
+      "enabled": false,
+      "type": "splunk",
+      "endpoint": "",
+      "authentication": {
+        "type": "token",
+        "token": ""
+      }
+    },
+    "ticketing": {
+      "enabled": false,
+      "type": "jira",
+      "endpoint": "",
+      "authentication": {
+        "type": "basic",
+        "username": "",
+        "password": ""
+      }
+    },
+    "threat_intelligence": {
+      "enabled": false,
+      "providers": ["alienvault", "recordedfuture", "crowdstrike"],
+      "api_keys": {}
+    }
+  },
+  "performance": {
+    "max_memory_mb": 2048,
+    "max_cpu_percent": 80,
+    "concurrent_scans_limit": 10,
+    "queue_size_limit": 1000,
+    "cleanup_interval_hours": 6
+  }
+}

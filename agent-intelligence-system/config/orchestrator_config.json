@@ -1,0 +1,63 @@
+{
+  "learning_cycle_interval": 300,
+  "consolidation_threshold": 10,
+  "lora_training_threshold": 50,
+  "intelligence_update_interval": 100,
+  "session_timeout": 3600,
+  "max_concurrent_sessions": 100,
+  "performance_window": 1000,
+  "auto_save_interval": 60,
+  "dashboard_websocket_url": "ws://localhost:8001/ws",
+  "database": {
+    "postgresql_url": "postgresql://localhost:5432/dmlogn8n",
+    "mongodb_url": "mongodb://localhost:27017/dmlogn8n",
+    "redis_url": "redis://localhost:6379",
+    "chroma_path": "./data/chroma"
+  },
+  "model_settings": {
+    "base_model": "microsoft/DialoGPT-medium",
+    "lora_config": {
+      "r": 8,
+      "lora_alpha": 32,
+      "target_modules": ["q_proj", "v_proj", "k_proj", "o_proj"],
+      "lora_dropout": 0.1,
+      "bias": "none",
+      "task_type": "CAUSAL_LM"
+    },
+    "training_config": {
+      "batch_size": 4,
+      "learning_rate": 5e-5,
+      "num_epochs": 3,
+      "warmup_steps": 100,
+      "save_steps": 500,
+      "eval_steps": 100
+    }
+  },
+  "memory_settings": {
+    "working_memory_duration": 300,
+    "episodic_memory_duration": 86400,
+    "semantic_consolidation_interval": 3600,
+    "forgetting_threshold": 0.1,
+    "importance_decay_rate": 0.95
+  },
+  "skill_settings": {
+    "base_xp_rate": 10,
+    "success_multiplier": 2.0,
+    "failure_multiplier": 0.5,
+    "difficulty_bonus_cap": 2.0,
+    "context_bonus_cap": 1.0,
+    "streak_bonus_cap": 1.5
+  },
+  "intelligence_metrics": {
+    "base_intelligence": 100,
+    "improvement_rate": 0.1,
+    "max_intelligence": 200,
+    "measurement_interval": 100
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/orchestrator.log",
+    "max_size": "100MB",
+    "backup_count": 5
+  }
+}

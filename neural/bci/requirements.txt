@@ -1,0 +1,230 @@
+# Core BCI Dependencies
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
+scikit-learn>=1.3.0
+
+# Machine Learning and AI
+tensorflow>=2.13.0
+torch>=2.0.0
+torchvision>=0.15.0
+keras>=2.13.0
+
+# Signal Processing
+pyOpenBCI>=0.1.1
+mne>=1.5.0
+brainflow>=5.12.0
+
+# Data Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+plotly>=5.15.0
+opencv-python>=4.8.0
+
+# GUI and Visualization
+tkinter  # Usually comes with Python
+pygame>=2.5.0
+Pillow>=10.0.0
+
+# Database and Storage
+sqlite3  # Usually comes with Python
+sqlalchemy>=2.0.0
+
+# Networking and Communication
+websockets>=11.0.3
+aiohttp>=3.8.0
+requests>=2.31.0
+
+# Security and Cryptography
+cryptography>=41.0.0
+bcrypt>=4.0.0
+passlib>=1.7.4
+PyJWT>=2.8.0
+secure>=0.3.0
+bleach>=6.0.0
+
+# Authentication and Authorization
+python-jose>=3.3.0
+python-multipart>=0.0.6
+
+# Rate Limiting
+ratelimit>=2.2.1
+
+# Async Support
+asyncio  # Usually comes with Python
+aiofiles>=23.0.0
+
+# Logging and Monitoring
+loguru>=0.7.0
+
+# Data Validation
+pydantic>=2.0.0
+marshmallow>=3.20.0
+
+# HTTP and API
+fastapi>=0.100.0
+uvicorn>=0.22.0
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+
+# Development Tools
+black>=23.7.0
+flake8>=6.0.0
+mypy>=1.4.0
+
+# Performance Monitoring
+psutil>=5.9.0
+memory-profiler>=0.61.0
+
+# Data Export/Import
+h5py>=3.9.0
+joblib>=1.3.0
+
+# Scientific Computing
+networkx>=3.1.0
+sympy>=1.12.0
+
+# Optional BCI Hardware Support
+# Uncomment if you have specific hardware:
+# emotiv>=2.0.0  # For Emotiv headsets
+# neurosky>=1.0.0  # For NeuroSky headsets
+
+# Optional VR/AR Support
+# Uncomment for VR integration:
+# openvr>=1.23.0  # For SteamVR support
+# pybullet>=3.24.0  # For physics simulation
+
+# Optional Cloud Storage
+# Uncomment for cloud integration:
+# boto3>=1.28.0  # For AWS S3
+# google-cloud-storage>=2.10.0  # For Google Cloud Storage
+
+# Time and Date
+python-dateutil>=2.8.0
+pytz>=2023.3
+
+# Progress Bars
+tqdm>=4.65.0
+
+# Configuration Management
+python-dotenv>=1.0.0
+pyyaml>=6.0.1
+
+# Memory Management
+weakref  # Usually comes with Python
+gc  # Usually comes with Python
+
+# System Information
+platform  # Usually comes with Python
+sys  # Usually comes with Python
+
+# Threading and Multiprocessing
+threading  # Usually comes with Python
+multiprocessing  # Usually comes with Python
+concurrent.futures  # Usually comes with Python
+
+# Queue Management
+queue  # Usually comes with Python
+
+# JSON and Data Serialization
+json  # Usually comes with Python
+pickle  # Usually comes with Python
+msgpack>=1.0.5
+
+# Random Number Generation
+secrets  # Usually comes with Python
+random  # Usually comes with Python
+
+# UUID Generation
+uuid  # Usually comes with Python
+
+# Base64 Encoding
+base64  # Usually comes with Python
+
+# Hashlib and Cryptographic Primitives
+hashlib  # Usually comes with Python
+hmac  # Usually comes with Python
+
+# Socket Programming
+socket  # Usually comes with Python
+struct  # Usually comes with Python
+
+# Collections and Data Structures
+collections  # Usually comes with Python
+deque  # Usually comes with Python
+
+# Math and Statistics
+math  # Usually comes with Python
+statistics  # Usually comes with Python
+
+# Path and File System
+pathlib  # Usually comes with Python
+os  # Usually comes with Python
+
+# Regular Expressions
+re  # Usually comes with Python
+
+# Time Operations
+time  # Usually comes with Python
+datetime  # Usually comes with Python
+
+# Type Hinting
+typing  # Usually comes with Python
+
+# Context Managers
+contextlib  # Usually comes with Python
+
+# Iteration Tools
+itertools  # Usually comes with Python
+
+# Functional Programming
+functools  # Usually comes with Python
+
+# Operator Overloading
+operator  # Usually comes with Python
+
+# Number Theory
+numbers  # Usually comes with Python
+
+# String Operations
+string  # Usually comes with Python
+
+# Text Processing
+textwrap  # Usually comes with Python
+
+# Command Line Interface
+argparse  # Usually comes with Python
+
+# Logging
+logging  # Usually comes with Python
+
+# Configuration File Parser
+configparser  # Usually comes with Python
+
+# Internet Protocols
+urllib.parse  # Usually comes with Python
+http.client  # Usually comes with Python
+
+# Email Processing
+email  # Usually comes with Python
+
+# Compression
+zlib  # Usually comes with Python
+gzip  # Usually comes with Python
+bz2  # Usually comes with Python
+
+# Archive Formats
+tarfile  # Usually comes with Python
+zipfile  # Usually comes with Python
+
+# Temporary Files
+tempfile  # Usually comes with Python
+
+# System-specific Parameters
+sysconfig  # Usually comes with Python
+
+# Build System
+distutils  # Usually comes with Python

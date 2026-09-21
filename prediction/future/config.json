@@ -1,0 +1,194 @@
+{
+  "predictive_engine": {
+    "default_models": ["lstm", "arima", "ensemble"],
+    "ensemble_weights": {
+      "lstm": 0.4,
+      "arima": 0.3,
+      "gradient_boosting": 0.3
+    },
+    "training": {
+      "min_data_points": 100,
+      "validation_split": 0.2,
+      "retrain_interval_hours": 24
+    },
+    "prediction": {
+      "default_horizon_hours": 24,
+      "max_horizon_hours": 168,
+      "confidence_threshold": 0.7
+    }
+  },
+  "pattern_analyzer": {
+    "detection_thresholds": {
+      "seasonal_strength": 0.3,
+      "anomaly_z_score": 3.0,
+      "correlation_coefficient": 0.3
+    },
+    "time_windows": {
+      "short_term_hours": 24,
+      "medium_term_hours": 168,
+      "long_term_hours": 720
+    },
+    "cache_size": 10000
+  },
+  "future_simulator": {
+    "monte_carlo": {
+      "default_simulations": 10000,
+      "min_simulations": 1000,
+      "max_simulations": 100000,
+      "convergence_threshold": 0.01
+    },
+    "scenarios": {
+      "optimistic_probability": 0.2,
+      "pessimistic_probability": 0.2,
+      "realistic_probability": 0.6,
+      "black_swan_probability": 0.05
+    },
+    "event_generation": {
+      "market_crash": {"probability": 0.01, "impact": -0.3},
+      "market_boom": {"probability": 0.02, "impact": 0.2},
+      "player_surge": {"probability": 0.05, "impact": 0.5},
+      "technical_issue": {"probability": 0.03, "impact": -0.2}
+    }
+  },
+  "market_predictor": {
+    "technical_indicators": {
+      "sma_windows": [10, 20, 50],
+      "ema_windows": [12, 26],
+      "rsi_period": 14,
+      "bollinger_period": 20,
+      "bollinger_std": 2.0
+    },
+    "signal_thresholds": {
+      "strong_buy": 0.8,
+      "buy": 0.6,
+      "hold": 0.4,
+      "sell": 0.2,
+      "strong_sell": 0.0
+    },
+    "risk_management": {
+      "stop_loss_atr_multiplier": 2.0,
+      "take_profit_atr_multiplier": 3.0,
+      "max_position_size": 0.1
+    }
+  },
+  "behavioral_analytics": {
+    "player_segmentation": {
+      "num_clusters": 8,
+      "min_cluster_size": 10,
+      "features": [
+        "session_frequency",
+        "avg_session_length",
+        "total_playtime",
+        "social_engagement",
+        "progression_rate",
+        "spending_rate"
+      ]
+    },
+    "churn_prediction": {
+      "risk_thresholds": {
+        "high": 0.7,
+        "medium": 0.4,
+        "low": 0.2
+      },
+      "intervention_triggers": {
+        "inactivity_days": 7,
+        "engagement_decline": 0.3,
+        "negative_sentiment": 0.6
+      }
+    },
+    "behavior_types": [
+      "casual", "hardcore", "social", "explorer",
+      "achiever", "competitive", "creative", "economic"
+    ]
+  },
+  "event_forecaster": {
+    "event_types": [
+      "natural_disaster", "political_event", "economic_crisis",
+      "technological_breakthrough", "social_movement", "military_conflict",
+      "market_crash", "player_rebellion", "magical_event"
+    ],
+    "base_rates": {
+      "natural_disaster": 0.01,
+      "political_event": 0.05,
+      "economic_crisis": 0.02,
+      "technological_breakthrough": 0.03,
+      "social_movement": 0.04,
+      "military_conflict": 0.02,
+      "market_crash": 0.03,
+      "player_rebellion": 0.02,
+      "magical_event": 0.02
+    },
+    "severity_weights": {
+      "trivial": 1,
+      "minor": 2,
+      "moderate": 3,
+      "major": 4,
+      "severe": 5,
+      "catastrophic": 6,
+      "extinction": 7
+    },
+    "dependency_threshold": 0.1,
+    "cascade_max_depth": 3
+  },
+  "ai_oracle": {
+    "insight_generation": {
+      "max_insights_per_session": 20,
+      "confidence_threshold": 0.5,
+      "domain_weights": {
+        "market": 0.25,
+        "behavioral": 0.20,
+        "events": 0.20,
+        "patterns": 0.15,
+        "simulation": 0.20
+      }
+    },
+    "recommendation_engine": {
+      "max_recommendations": 15,
+      "risk_reward_threshold": 1.5,
+      "action_types": [
+        "monitor", "prepare", "act", "invest",
+        "diverge", "strengthen", "escalate"
+      ]
+    },
+    "session_management": {
+      "max_sessions": 100,
+      "session_retention_hours": 168
+    }
+  },
+  "chaos_theory": {
+    "analysis_parameters": {
+      "embedding_dimensions": [2, 3, 4],
+      "time_delays": [1, 2, 3],
+      "min_data_points": 100,
+      "recurrence_threshold_percentile": 10
+    },
+    "lyapunov_calculation": {
+      "max_time_steps": 100,
+      "tolerance": 0.01,
+      "min_neighbors": 10
+    },
+    "complexity_thresholds": {
+      "chaos_lyapunov": 0.1,
+      "complex_lyapunov": 0.01,
+      "simple_determinism": 0.8,
+      "fractal_dimension": 2.5
+    }
+  },
+  "system": {
+    "logging": {
+      "level": "INFO",
+      "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+      "file": "prediction_system.log"
+    },
+    "performance": {
+      "max_concurrent_predictions": 10,
+      "cache_ttl_seconds": 3600,
+      "batch_size": 1000
+    },
+    "data_retention": {
+      "prediction_history_days": 30,
+      "analysis_history_days": 90,
+      "raw_data_days": 7
+    }
+  }
+}

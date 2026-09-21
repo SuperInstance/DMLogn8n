@@ -1,0 +1,107 @@
+{
+  "server": {
+    "port": 3000,
+    "host": "0.0.0.0",
+    "environment": "development",
+    "maxConnections": 1000,
+    "requestTimeout": 30000
+  },
+  "database": {
+    "mongodb": {
+      "uri": "mongodb://localhost:27017/dmlogn8n_arena",
+      "options": {
+        "maxPoolSize": 10,
+        "serverSelectionTimeoutMS": 5000,
+        "socketTimeoutMS": 45000
+      }
+    },
+    "redis": {
+      "host": "localhost",
+      "port": 6379,
+      "db": 0,
+      "keyPrefix": "dmlogn8n:",
+      "retryDelayOnFailover": 100,
+      "maxRetriesPerRequest": 3
+    }
+  },
+  "arena": {
+    "maxMatches": 100,
+    "defaultMatchDuration": 600000,
+    "spectatorDelay": 30000,
+    "maxSpectators": 1000,
+    "cleanupDelay": 300000
+  },
+  "matchmaking": {
+    "tickRate": 1000,
+    "maxWaitTime": 600000,
+    "skillRangeExpansion": 0.1,
+    "geographicPriority": true,
+    "queueTimeout": 1800000
+  },
+  "ranking": {
+    "baseELO": 1500,
+    "kFactor": 32,
+    "seasonDuration": 2592000000,
+    "leagueThresholds": {
+      "Bronze": { "min": 0, "max": 1399 },
+      "Silver": { "min": 1400, "max": 1699 },
+      "Gold": { "min": 1700, "max": 1999 },
+      "Platinum": { "min": 2000, "max": 2299 },
+      "Diamond": { "min": 2300, "max": 2599 },
+      "Master": { "min": 2600, "max": 2899 },
+      "Mythic": { "min": 2900, "max": 9999 }
+    }
+  },
+  "anticheat": {
+    "enabled": true,
+    "monitoringInterval": 1000,
+    "violationThreshold": 3,
+    "banDuration": 86400000,
+    "detectionModes": ["server", "client", "behavior", "ml"]
+  },
+  "netcode": {
+    "tickRate": 60,
+    "snapshotRate": 20,
+    "maxHistory": 300,
+    "interpolationDelay": 100,
+    "extrapolationLimit": 500,
+    "maxPacketSize": 1200,
+    "compressionEnabled": true
+  },
+  "streaming": {
+    "enabled": true,
+    "maxQuality": "1080p",
+    "defaultQuality": "720p",
+    "bufferSize": 5,
+    "chunkSize": 1024
+  },
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "file": "./logs/arena.log",
+    "maxSize": "10m",
+    "maxFiles": 5
+  },
+  "features": {
+    "tournaments": true,
+    "spectating": true,
+    "replays": true,
+    "achievements": true,
+    "leaderboards": true,
+    "analytics": true
+  },
+  "security": {
+    "rateLimiting": {
+      "enabled": true,
+      "windowMs": 900000,
+      "max": 100
+    },
+    "cors": {
+      "enabled": true,
+      "origins": ["http://localhost:3000", "https://dmlogn8n.com"]
+    },
+    "helmet": {
+      "enabled": true
+    }
+  }
+}

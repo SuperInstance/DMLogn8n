@@ -1,0 +1,456 @@
+{
+  "name": "AI System Testing Suite - Intelligence Validation",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ai/test/start",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "ai-test-trigger",
+      "name": "Start AI System Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [240, 300],
+      "webhookId": "ai-test-suite-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize AI system test configuration\nconst aiTestConfig = {\n  testId: 'ai_test_' + Date.now(),\n  startTime: new Date().toISOString(),\n  testSuite: 'ai_systems',\n  aiComponents: {\n    decisionEngine: 'character_ai_decision_engine',\n    memorySystem: 'character_memory_system',\n    personalityEngine: 'character_personality_engine',\n    learningSystem: 'character_learning_system',\n    coordinationSystem: 'multi_agent_coordination'\n  },\n  testScenarios: {\n    personalityConsistency: {\n      characterTypes: ['brave_warrior', 'cautious_mage', 'charismatic_rogue', 'wise_cleric'],\n      testSituations: ['combat', 'social', 'exploration', 'moral_dilemma'],\n      consistencyMetrics: ['trait_alignment', 'behavior_consistency', 'decision_patterns']\n    },\n    decisionQuality: {\n      complexityLevels: ['simple', 'medium', 'complex', 'strategic'],\n      decisionTypes: ['combat_tactics', 'social_interactions', 'problem_solving', 'resource_management'],\n      evaluationCriteria: ['logical_coherence', 'context_appropriateness', 'outcome_optimization', 'efficiency']\n    },\n    memoryConsolidation: {\n      memoryTypes: ['episodic', 'semantic', 'procedural', 'emotional'],\n      consolidationScenarios: ['learning_from_experience', 'relationship_building', 'skill_acquisition', 'trauma_processing'],\n      accuracyMetrics: ['recall_precision', 'context_relevance', 'emotional_weighting', 'temporal_coherence']\n    },\n    learningCurve: {\n      learningDomains: ['combat_skills', 'social_skills', 'knowledge_acquisition', 'pattern_recognition'],\n      progressionTracking: ['skill_improvement_rate', 'adaptation_speed', 'retention_rate', 'transfer_learning'],\n      difficultyProgression: ['adaptive_difficulty', 'challenge_scaling', 'mastery_indicators']\n    },\n    multiAgentCoordination: {\n      agentTypes: ['player_characters', 'npcs', 'ai_dm', 'monsters'],\n      coordinationScenarios: ['team_combat', 'social_dynamics', 'resource_sharing', 'conflict_resolution'],\n      coordinationMetrics: ['communication_efficiency', 'role_adherence', 'goal_alignment', 'conflict_resolution']\n    }\n  },\n  evaluationThresholds: {\n    personalityConsistency: 85,\n    decisionQuality: 80,\n    memoryAccuracy: 90,\n    learningEffectiveness: 75,\n    coordinationEfficiency: 85\n  }\n};\n\n$items[0].json.aiTestConfig = aiTestConfig;\n\nreturn [{\n  json: {\n    ...aiTestConfig,\n    status: 'initialized',\n    currentTest: 'character_personality_consistency'\n  }\n}];"
+      },
+      "id": "initialize-ai-test",
+      "name": "Initialize AI Test",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "personality-consistency-condition",
+              "leftValue": "={{ $json.currentTest }}",
+              "rightValue": "character_personality_consistency",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "ai-test-router",
+      "name": "Route AI Test",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ai/personality-consistency",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "characterTypes": "={{ $json.testScenarios.personalityConsistency.characterTypes }}",
+          "testSituations": "={{ $json.testScenarios.personalityConsistency.testSituations }}",
+          "consistencyMetrics": "={{ $json.testScenarios.personalityConsistency.consistencyMetrics }}",
+          "testDuration": 1800,
+          "iterationsPerType": 20,
+          "evaluationThreshold": "={{ $json.evaluationThresholds.personalityConsistency }}",
+          "testParameters": {
+n            "traitStressTesting": true,\n            "situationalVariation": true,\n            "longitudinalTracking": true,\n            "crossContextValidation": true\n          }\n        },
+        "options": {
+          "timeout": 600000\n        }\n      },
+      "id": "personality-consistency-test",
+      "name": "Character Personality Consistency Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 200]\n    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ai/decision-quality",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "complexityLevels": "={{ $json.testScenarios.decisionQuality.complexityLevels }}",
+          "decisionTypes": "={{ $json.testScenarios.decisionQuality.decisionTypes }}",
+          "evaluationCriteria": "={{ $json.testScenarios.decisionQuality.evaluationCriteria }}",
+          "testScenarios": [\n            "combat_encounter_decisions",\n            "social_interaction_choices",\n            "resource_management_dilemmas",\n            "moral_ethical_decisions",\n            "strategic_planning_choices"\n          ],\n          "benchmarkComparisons": {\n            "human_dm_baseline": true,\n            "rule_based_baseline": true,\n            "expert_player_baseline": true\n          },\n          "evaluationThreshold": "={{ $json.evaluationThresholds.decisionQuality }}"\n        },
+        "options": {
+          "timeout": 720000\n        }\n      },
+      "id": "decision-quality-test",
+      "name": "Decision Quality Assessment Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 200]\n    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ai/memory-consolidation",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "memoryTypes": "={{ $json.testScenarios.memoryConsolidation.memoryTypes }}",
+          "consolidationScenarios": "={{ $json.testScenarios.memoryConsolidation.consolidationScenarios }}",
+          "accuracyMetrics": "={{ $json.testScenarios.memoryConsolidation.accuracyMetrics }}",
+          "testConditions": {\n            "informationLoad": ['low', 'medium', 'high', 'overload'],\n            "timePressure": ['none', 'moderate', 'high', 'extreme'],\n            "emotionalStates": ['calm', 'excited', 'stressed', 'traumatized'],\n            "interferenceFactors": ['none', 'minimal', 'moderate', 'high']\n          },\n          "evaluationThreshold": "={{ $json.evaluationThresholds.memoryAccuracy }}",\n          "retentionTesting": {\n            "shortTerm": 300,\n            "mediumTerm": 3600,\n            "longTerm": 86400\n          }\n        },
+        "options": {
+          "timeout": 900000\n        }\n      },
+      "id": "memory-consolidation-test",
+      "name": "Memory Consolidation Accuracy Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 200]\n    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ai/learning-curve",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "learningDomains": "={{ $json.testScenarios.learningCurve.learningDomains }}",
+          "progressionTracking": "={{ $json.testScenarios.learningCurve.progressionTracking }}",
+          "difficultyProgression": "={{ $json.testScenarios.learningCurve.difficultyProgression }}",
+          "learningScenarios": [\n            "combat_skill_acquisition",\n            "social_skill_development",\n            "knowledge_domain_learning",\n            "pattern_recognition_training",\n            "adaptive_behavior_learning"\n          ],\n          "evaluationMetrics": {\n            "learningRate": true,\n            "retentionRate": true,\n            "transferEffectiveness": true,\n            "adaptationSpeed": true,\n            "masteryPlateauDetection": true\n          },\n          "evaluationThreshold": "={{ $json.evaluationThresholds.learningEffectiveness }}",\n          "testDuration": 3600\n        },
+        "options": {
+          "timeout": 1080000\n        }\n      },
+      "id": "learning-curve-test",
+      "name": "Learning Curve Validation Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 200]
+n    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ai/multi-agent-coordination",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "agentTypes": "={{ $json.testScenarios.multiAgentCoordination.agentTypes }}",
+          "coordinationScenarios": "={{ $json.testScenarios.multiAgentCoordination.coordinationScenarios }}",
+          "coordinationMetrics": "={{ $json.testScenarios.multiAgentCoordination.coordinationMetrics }}",
+          "testConfigurations": [\n            {\n              "scenario": "combat_team_coordination",\n              "agents": ["fighter", "wizard", "cleric", "rogue"],\n              "objectives": ["defeat_enemies", "protect_allies", "achieve_strategic_goals"],\n              "complexity": "high"\n            },\n            {\n              "scenario": "social_dynamics_management",\n              "agents": ["player_characters", "npc_allies", "npc_neutrals", "npc_hostiles"],\n              "objectives": ["maintain_relationships", "resolve_conflicts", "achieve_social_goals"],\n              "complexity": "medium"\n            },\n            {\n              "scenario": "resource_allocation_coordination",\n              "agents": ["party_members", "ai_dm", "quest_givers"],\n              "objectives": ["optimize_resource_use", "ensure_fairness", "achieve_quest_objectives"],\n              "complexity": "medium"\n            }\n          ],\n          "evaluationThreshold": "={{ $json.evaluationThresholds.coordinationEfficiency }}",\n          "stressTesting": {\n            "agentFailureSimulation": true,\n            "communicationBreakdown": true,\n            "conflictingObjectives": true,\n            "resourceConstraints": true\n          }\n        },
+        "options": {
+          "timeout": 900000\n        }\n      },
+      "id": "multi-agent-coordination-test",
+      "name": "Multi-Agent Coordination Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ai/adaptive-behavior",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "adaptationScenarios": [\n            "enemy_pattern_adaptation",\n            "environmental_change_adaptation",\n            "social_situation_adaptation",\n            "resource_constraint_adaptation",\n            "failure_recovery_adaptation"\n          ],\n          "adaptationMetrics": [\n            "response_time",\n            "adaptation_effectiveness",\n            "behavior_flexibility",\n            "learning_integration",\n            "contextual_appropriateness"\n          ],\n          "testConditions": {\n            "gradualChanges": true,\n            "suddenChanges": true,\n            "multiple_simultaneous_changes": true,\n            "repeated_pattern_changes": true\n          }\n        },
+        "options": {
+          "timeout": 600000\n        }
+      },
+      "id": "adaptive-behavior-test",
+      "name": "Adaptive Behavior Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ai/emotional-intelligence",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "emotionalScenarios": [\n            "empathy_responding",\n            "emotional_regulation",\n            "social_cue_interpretation",\n            "emotional_memory_integration",\n            "relationship_building"\n          ],\n          "emotionalMetrics": [\n            "emotional_accuracy",\n            "appropriate_response",\n            "emotional_consistency",\n            "relationship_impact",\n            "emotional_growth"\n          ],\n          "testCharacters": [\n            "empathetic_healer",\n            "stoic_warrior",\n            "impulsive_rogue",\n            "scholarly_mage"\n          ]\n        },
+        "options": {
+          "timeout": 720000\n        }
+      },
+      "id": "emotional-intelligence-test",
+      "name": "Emotional Intelligence Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ai/creativity-assessment",
+        "jsonParameters": true,
+        "json": {
+          "testId": "={{ $json.testId }}",
+          "creativityScenarios": [\n            "problem_solving_creativity",\n            "narrative_contribution",\n            "strategic_innovation",\n            "social_interaction_creativity",\n            "resourceful_thinking"\n          ],\n          "creativityMetrics": [\n            "novelty",\n            "appropriateness",\n            "effectiveness",\n            "flexibility",\n            "originality"\n          ],\n          "evaluationCriteria": {\n            "contextual_relevance": true,\n            "character_consistency": true,\n            "narrative_coherence": true,\n            "practical_feasibility": true\n          }\n        },
+        "options": {
+          "timeout": 600000\n        }
+      },
+      "id": "creativity-assessment-test",
+      "name": "Creativity Assessment Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyze AI system test results and generate comprehensive report\nconst aiTestResults = {\n  testId: $json.testId,\n  testSuite: 'ai_systems',\n  startTime: $json.startTime,\n  endTime: new Date().toISOString(),\n  totalDuration: Date.now() - new Date($json.startTime).getTime(),\n  tests: [\n    {\n      name: 'character_personality_consistency',\n      status: $json.personalityConsistencyResults ? 'passed' : 'failed',\n      consistencyScore: $json.personalityConsistencyScore || 0,\n      traitAdherence: $json.traitAdherenceScore || 0,\n      behavioralConsistency: $json.behavioralConsistencyScore || 0,\n      crossContextValidation: $json.crossContextValidationScore || 0,\n      evaluationThreshold: $json.evaluationThresholds.personalityConsistency,\n      details: $json.personalityConsistencyDetails || {}\n    },\n    {\n      name: 'decision_quality_assessment',\n      status: $json.decisionQualityResults ? 'passed' : 'failed',\n      qualityScore: $json.decisionQualityScore || 0,\n      logicalCoherence: $json.logicalCoherenceScore || 0,\n      contextAppropriateness: $json.contextAppropriatenessScore || 0,\n      outcomeOptimization: $json.outcomeOptimizationScore || 0,\n      evaluationThreshold: $json.evaluationThresholds.decisionQuality,\n      details: $json.decisionQualityDetails || {}\n    },\n    {\n      name: 'memory_consolidation_accuracy',\n      status: $json.memoryConsolidationResults ? 'passed' : 'failed',\n      accuracyScore: $json.memoryAccuracyScore || 0,\n      recallPrecision: $json.recallPrecisionScore || 0,\n      contextRelevance: $json.contextRelevanceScore || 0,\n      emotionalWeighting: $json.emotionalWeightingScore || 0,\n      evaluationThreshold: $json.evaluationThresholds.memoryAccuracy,\n      details: $json.memoryConsolidationDetails || {}\n    },\n    {\n      name: 'learning_curve_validation',\n      status: $json.learningCurveResults ? 'passed' : 'failed',\n      learningEffectiveness: $json.learningEffectivenessScore || 0,\n      adaptationSpeed: $json.adaptationSpeedScore || 0,\n      retentionRate: $json.retentionRateScore || 0,\n      transferLearning: $json.transferLearningScore || 0,\n      evaluationThreshold: $json.evaluationThresholds.learningEffectiveness,\n      details: $json.learningCurveDetails || {}\n    },\n    {\n      name: 'multi_agent_coordination',\n      status: $json.multiAgentCoordinationResults ? 'passed' : 'failed',\n      coordinationEfficiency: $json.coordinationEfficiencyScore || 0,\n      communicationQuality: $json.communicationQualityScore || 0,\n      goalAlignment: $json.goalAlignmentScore || 0,\n      conflictResolution: $json.conflictResolutionScore || 0,\n      evaluationThreshold: $json.evaluationThresholds.coordinationEfficiency,\n      details: $json.multiAgentCoordinationDetails || {}\n    },\n    {\n      name: 'adaptive_behavior',\n      status: $json.adaptiveBehaviorResults ? 'passed' : 'failed',\n      adaptationEffectiveness: $json.adaptationEffectivenessScore || 0,\n      behavioralFlexibility: $json.behavioralFlexibilityScore || 0,\n      learningIntegration: $json.learningIntegrationScore || 0,\n      contextualAppropriateness: $json.contextualAppropriatenessScore || 0,\n      details: $json.adaptiveBehaviorDetails || {}\n    },\n    {\n      name: 'emotional_intelligence',\n      status: $json.emotionalIntelligenceResults ? 'passed' : 'failed',\n      emotionalAccuracy: $json.emotionalAccuracyScore || 0,\n      empathyResponse: $json.empathyResponseScore || 0,\n      emotionalRegulation: $json.emotionalRegulationScore || 0,\n      relationshipBuilding: $json.relationshipBuildingScore || 0,\n      details: $json.emotionalIntelligenceDetails || {}\n    },\n    {\n      name: 'creativity_assessment',\n      status: $json.creativityAssessmentResults ? 'passed' : 'failed',\n      noveltyScore: $json.noveltyScore || 0,\n      appropriatenessScore: $json.appropriatenessScore || 0,\n      effectivenessScore: $json.effectivenessScore || 0,\n      originalityScore: $json.originalityScore || 0,\n      details: $json.creativityAssessmentDetails || {}\n    }\n  ],\n  overallMetrics: {\n    averageAIScore: 0,\n    totalAICapabilities: 0,\n    advancedCapabilities: 0,\n    basicCapabilities: 0,\n    learningCapabilities: 0,\n    socialCapabilities: 0\n  }\n};\n\n// Calculate AI system summary\nconst passedTests = aiTestResults.tests.filter(t => t.status === 'passed').length;\nconst totalTests = aiTestResults.tests.length;\nconst successRate = (passedTests / totalTests * 100).toFixed(1);\n\n// Calculate overall AI scores\nconst allScores = aiTestResults.tests.map(t => {\n  const scores = [\n    t.consistencyScore, t.qualityScore, t.accuracyScore, t.learningEffectiveness,\n    t.coordinationEfficiency, t.adaptationEffectiveness, t.emotionalAccuracy, t.noveltyScore\n  ].filter(s => s > 0);\n  return scores.length > 0 ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0;\n});\n\naiTestResults.overallMetrics.averageAIScore = \n  allScores.length > 0 ? allScores.reduce((sum, score) => sum + score, 0) / allScores.length : 0;\n\n// Categorize AI capabilities\naiTestResults.overallMetrics.totalAICapabilities = totalTests;\naiTestResults.overallMetrics.advancedCapabilities = \n  aiTestResults.tests.filter(t => \n    ['learning_curve_validation', 'multi_agent_coordination', 'adaptive_behavior'].includes(t.name) && \n    t.status === 'passed'\n  ).length;\naiTestResults.overallMetrics.basicCapabilities = \n  aiTestResults.tests.filter(t => \n    ['character_personality_consistency', 'decision_quality_assessment'].includes(t.name) && \n    t.status === 'passed'\n  ).length;\naiTestResults.overallMetrics.learningCapabilities = \n  aiTestResults.tests.filter(t => \n    ['memory_consolidation_accuracy', 'learning_curve_validation'].includes(t.name) && \n    t.status === 'passed'\n  ).length;\naiTestResults.overallMetrics.socialCapabilities = \n  aiTestResults.tests.filter(t => \n    ['multi_agent_coordination', 'emotional_intelligence'].includes(t.name) && \n    t.status === 'passed'\n  ).length;\n\n// Determine AI intelligence rating\nlet aiIntelligenceRating = 'exceptional';\nif (aiTestResults.overallMetrics.averageAIScore < 60) {\n  aiIntelligenceRating = 'basic';\n} else if (aiTestResults.overallMetrics.averageAIScore < 75) {\n  aiIntelligenceRating = 'intermediate';\n} else if (aiTestResults.overallMetrics.averageAIScore < 90) {\n  aiIntelligenceRating = 'advanced';\n}\n\n// Identify AI system strengths and weaknesses\nconst strengths = [];\nconst weaknesses = [];\n\naiTestResults.tests.forEach(test => {\n  const score = [\n    test.consistencyScore, test.qualityScore, test.accuracyScore, test.learningEffectiveness,\n    test.coordinationEfficiency, test.adaptationEffectiveness, test.emotionalAccuracy, test.noveltyScore\n  ].find(s => s > 0);\n  \n  if (score && score >= 90) {\n    strengths.push(test.name.replace(/_/g, ' '));\n  } else if (score && score < 70) {\n    weaknesses.push(test.name.replace(/_/g, ' '));\n  }\n});\n\nconst summary = {\n  totalTests,\n  passedTests,\n  failedTests: totalTests - passedTests,\n  successRate: parseFloat(successRate),\n  overallStatus: successRate >= 80 ? 'passed' : successRate >= 60 ? 'warning' : 'failed',\n  aiIntelligenceRating,\n  overallMetrics: aiTestResults.overallMetrics,\n  strengths,\n  weaknesses\n};\n\nreturn [{\n  json: {\n    testSuite: 'ai_systems',\n    ...aiTestResults,\n    summary,\n    status: summary.overallStatus,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "analyze-ai-results",
+      "name": "Analyze AI Test Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ai/test/results",
+        "jsonParameters": true,
+        "json": "={{ $json }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "save-ai-results",
+      "name": "Save AI Test Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "return-ai-report",
+      "name": "Return AI Test Report",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate AI system improvement recommendations\nconst recommendations = [];\nconst insights = [];\n\n// Analyze test results for specific recommendations\n$json.tests.forEach(test => {\n  const score = [\n    test.consistencyScore, test.qualityScore, test.accuracyScore, test.learningEffectiveness,\n    test.coordinationEfficiency, test.adaptationEffectiveness, test.emotionalAccuracy, test.noveltyScore\n  ].find(s => s > 0);\n  \n  if (test.name === 'character_personality_consistency' && score < 85) {\n    recommendations.push({\n      category: 'personality_engine',\n      priority: 'high',\n      issue: 'Personality consistency below threshold',\n      suggestion: 'Enhance personality model with stronger trait reinforcement and context-aware decision weighting'\n    });\n  }\n  \n  if (test.name === 'decision_quality_assessment' && score < 80) {\n    recommendations.push({\n      category: 'decision_engine',\n      priority: 'high',\n      issue: 'Decision quality needs improvement',\n      suggestion: 'Implement more sophisticated decision trees with better context understanding and outcome prediction'\n    });\n  }\n  \n  if (test.name === 'memory_consolidation_accuracy' && score < 90) {\n    recommendations.push({\n      category: 'memory_system',\n      priority: 'medium',\n      issue: 'Memory consolidation accuracy below optimal',\n      suggestion: 'Improve memory weighting algorithms and contextual relevance scoring'\n    });\n  }\n  \n  if (test.name === 'learning_curve_validation' && score < 75) {\n    recommendations.push({\n      category: 'learning_system',\n      priority: 'high',\n      issue: 'Learning effectiveness below expectations',\n      suggestion: 'Enhance learning algorithms with better pattern recognition and feedback integration'\n    });\n  }\n  \n  if (test.name === 'multi_agent_coordination' && score < 85) {\n    recommendations.push({\n      category: 'coordination_system',\n      priority: 'medium',\n      issue: 'Multi-agent coordination needs improvement',\n      suggestion: 'Improve communication protocols and goal alignment mechanisms'\n    });\n  }\n});\n\n// Generate insights based on overall performance\nif ($json.summary.aiIntelligenceRating === 'exceptional') {\n  insights.push({\n    type: 'achievement',\n    message: 'AI system demonstrates exceptional intelligence across all tested capabilities'\n  });\n} else if ($json.summary.aiIntelligenceRating === 'advanced') {\n  insights.push({\n    type: 'strength',\n    message: 'AI system shows advanced capabilities with room for specialized improvements'\n  });\n} else if ($json.summary.aiIntelligenceRating === 'basic') {\n  insights.push({\n    type: 'improvement_needed',\n    message: 'AI system requires fundamental improvements to reach advanced capability levels'\n  });\n}\n\n// Capability balance analysis\nconst learningCap = $json.overallMetrics.learningCapabilities;\nconst socialCap = $json.overallMetrics.socialCapabilities;\nconst advancedCap = $json.overallMetrics.advancedCapabilities;\n\nif (learningCap > socialCap) {\n  insights.push({\n    type: 'imbalance',\n    message: 'Learning capabilities exceed social capabilities - consider enhancing emotional intelligence'\n  });\n} else if (socialCap > learningCap) {\n  insights.push({\n    type: 'imbalance',\n    message: 'Social capabilities exceed learning capabilities - consider improving learning algorithms'\n  });\n}\n\nif (advancedCap < 2) {\n  recommendations.push({\n    category: 'advanced_features',\n    priority: 'medium',\n    issue: 'Limited advanced AI capabilities',\n    suggestion: 'Focus on developing adaptive behavior and multi-agent coordination features'\n  });\n}\n\nreturn [{\n  json: {\n    testId: $json.testId,\n    recommendations,\n    insights,\n    summary: {\n      totalRecommendations: recommendations.length,\n      highPriorityIssues: recommendations.filter(r => r.priority === 'high').length,\n      mediumPriorityIssues: recommendations.filter(r => r.priority === 'medium').length,\n      keyInsights: insights.length\n    },\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "generate-ai-recommendations",
+      "name": "Generate AI Recommendations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/ai/recommendations",
+        "jsonParameters": true,
+        "json": "={{ $json }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "save-ai-recommendations",
+      "name": "Save AI Recommendations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2000, 500]
+    }
+  ],
+  "connections": {
+    "Start AI System Test": {
+      "main": [
+        [
+          {
+            "node": "Initialize AI Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize AI Test": {
+      "main": [
+        [
+          {
+            "node": "Route AI Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route AI Test": {
+      "main": [
+        [
+          {
+            "node": "Character Personality Consistency Test",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Multi-Agent Coordination Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Character Personality Consistency Test": {
+      "main": [
+        [
+          {
+            "node": "Decision Quality Assessment Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decision Quality Assessment Test": {
+      "main": [
+        [
+          {
+            "node": "Memory Consolidation Accuracy Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory Consolidation Accuracy Test": {
+      "main": [
+        [
+          {
+            "node": "Learning Curve Validation Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Learning Curve Validation Test": {
+      "main": [
+        [
+          {
+            "node": "Analyze AI Test Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Multi-Agent Coordination Test": {
+      "main": [
+        [
+          {
+            "node": "Adaptive Behavior Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Adaptive Behavior Test": {
+      "main": [
+        [
+          {
+            "node": "Emotional Intelligence Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Emotional Intelligence Test": {
+      "main": [
+        [
+          {
+            "node": "Creativity Assessment Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Creativity Assessment Test": {
+      "main": [
+        [
+          {
+            "node": "Analyze AI Test Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze AI Test Results": {
+      "main": [
+        [
+          {
+            "node": "Save AI Test Results",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate AI Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save AI Test Results": {
+      "main": [
+        [
+          {
+            "node": "Return AI Test Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate AI Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Save AI Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T16:30:00.000Z",
+      "updatedAt": "2024-10-23T16:30:00.000Z",
+      "id": "tag-ai-testing",
+      "name": "AI Testing"
+    },
+    {
+      "createdAt": "2024-10-23T16:30:00.000Z",
+      "updatedAt": "2024-10-23T16:30:00.000Z",
+      "id": "tag-intelligence",
+      "name": "Intelligence"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T16:30:00.000Z",
+  "versionId": "1"
+}

@@ -1,0 +1,60 @@
+{
+  "system": {
+    "version": "1.0.0",
+    "name": "DMlogn8n Companion Pet System",
+    "description": "AI-driven companion pets with evolution mechanics",
+    "author": "DMlogn8n Team",
+    "enabled": true
+  },
+  "gameplay": {
+    "maxActivePets": 5,
+    "maxPetLevel": 100,
+    "evolutionStages": 5,
+    "trainingCooldownMinutes": 60,
+    "feedingCooldownMinutes": 120,
+    "breedingCooldownHours": 24,
+    "bondingDecayRate": 0.1
+  },
+  "ai": {
+    "updateInterval": 5000,
+    "learningRate": 0.01,
+    "memoryDepth": 100,
+    "emotionUpdateRate": 10000,
+    "behaviorComplexity": "high",
+    "autonomousActions": true
+  },
+  "evolution": {
+    "experienceMultiplier": 1.0,
+    "skillPointRate": 1,
+    "traitMutationChance": 0.1,
+    "evolutionRequirements": {
+      "levelThresholds": [10, 25, 50, 75, 100],
+      "bondingRequirements": [20, 40, 60, 80, 95],
+      "skillRequirements": true,
+      "specialConditions": true
+    }
+  },
+  "combat": {
+    "enabled": true,
+    "petDamageMultiplier": 0.7,
+    "petHealthMultiplier": 0.6,
+    "abilityCooldownReduction": 0.1,
+    "supportEffectiveness": 1.2,
+    "tournamentEnabled": true
+  },
+  "care": {
+    "happinessDecayRate": 0.05,
+    "hungerDecayRate": 0.08,
+    "cleanlinessDecayRate": 0.06,
+    "groomingBonus": 15,
+    "feedingBonus": 20,
+    "playBonus": 10
+  },
+  "acquisition": {
+    "tamingSuccessBase": 0.3,
+    "summoningCostMultiplier": 1.0,
+    "breedingSuccessBase": 0.6,
+    "questRewardChance": 0.15,
+    "eventDropChance": 0.05
+  }
+}

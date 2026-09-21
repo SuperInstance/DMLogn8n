@@ -1,0 +1,283 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+  labels:
+    app: cert-manager
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: security@dmlog.com
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+      selector: {}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+  labels:
+    app: cert-manager
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: security@dmlog.com
+    privateKeySecretRef:
+      name: letsencrypt-staging
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+      selector: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: dmlog-wildcard
+  namespace: cert-manager
+  labels:
+    app: cert-manager
+spec:
+  secretName: dmlog-wildcard-tls
+  secretTemplate:
+    annotations:
+      cert-manager.io/enable-renewal: "true"
+      cert-manager.io/renew-before: "720h"  # 30 days before expiry
+  dns01Providers:
+    cloudflare:
+      apiTokenSecretRef:
+        name: cloudflare-api-token
+        key: api-token
+  commonName: "*.dmlog.com"
+  dnsNames:
+  - "dmlog.com"
+  - "*.dmlog.com"
+  - "app.dmlog.com"
+  - "api.dmlog.com"
+  - "monitoring.dmlog.com"
+  - "logs.dmlog.com"
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: dmlog-internal-ca
+  namespace: cert-manager
+  labels:
+    app: cert-manager
+spec:
+  isCA: true
+  secretName: dmlog-internal-ca-keypair
+  commonName: "DMLog Internal CA"
+  duration: 8760h  # 1 year
+  renewBefore: 720h  # 30 days before expiry
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS1
+    size: 4096
+  usages:
+  - digital signature
+  - key encipherment
+  - cert sign
+  - crl sign
+  issuerRef:
+    name: dmlog-selfsigned-issuer
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: dmlog-selfsigned-issuer
+  labels:
+    app: cert-manager
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: dmlog-internal-issuer
+  labels:
+    app: cert-manager
+spec:
+  ca:
+    secretName: dmlog-internal-ca-keypair
+---
+# Certificate for internal services
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: dmlog-backend
+  namespace: dmlog
+  labels:
+    app: dmlog
+    component: backend
+spec:
+  secretName: dmlog-backend-tls
+  secretTemplate:
+    annotations:
+      cert-manager.io/enable-renewal: "true"
+  dnsNames:
+  - "backend-service.dmlog.svc.cluster.local"
+  - "backend-service.dmlog.svc"
+  - "backend-service"
+  issuerRef:
+    name: dmlog-internal-issuer
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: dmlog-frontend
+  namespace: dmlog
+  labels:
+    app: dmlog
+    component: frontend
+spec:
+  secretName: dmlog-frontend-tls
+  secretTemplate:
+    annotations:
+      cert-manager.io/enable-renewal: "true"
+  dnsNames:
+  - "frontend-service.dmlog.svc.cluster.local"
+  - "frontend-service.dmlog.svc"
+  - "frontend-service"
+  issuerRef:
+    name: dmlog-internal-issuer
+    kind: ClusterIssuer
+---
+# Certificate monitoring and alerts
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: certificate-monitor
+  namespace: cert-manager
+  labels:
+    app: cert-monitor
+spec:
+  schedule: "0 8 * * *"  # Daily at 8 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: cert-monitor
+          restartPolicy: OnFailure
+          containers:
+          - name: cert-monitor
+            image: alpine/k8s:1.25.0
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Checking certificate expiry at $(date)"
+
+              # Get all certificates
+              kubectl get certificates --all-namespaces -o custom-columns=NAME:.metadata.name,NAMESPACE:.metadata.namespace,SECRET:.spec.secretName --no-headers > /tmp/certs.txt
+
+              # Check each certificate
+              while read cert_name namespace secret_name; do
+                echo "Checking certificate: $cert_name in namespace: $namespace"
+
+                # Get certificate expiry
+                expiry=$(kubectl get secret $secret_name -n $namespace -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -enddate | cut -d= -f2)
+                expiry_timestamp=$(date -d "$expiry" +%s)
+                current_timestamp=$(date +%s)
+                days_until_expiry=$(( (expiry_timestamp - current_timestamp) / 86400 ))
+
+                echo "Certificate $cert_name expires in $days_until_expiry days"
+
+                if [ $days_until_expiry -lt 30 ]; then
+                  echo "WARNING: Certificate $cert_name expires in less than 30 days!"
+
+                  # Send alert to Slack
+                  curl -X POST -H 'Content-type: application/json' \
+                    --data "{\"text\":\"⚠️ Certificate $cert_name in namespace $namespace expires in $days_until_expiry days\"}" \
+                    "$SLACK_WEBHOOK_URL"
+
+                  # Send email
+                  echo "Certificate $cert_name expires in $days_until_expiry days" | \
+                    mail -s "Certificate Expiry Warning: $cert_name" security@dmlog.com
+                fi
+              done < /tmp/certs.txt
+
+              echo "Certificate check completed at $(date)"
+            env:
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: cert-monitor-secrets
+                  key: slack-webhook-url
+            - name: EMAIL_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: cert-monitor-secrets
+                  key: email-username
+            - name: EMAIL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cert-monitor-secrets
+                  key: email-password
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 200m
+                memory: 256Mi
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ServiceAccount
+metadata:
+  name: cert-monitor
+  namespace: cert-manager
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cert-monitor
+rules:
+- apiGroups: ["cert-manager.io"]
+  resources: ["certificates"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cert-monitor
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cert-monitor
+subjects:
+- kind: ServiceAccount
+  name: cert-monitor
+  namespace: cert-manager
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cert-monitor-secrets
+  namespace: cert-manager
+type: Opaque
+data:
+  slack-webhook-url: <BASE64_ENCODED_SLACK_WEBHOOK_URL>
+  email-username: <BASE64_ENCODED_EMAIL_USERNAME>
+  email-password: <BASE64_ENCODED_EMAIL_PASSWORD>
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudflare-api-token
+  namespace: cert-manager
+type: Opaque
+data:
+  api-token: <BASE64_ENCODED_CLOUDFLARE_API_TOKEN>

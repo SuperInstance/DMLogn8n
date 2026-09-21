@@ -1,0 +1,59 @@
+{
+  "service": {
+    "name": "dmlogn8n-dialogue-system",
+    "id": "dialogue-system-1",
+    "tags": [
+      "dialogue-system",
+      "agent-service",
+      "dmlogn8n",
+      "lb-weight:4",
+      "version:1.0.0"
+    ],
+    "address": "dialogue-system.dmlogn8n.local",
+    "port": 8082,
+    "meta": {
+      "service_id": "dialogue-system-1",
+      "service_type": "agent-service",
+      "version": "1.0.0",
+      "owner": "ai-team",
+      "team": "ai",
+      "environment": "production",
+      "region": "us-east-1",
+      "availability_zone": "us-east-1a",
+      "max_connections": "300",
+      "lb_weight": "4",
+      "agent_type": "dialogue_agent",
+      "capabilities": "natural_language_processing,dialogue_generation,context_management"
+    },
+    "enable_tag_override": false,
+    "check": {
+      "id": "dialogue-system-health",
+      "name": "Dialogue System Health Check",
+      "http": "http://dialogue-system.dmlogn8n.local:8082/health",
+      "method": "GET",
+      "interval": "10s",
+      "timeout": "3s",
+      "deregister_critical_service_after": "30s",
+      "success_before_passing": 3,
+      "failures_before_critical": 3
+    },
+    "connect": {
+      "sidecar_service": {
+        "proxy": {
+          "config": {
+            "upstreams": [
+              {
+                "destination_name": "character-portal",
+                "local_bind_port": 20021
+              },
+              {
+                "destination_name": "qdrant",
+                "local_bind_port": 20022
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

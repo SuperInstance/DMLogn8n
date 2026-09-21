@@ -1,0 +1,308 @@
+I'll walk you through building a comprehensive coding agent in n8n using the Z.ai GLM-4.6 API. Let's build this step by step with detailed explanations.
+
+## 🏗️ Architecture Overview
+
+We're going to create a system where:
+- **Manager agents** (non-coders) can request coding tasks
+- **Coding specialist** (Z.ai GLM-4.6) handles the actual coding
+- **Communication** happens via n8n workflows
+
+Let me start with the core component - the Z.ai coding agent.
+
+## 🔧 Step 1: Setting Up the Z.ai HTTP Request Node
+
+### 1.1 Create New Workflow
+First, create a new workflow in n8n called "Z.ai Coding Agent".
+
+**What's happening**: This workflow will become our dedicated coding specialist that other agents can call.
+
+### 1.2 Add HTTP Request Node
+Add an HTTP Request node and configure it:
+
+```json
+// HTTP Request Node Configuration:
+{
+  "Method": "POST",
+  "URL": "https://api.z.ai/v1/chat/completions",
+  "Headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer YOUR_ZAI_API_KEY"
+  },
+  "Body": {
+    "model": "glm-4-6",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a specialized coding assistant. You respond with clean, functional code. Always include brief comments. If the request is ambiguous, ask for clarification but generally assume the requester knows what they need."
+      },
+      {
+        "role": "user", 
+        "content": "{{ $json.user_request }}"
+      }
+    ],
+    "max_tokens": 4000,
+    "temperature": 0.1
+  }
+}
+```
+
+**Explanation of key components**:
+- **URL**: This is Z.ai's API endpoint for chat completions
+- **Authorization**: Your API key authenticates the request (you'll need to get this from Z.ai's platform)
+- **System Prompt**: This defines the agent's personality and behavior - it's always a coding specialist
+- **User Content**: `{{ $json.user_request }}` is a placeholder that will be replaced with actual requests from other agents
+- **Temperature**: 0.1 makes the output more deterministic (better for code)
+
+### 1.3 Set Up Authentication
+Create a credential for Z.ai in n8n:
+
+1. Go to **Credentials** → **Add Credential**
+2. Choose **HTTP Header Auth** 
+3. Set:
+   - **Name**: "Z.ai API"
+   - **Header Name**: "Authorization"
+   - **Value**: "Bearer YOUR_ACTUAL_API_KEY"
+
+**What's happening**: This securely stores your API key and automatically adds it to the request headers.
+
+## 🎯 Step 2: Processing the Response
+
+### 2.1 Add JavaScript Node for Response Processing
+After the HTTP Request node, add a Code Node to process the response:
+
+```javascript
+// JavaScript Code Node - "Process Coding Response"
+const response = $input.all()[0].json;
+
+// Extract the actual code from the API response
+if (response.choices && response.choices.length > 0) {
+  const codeResponse = response.choices[0].message.content;
+  
+  // Extract just the code blocks if they exist
+  const codeMatch = codeResponse.match(/```(?:\w+)?\n([\s\S]*?)```/);
+  
+  return {
+    original_request: $input.all()[0].json.user_request,
+    full_response: codeResponse,
+    extracted_code: codeMatch ? codeMatch[1] : codeResponse,
+    usage: response.usage,
+    timestamp: new Date().toISOString()
+  };
+} else {
+  throw new Error("No response from coding agent");
+}
+```
+
+**Explanation**:
+- **`$input.all()[0].json`**: Gets the JSON response from the HTTP request
+- **Regex matching**: Extracts code between ``` ``` blocks (common in AI responses)
+- **Structured output**: Returns both the raw response and cleaned code for flexibility
+- **Error handling**: Throws an error if the API returns no response
+
+### 2.2 Add Error Handling Node
+Add another Code Node for error handling:
+
+```javascript
+// JavaScript Code Node - "Error Handler"
+const errorMessage = $input.all()[0].json?.message || "Unknown error occurred";
+
+return {
+  success: false,
+  error: errorMessage,
+  original_request: $input.all()[0].json?.user_request || "Unknown",
+  timestamp: new Date().toISOString()
+};
+```
+
+**What's happening**: This catches API errors and returns structured error information instead of breaking the workflow.
+
+## 🔄 Step 3: Making the Agent Callable
+
+### 3.1 Set Up Webhook Trigger
+Add a Webhook node as the trigger:
+
+- **Webhook Type**: POST
+- **Path**: `/coding-agent`
+- **Response Mode**: "Last Node"
+
+**Explanation**: This creates an endpoint that other workflows can call via HTTP POST requests.
+
+### 3.2 Final Workflow Structure
+Your complete workflow should look like:
+
+```
+Webhook Trigger 
+    ↓
+HTTP Request (Z.ai API)
+    ↓
+IF Error? → Error Handler
+    ↓
+Process Coding Response → Webhook Response
+```
+
+## 🤝 Step 4: Creating Manager Agents
+
+Now let's create a simple manager agent that can call our coding specialist.
+
+### 4.1 Create "Manager Agent" Workflow
+Create a new workflow called "Task Manager".
+
+### 4.2 Add Trigger (Example: Manual Trigger for Testing)
+Start with a Manual Trigger node, and add a Code Node:
+
+```javascript
+// JavaScript Code Node - "Generate Coding Task"
+// This simulates a non-coding agent needing help
+const codingTasks = [
+  "Create a Python script to rename all .txt files in a folder with timestamp prefixes",
+  "Write a JavaScript function to validate email addresses with regex",
+  "Create a bash script to backup a directory and compress it"
+];
+
+const randomTask = codingTasks[Math.floor(Math.random() * codingTasks.length)];
+
+return {
+  user_request: randomTask,
+  requester_id: "manager_agent_001",
+  priority: "medium",
+  context: "This is for automating project file management"
+};
+```
+
+### 4.3 Call the Coding Specialist
+Add an HTTP Request node to call your coding agent:
+
+```json
+// HTTP Request Node Configuration:
+{
+  "Method": "POST",
+  "URL": "https://your-n8n-instance.com/webhook/coding-agent",
+  "Headers": {
+    "Content-Type": "application/json"
+  },
+  "Body": {
+    "user_request": "{{ $json.user_request }}",
+    "requester_id": "{{ $json.requester_id }}",
+    "priority": "{{ $json.priority }}",
+    "context": "{{ $json.context }}"
+  }
+}
+```
+
+**What's happening**: This manager agent generates a task and passes it to our coding specialist via the webhook we created.
+
+## 🧪 Step 5: Testing the System
+
+### 5.1 Test the Coding Agent Directly
+1. Open your "Z.ai Coding Agent" workflow
+2. Test the Webhook node by sending a POST request:
+
+```bash
+curl -X POST https://your-n8n-instance.com/webhook/coding-agent \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_request": "Create a Python script to list all files larger than 100MB in a directory",
+    "requester_id": "test_agent",
+    "priority": "high"
+  }'
+```
+
+### 5.2 Test End-to-End Flow
+1. Activate both workflows
+2. Execute the Manual Trigger in your "Task Manager"
+3. Watch the data flow through both workflows
+
+## 🚀 Step 6: Advanced Features
+
+### 6.1 Add Rate Limiting
+Add a Code Node before the HTTP Request to prevent API abuse:
+
+```javascript
+// JavaScript Code Node - "Rate Limiter"
+const MAX_REQUESTS_PER_MINUTE = 10;
+
+// You'd typically store this in a database, but for simplicity:
+const requestCount = 0; // In real implementation, track this externally
+
+if (requestCount > MAX_REQUESTS_PER_MINUTE) {
+  throw new Error("Rate limit exceeded. Please try again later.");
+}
+
+return $input.all()[0].json;
+```
+
+### 6.2 Add Code Validation
+Add a Code Node to validate the generated code:
+
+```javascript
+// JavaScript Code Node - "Validate Code"
+const response = $input.all()[0].json;
+
+// Basic validation - check if it looks like code
+function looksLikeCode(text) {
+  const codeIndicators = [
+    'function', 'def ', 'import ', 'const ', 'let ', 'var ',
+    'class ', 'if (', 'for ', 'while ', 'return '
+  ];
+  
+  return codeIndicators.some(indicator => 
+    text.toLowerCase().includes(indicator.toLowerCase())
+  );
+}
+
+return {
+  ...response,
+  validation: {
+    looks_like_code: looksLikeCode(response.extracted_code),
+    code_length: response.extracted_code.length,
+    has_comments: response.extracted_code.includes('//') || 
+                  response.extracted_code.includes('#')
+  }
+};
+```
+
+## 📊 Step 7: Monitoring and Logging
+
+### 7.1 Add Analytics Node
+Add a Code Node to log all requests:
+
+```javascript
+// JavaScript Code Node - "Request Logger"
+const requestData = $input.all()[0].json;
+
+// In production, you'd save this to a database
+console.log('Coding Request:', {
+  timestamp: new Date().toISOString(),
+  requester: requestData.requester_id,
+  request_length: requestData.user_request.length,
+  priority: requestData.priority
+});
+
+return requestData;
+```
+
+## 🔄 Complete Workflow Summary
+
+Your final Z.ai coding agent workflow should have these nodes in sequence:
+
+1. **Webhook Trigger** - Receives requests
+2. **Request Logger** - Logs incoming requests  
+3. **Rate Limiter** - Prevents abuse
+4. **HTTP Request** - Calls Z.ai API
+5. **IF Node** - Checks for errors
+6. **Error Handler** (if error) - Handles API errors
+7. **Process Response** (if no error) - Extracts code
+8. **Validate Code** - Basic code validation
+9. **Webhook Response** - Returns final result
+
+## 🎯 Next Steps for Production
+
+1. **Replace the manual API key** with n8n credentials
+2. **Add persistent storage** for request logging
+3. **Implement proper rate limiting** with Redis or database
+4. **Add authentication** for webhook endpoints
+5. **Create multiple specialist agents** (web scraping, data analysis, etc.)
+
+This gives you a robust, callable coding agent that any other n8n workflow can use. The key insight is that we're using n8n's webhook and HTTP request capabilities to create an "agent network" where specialized workers (like your Z.ai coder) can be called by generalist managers.
+
+Would you like me to elaborate on any of these steps or help you adapt this for your specific use case?

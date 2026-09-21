@@ -1,0 +1,664 @@
+# =============================================================================
+# Production Docker Compose for DMLogn8n
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # =============================================================================
+  # API Gateway
+  # =============================================================================
+  api-gateway:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.gateway
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+    environment:
+      - GATEWAY_MODE=production
+      - REDIS_URL=redis://redis:6379/3
+      - CONSUL_HOST=consul
+      - PROMETHEUS_ENABLED=true
+      - RATE_LIMIT_REDIS=redis://redis:6379/4
+    depends_on:
+      - redis
+      - consul
+    volumes:
+      - ./ssl:/app/ssl:ro
+    networks:
+      - dmlogn8n-public
+      - dmlogn8n-internal
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # =============================================================================
+  # Authentication Service
+  # =============================================================================
+  auth-service:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.auth
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/dmlogn8n_auth
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=${JWT_SECRET}
+      - CASSANDRA_HOSTS=cassandra:9042
+    depends_on:
+      - postgres
+      - redis
+      - cassandra
+    volumes:
+      - auth_data:/app/data
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  # =============================================================================
+  # Multi-Portal Gateway with Parallel Services
+  # =============================================================================
+  gateway:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.gateway-parallel
+    environment:
+      - GATEWAY_MODE=production
+      - MAX_AGENTS=1000
+      - MAX_WORKERS=200
+      - REDIS_HOST=redis
+      - POSTGRES_HOST=postgres
+      - NEO4J_HOST=neo4j
+      - QDRANT_HOST=qdrant
+      - INFLUX_HOST=influxdb
+    depends_on:
+      - redis
+      - postgres
+      - neo4j
+      - qdrant
+      - influxdb
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+  # =============================================================================
+  # AI Model Pools Service
+  # =============================================================================
+  ai-pools:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.ai-pools
+    environment:
+      - REDIS_HOST=redis
+      - GLM4_ENDPOINT=${GLM4_ENDPOINT}
+      - GLM4_API_KEY=${GLM4_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    depends_on:
+      - redis
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+    deploy:
+      replicas: 5
+      resources:
+        limits:
+          cpus: '2'
+          memory: 8G
+          # GPU support if available
+          # deploy:
+          #   resources:
+          #     reservations:
+          #       devices:
+          #         - driver: nvidia
+          #           count: 1
+          #           capabilities: [gpu]
+
+  # =============================================================================
+  # World Simulation Service
+  # =============================================================================
+  world-sim:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.world-sim
+    environment:
+      - NUM_REGIONS=100
+      - TICK_RATE=20
+      - REDIS_HOST=redis
+      - POSTGRES_HOST=postgres
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+
+  # =============================================================================
+  # Dialogue Service
+  # =============================================================================
+  dialogue-service:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.dialogue
+    environment:
+      - MAX_CONCURRENT_DIALOGUES=1000
+      - REDIS_HOST=redis
+      - GLM4_API_KEY=${GLM4_API_KEY}
+    depends_on:
+      - redis
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+
+  # =============================================================================
+  # Combat Engine
+  # =============================================================================
+  combat-engine:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.combat
+    environment:
+      - MAX_CONCURRENT_ENCOUNTERS=500
+      - REDIS_HOST=redis
+    depends_on:
+      - redis
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  # =============================================================================
+  # Metrics System
+  # =============================================================================
+  metrics:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.metrics
+    environment:
+      - REDIS_HOST=redis
+      - INFLUX_HOST=influxdb
+      - PROMETHEUS_ENABLED=true
+    depends_on:
+      - redis
+      - influxdb
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  # =============================================================================
+  # Frontend Applications
+  # =============================================================================
+  player-dashboard:
+    build:
+      context: ../../frontend/player-dashboard
+      dockerfile: ../../deployment/docker/Dockerfile.react
+    environment:
+      - REACT_APP_API_URL=http://api-gateway:8000
+      - REACT_APP_WS_URL=ws://api-gateway:8000
+    networks:
+      - dmlogn8n-public
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+
+  gm-dashboard:
+    build:
+      context: ../../frontend/gm-dashboard
+      dockerfile: ../../deployment/docker/Dockerfile.react
+    environment:
+      - REACT_APP_API_URL=http://api-gateway:8000
+      - REACT_APP_WS_URL=ws://api-gateway:8000
+    networks:
+      - dmlogn8n-public
+    restart: unless-stopped
+    deploy:
+      replicas: 1
+
+  admin-dashboard:
+    build:
+      context: ../../frontend/admin-dashboard
+      dockerfile: ../../deployment/docker/Dockerfile.react
+    environment:
+      - REACT_APP_API_URL=http://api-gateway:8000
+    networks:
+      - dmlogn8n-public
+    restart: unless-stopped
+    deploy:
+      replicas: 1
+
+  # =============================================================================
+  # Load Balancer (Nginx)
+  # =============================================================================
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./logs/nginx:/var/log/nginx
+    depends_on:
+      - api-gateway
+      - player-dashboard
+      - gm-dashboard
+      - admin-dashboard
+    networks:
+      - dmlogn8n-public
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+
+  # =============================================================================
+  # Databases and Storage
+  # =============================================================================
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=dmlogn8n
+      - POSTGRES_USER=dmlogn8n_user
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --locale=C
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+      - ./backups/postgres:/backups
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  cassandra:
+    image: cassandra:4
+    environment:
+      - CASSANDRA_CLUSTER_NAME=DMLogn8n
+      - CASSANDRA_DC=DC1
+      - CASSANDRA_RACK=RAC1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - CASSANDRA_NUM_TOKENS=256
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  neo4j:
+    image: neo4j:5-enterprise
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD}
+      - NEO4J_PLUGINS=["apoc", "graph-data-science"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*,gds.*
+      - NEO4J_dbms_memory_heap_initial__size=512m
+      - NEO4J_dbms_memory_heap_max__size=2G
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+      - ./neo4j/plugins:/plugins
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+
+  influxdb:
+    image: influxdb:2.7-alpine
+    environment:
+      - INFLUXDB_DB=dmlogn8n_metrics
+      - INFLUXDB_ADMIN_USER=admin
+      - INFLUXDB_ADMIN_PASSWORD=${INFLUXDB_PASSWORD}
+      - INFLUXDB_USER=dmlogn8n
+      - INFLUXDB_USER_PASSWORD=${INFLUXDB_PASSWORD}
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+      - influxdb_config:/etc/influxdb2
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  mongodb:
+    image: mongo:6
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGODB_PASSWORD}
+      - MONGO_INITDB_DATABASE=dmlogn8n
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongodb/init:/docker-entrypoint-initdb.d
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.7.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  # =============================================================================
+  # Service Discovery
+  # =============================================================================
+  consul:
+    image: consul:1.15
+    ports:
+      - "8500:8500"
+    volumes:
+      - consul_data:/consul/data
+      - ./consul/config:/consul/config
+    command: consul agent -server -bootstrap -ui -client=0.0.0.0
+    networks:
+      - dmlogn8n-internal
+      - dmlogn8n-public
+    restart: unless-stopped
+
+  # =============================================================================
+  # Message Queue
+  # =============================================================================
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  # =============================================================================
+  # Monitoring Stack
+  # =============================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - dmlogn8n-internal
+      - dmlogn8n-public
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      - dmlogn8n-internal
+      - dmlogn8n-public
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+    environment:
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+    networks:
+      - dmlogn8n-internal
+      - dmlogn8n-public
+    restart: unless-stopped
+
+  # =============================================================================
+  # Log Aggregation
+  # =============================================================================
+  elasticsearch-log:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.7.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    volumes:
+      - elasticsearch_log_data:/usr/share/elasticsearch/data
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.7.0
+    volumes:
+      - ./logging/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+    depends_on:
+      - elasticsearch-log
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.7.0
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch-log:9200
+    depends_on:
+      - elasticsearch-log
+    networks:
+      - dmlogn8n-internal
+      - dmlogn8n-public
+    restart: unless-stopped
+
+  # =============================================================================
+  # Backup Service
+  # =============================================================================
+  backup:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile.backup
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - REDIS_HOST=redis
+      - MONGODB_HOST=mongodb
+      - S3_BUCKET=${BACKUP_S3_BUCKET}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    volumes:
+      - ./backups:/backups
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - postgres
+      - redis
+      - mongodb
+    networks:
+      - dmlogn8n-internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  dmlogn8n-public:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+  dmlogn8n-internal:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  cassandra_data:
+    driver: local
+  neo4j_data:
+    driver: local
+  neo4j_logs:
+    driver: local
+  neo4j_import:
+    driver: local
+  qdrant_data:
+    driver: local
+  influxdb_data:
+    driver: local
+  influxdb_config:
+    driver: local
+  mongodb_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  elasticsearch_log_data:
+    driver: local
+  grafana_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  consul_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+  auth_data:
+    driver: local

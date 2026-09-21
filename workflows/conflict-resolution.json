@@ -1,0 +1,273 @@
+{
+  "name": "Conflict Resolution - Agent Disagreement Management",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "conflict-resolve",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Conflict Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "conflict-resolution"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse conflict report\nconst conflict = $input.first().json;\n\n// Required fields validation\nif (!conflict.conflicting_agents || !conflict.conflict_type || !conflict.reported_by) {\n  return [{\n    json: {\n      error: 'Missing required fields: conflicting_agents, conflict_type, reported_by',\n      status: 'invalid'\n    }\n  }];\n}\n\n// Create conflict resolution session\nconst conflictId = `conflict_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;\nconst conflictData = {\n  ...conflict,\n  conflict_id: conflictId,\n  created_at: new Date().toISOString(),\n  status: 'triage',\n  severity: conflict.severity || 'medium',\n  urgency: conflict.urgency || 'normal',\n  resolution_strategy: null,\n  mediator: 'conflict_resolution_system',\n  timeline: {\n    triage_started: new Date().toISOString(),\n    mediation_requested: null,\n    resolution_reached: null\n  },\n  communication_log: [],\n  resolution_attempts: 0,\n  max_attempts: 3,\n  escalation_level: 0\n};\n\nreturn [{\n  json: conflictData\n}];"
+      },
+      "id": "code-1",
+      "name": "Triage Conflict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {\n          "options": {\n            "caseSensitive": true,\n            "leftValue": "",\n            "typeValidation": "strict"\n          },\n          "conditions": [\n            {\n              "leftValue": "={{ $json.severity }}",\n              "rightValue": "critical",\n              "operator": {\n                "type": "string",\n                "operation": "equals"\n              }\n            }\n          ],\n          "combinator": "and"\n        }
+      },
+      "id": "if-1",
+      "name": "Assess Severity",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle critical conflicts - immediate escalation\nconst conflict = $input.first().json;\n\n// Immediate intervention for critical conflicts\nconst escalationData = {\n  ...conflict,\n  escalation_level: 3,\n  status: 'immediate_intervention',\n  resolution_strategy: 'immediate_mediation',\n  timeline: {\n    ...conflict.timeline,\n    escalation_triggered: new Date().toISOString()\n  },\n  actions_required: [\n    'Pause conflicting agent operations',\n    'Initiate immediate mediation',\n    'Notify system administrator',\n    'Document conflict details'\n  ]\n};\n\nreturn [{\n  json: escalationData\n}];"
+      },
+      "id": "code-2",
+      "name": "Critical Conflict Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle non-critical conflicts - standard resolution process\nconst conflict = $input.first().json;\n\n// Determine resolution strategy based on conflict type\nconst strategies = {\n  'resource_conflict': 'negotiation',\n  'goal_conflict': 'consensus_building',\n  'communication_breakdown': 'mediated_dialogue',\n  'priority_conflict': 'arbitration',\n  'data_disagreement': 'fact_checking'\n};\n\nconst strategy = strategies[conflict.conflict_type] || 'general_mediation';\n\nconst resolutionData = {\n  ...conflict,\n  resolution_strategy: strategy,\n  status: 'mediation_requested',\n  timeline: {\n    ...conflict.timeline,\n    mediation_requested: new Date().toISOString()\n  }\n};\n\nreturn [{\n  json: resolutionData\n}];"
+      },
+      "id": "code-3",
+      "name": "Standard Conflict Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create mediation requests for conflicting agents\nconst conflict = $input.first().json;\n\nconst mediationRequests = conflict.conflicting_agents.map(agent => ({\n  type: 'conflict_mediation_request',\n  conflict_id: conflict.conflict_id,\n  to_agent: agent,\n  from_agent: 'conflict_resolution_system',\n  data: {\n    conflict_type: conflict.conflict_type,\n    severity: conflict.severity,\n    resolution_strategy: conflict.resolution_strategy,\n    other_parties: conflict.conflicting_agents.filter(a => a !== agent),\n    mediation_instructions: generateMediationInstructions(conflict, agent),\n    response_deadline: new Date(Date.now() + 30 * 60000).toISOString() // 30 minutes\n  },\n  message: `Conflict Resolution Required\\n\\nConflict ID: ${conflict.conflict_id}\\nType: ${conflict.conflict_type}\\nSeverity: ${conflict.severity}\\n\\nPlease respond to mediation request by: ${new Date(Date.now() + 30 * 60000).toLocaleString()}`\n}));\n\nreturn mediationRequests.map(req => ({\n  json: req\n}));\n\nfunction generateMediationInstructions(conflict, agent) {\n  const instructions = {\n    'resource_conflict': 'Please outline your resource requirements and constraints. Be prepared to negotiate resource allocation.',\n    'goal_conflict': 'Please explain your objectives and why they may conflict with other agents. Consider compromise solutions.',\n    'communication_breakdown': 'Please describe the communication issues and suggest improvements to dialogue.',\n    'priority_conflict': 'Please justify your priority ranking and be prepared to discuss alternatives.',\n    'data_disagreement': 'Please provide evidence for your position and be open to fact-checking.'\n  };\n  \n  return instructions[conflict.conflict_type] || 'Please provide your perspective on the conflict and suggest a resolution approach.';\n}"
+      },
+      "id": "code-4",
+      "name": "Create Mediation Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/webhook/agent-message",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-1",
+      "name": "Send Mediation Requests",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Store conflict record\nconst conflict = $input.first().json;\n\nconst conflictRecord = {\n  conflict_id: conflict.conflict_id,\n  conflicting_agents: conflict.conflicting_agents,\n  conflict_type: conflict.conflict_type,\n  severity: conflict.severity,\n  urgency: conflict.urgency,\n  reported_by: conflict.reported_by,\n  description: conflict.description,\n  resolution_strategy: conflict.resolution_strategy,\n  status: conflict.status,\n  escalation_level: conflict.escalation_level,\n  timeline: conflict.timeline,\n  created_at: conflict.created_at,\n  resolution_attempts: conflict.resolution_attempts,\n  max_attempts: conflict.max_attempts\n};\n\nreturn [{\n  json: conflictRecord\n}];"
+      },
+      "id": "code-5",
+      "name": "Store Conflict Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/api/v1/conflicts",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "conflict_data",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-2",
+      "name": "Save Conflict to Database",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"conflict_triage_completed\",\n  \"conflict_id\": \"{{ $json.conflict_id }}\",\n  \"message\": \"Conflict has been triaged and mediation requests sent to involved agents.\",\n  \"severity\": \"{{ $json.severity }}\",\n  \"resolution_strategy\": \"{{ $json.resolution_strategy }}\",\n  \"next_steps\": \"Awaiting responses from conflicting agents\"\n}"
+      },
+      "id": "respond-1",
+      "name": "Send Conflict Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2000, 300]
+    }
+  ],
+  "connections": {
+    "Conflict Webhook": {
+      "main": [
+        [
+          {
+            "node": "Triage Conflict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Triage Conflict": {
+      "main": [
+        [
+          {
+            "node": "Assess Severity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assess Severity": {
+      "main": [
+        [
+          {
+            "node": "Critical Conflict Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Standard Conflict Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Critical Conflict Handler": {
+      "main": [
+        [
+          {
+            "node": "Create Mediation Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Standard Conflict Handler": {
+      "main": [
+        [
+          {
+            "node": "Create Mediation Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Mediation Requests": {
+      "main": [
+        [
+          {
+            "node": "Send Mediation Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Mediation Requests": {
+      "main": [
+        [
+          {
+            "node": "Store Conflict Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Conflict Record": {
+      "main": [
+        [
+          {
+            "node": "Save Conflict to Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Conflict to Database": {
+      "main": [
+        [
+          {
+            "node": "Send Conflict Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T21:00:00.000Z",
+      "updatedAt": "2024-10-23T21:00:00.000Z",
+      "id": "tag-conflict-resolution",
+      "name": "Conflict Resolution"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T21:00:00.000Z",
+  "versionId": "1"
+}

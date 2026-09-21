@@ -1,0 +1,59 @@
+{
+  "service": {
+    "name": "dmlogn8n-character-portal",
+    "id": "character-portal-1",
+    "tags": [
+      "character-portal",
+      "agent-service",
+      "dmlogn8n",
+      "lb-weight:3",
+      "version:1.0.0"
+    ],
+    "address": "character-portal.dmlogn8n.local",
+    "port": 8081,
+    "meta": {
+      "service_id": "character-portal-1",
+      "service_type": "agent-service",
+      "version": "1.0.0",
+      "owner": "ai-team",
+      "team": "ai",
+      "environment": "production",
+      "region": "us-east-1",
+      "availability_zone": "us-east-1a",
+      "max_connections": "500",
+      "lb_weight": "3",
+      "agent_type": "character_agent",
+      "capabilities": "character_creation,character_management,personality_modeling"
+    },
+    "enable_tag_override": false,
+    "check": {
+      "id": "character-portal-health",
+      "name": "Character Portal Health Check",
+      "http": "http://character-portal.dmlogn8n.local:8081/health",
+      "method": "GET",
+      "interval": "15s",
+      "timeout": "5s",
+      "deregister_critical_service_after": "30s",
+      "success_before_passing": 3,
+      "failures_before_critical": 3
+    },
+    "connect": {
+      "sidecar_service": {
+        "proxy": {
+          "config": {
+            "upstreams": [
+              {
+                "destination_name": "postgresql",
+                "local_bind_port": 20011
+              },
+              {
+                "destination_name": "redis",
+                "local_bind_port": 20012
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

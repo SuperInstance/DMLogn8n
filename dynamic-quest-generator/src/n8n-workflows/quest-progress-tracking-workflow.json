@@ -1,0 +1,263 @@
+{
+  "name": "Quest Progress Tracking Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "quest-progress",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "quest-progress-webhook",
+      "name": "Quest Progress Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "quest-progress-trigger"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Validate and process quest progress update\nconst { questId, playerId, objectiveId, progress, action, data } = $input.first().json;\n\n// Validate required fields\nif (!questId || !playerId) {\n  throw new Error('Quest ID and Player ID are required');\n}\n\n// Standardize the progress data\nconst progressData = {\n  questId,\n  playerId,\n  objectiveId: objectiveId || null,\n  progress: progress || 0,\n  action: action || 'update', // update, complete, abandon, choice\n  data: data || {},\n  timestamp: new Date().toISOString(),\n  sessionId: data.sessionId || `session_${Date.now()}`,\n  clientInfo: {\n    userAgent: data.userAgent || 'unknown',\n    ip: data.ip || 'unknown',\n    platform: data.platform || 'unknown'\n  }\n};\n\n// Add progress metadata\nprogressData.metadata = {\n  isIncremental: action === 'update' && typeof progress === 'number',\n  isCompletion: action === 'complete' || progress >= 100,\n  isAbandonment: action === 'abandon',\n  hasChoice: action === 'choice' && objectiveId,\n  timeSpent: data.timeSpent || 0,\n  location: data.location || null\n};\n\n// Log the progress update\nconsole.log(`Quest progress update: ${action} for quest ${questId}, player ${playerId}`);\n\nreturn { json: progressData };"
+      },
+      "id": "validate-progress-data",
+      "name": "Validate Progress Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.DATABASE_API_URL || 'http://localhost:3001/api/quests/' + $json.questId }}",
+        "sendHeaders": true,
+        "headerParameters": {\n          "parameters": [\n            {\n              "name": "Content-Type",\n              "value": "application/json"\n            },\n            {\n              "name": "Authorization",\n              "value": "Bearer {{ $env.DATABASE_API_KEY || '' }}"\n            }\n          ]\n        },
+        "options": {}
+      },
+      "id": "fetch-quest-details",
+      "name": "Fetch Quest Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.DATABASE_API_URL || 'http://localhost:3001/api/players/' + $json.playerId }}",
+        "sendHeaders": true,
+        "headerParameters": {\n          "parameters": [\n            {\n              "name": "Content-Type",\n              "value": "application/json"\n            },\n            {\n              "name": "Authorization",\n              "value": "Bearer {{ $env.DATABASE_API_KEY || '' }}"\n            }\n          ]\n        },
+        "options": {}
+      },
+      "id": "fetch-player-details",
+      "name": "Fetch Player Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [680, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {\n          "options": {\n            "caseSensitive": true,\n            "leftValue": "",\n            "typeValidation": "strict"\n          },\n          "conditions": [\n            {\n              "leftValue": "={{ $json.action }}",\n              "rightValue": "complete",\n              "operator": {\n                "type": "string",\n                "operation": "equal"\n              }\n            }\n          ],\n          "combinator": "and"\n        }
+      },
+      "id": "check-action-type",
+      "name": "Check Action Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {\n          "options": {\n            "caseSensitive": true,\n            "leftValue": "",\n            "typeValidation": "strict"\n          },\n          "conditions": [\n            {\n              "leftValue": "={{ $json.action }}",\n              "rightValue": "abandon",\n              "operator": {\n                "type": "string",\n                "operation": "equal"\n              }\n            }\n          ],\n          "combinator": "and"\n        }
+      },
+      "id": "check-abandon-action",
+      "name": "Check Abandon Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process quest completion\nconst questData = $node[\"Fetch Quest Details\"].json;\nconst playerData = $node[\"Fetch Player Details\"].json;\nconst progressData = $node[\"Validate Progress Data\"].json;\n\n// Calculate completion statistics\nconst completionStats = {\n  totalTime: progressData.metadata.timeSpent || 0,\n  objectivesCompleted: questData.objectives.filter(obj => obj.completed).length,\n  totalObjectives: questData.objectives.length,\n  completionPercentage: Math.round((questData.objectives.filter(obj => obj.completed).length / questData.objectives.length) * 100),\n  difficultyRating: questData.difficulty,\n  playerLevel: playerData.stats.level,\n  questType: questData.type,\n  questCategory: questData.category\n};\n\n// Calculate rewards\nconst rewardCalculation = {\n  baseExperience: 100 * questData.difficulty,\n  difficultyBonus: Math.round(100 * questData.difficulty * (questData.difficulty / 5)),\n  speedBonus: completionStats.totalTime < 1800000 ? Math.round(50 * questData.difficulty) : 0, // Less than 30 minutes\n  perfectionBonus: completionStats.completionPercentage === 100 ? Math.round(75 * questData.difficulty) : 0,\n  totalExperience: 0,\n  goldReward: Math.round(50 * questData.difficulty * (1 + (completionStats.completionPercentage / 100))),\n  reputationGain: Math.round(25 * questData.difficulty)\n};\n\nrewardCalculation.totalExperience = rewardCalculation.baseExperience + rewardCalculation.difficultyBonus + rewardCalculation.speedBonus + rewardCalculation.perfectionBonus;\n\n// Determine achievement eligibility\nconst achievements = [];\nif (completionStats.completionPercentage === 100) achievements.push('perfect_completion');\nif (completionStats.totalTime < 600000) achievements.push('speed_demon'); // Less than 10 minutes\nif (questData.difficulty >= 6) achievements.push('legendary_hero');\nif (playerData.stats.level <= questData.levelRequirement) achievements.push('underdog');\nif (questData.type === 'daily' && new Date().toDateString() === new Date(progressData.timestamp).toDateString()) {\n  achievements.push('daily_champion');\n}\n\n// Prepare completion data\nconst completionData = {\n  questId: questData.id,\n  playerId: playerData._id,\n  action: 'complete',\n  completionStats,\n  rewards: rewardCalculation,\n  achievements,\n  timestamp: progressData.timestamp,\n  sessionId: progressData.sessionId,\n  rating: progressData.data.rating || null,\n  feedback: progressData.data.feedback || ''\n};\n\nconsole.log(`Quest ${questData.id} completed by player ${playerData._id} with ${completionStats.completionPercentage}%`);\n\nreturn { json: completionData };"
+      },
+      "id": "process-completion",
+      "name": "Process Quest Completion",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process regular progress update\nconst questData = $node[\"Fetch Quest Details\"].json;\nconst playerData = $node[\"Fetch Player Details\"].json;\nconst progressData = $node[\"Validate Progress Data\"].json;\n\n// Find the objective being updated\nlet targetObjective = null;\nif (progressData.objectiveId) {\n  targetObjective = questData.objectives.find(obj => obj.id === progressData.objectiveId);\n} else {\n  // Find first incomplete objective\n  targetObjective = questData.objectives.find(obj => !obj.completed);\n}\n\nif (!targetObjective) {\n  throw new Error('No valid objective found for progress update');\n}\n\n// Calculate progress\nconst previousProgress = targetObjective.current || 0;\nconst newProgress = Math.min(progressData.progress, targetObjective.required);\nconst progressDelta = newProgress - previousProgress;\nconst isCompleted = newProgress >= targetObjective.required;\n\n// Update quest progress\nconst updatedQuest = { ...questData };\nconst objectiveIndex = updatedQuest.objectives.findIndex(obj => obj.id === targetObjective.id);\nupdatedQuest.objectives[objectiveIndex].current = newProgress;\nupdatedQuest.objectives[objectiveIndex].completed = isCompleted;\n\n// Calculate overall quest progress\nconst totalObjectives = updatedQuest.objectives.filter(obj => !obj.optional).length;\nconst completedObjectives = updatedQuest.objectives.filter(obj => !obj.optional && obj.completed).length;\nconst overallProgress = Math.round((completedObjectives / totalObjectives) * 100);\n\n// Check for milestones\nconst milestones = [];\nif (overallProgress >= 25 && !questData.milestones?.includes('quarter_complete')) {\n  milestones.push('quarter_complete');\n}\nif (overallProgress >= 50 && !questData.milestones?.includes('half_complete')) {\n  milestones.push('half_complete');\n}\nif (overallProgress >= 75 && !questData.milestones?.includes('three_quarters_complete')) {\n  milestones.push('three_quarters_complete');\n}\nif (isCompleted && !targetObjective.completed) {\n  milestones.push('objective_completed');\n}\n\n// Prepare progress update data\nconst progressUpdateData = {\n  questId: questData.id,\n  playerId: playerData._id,\n  action: 'update',\n  objectiveId: targetObjective.id,\n  objectiveTitle: targetObjective.title,\n  previousProgress,\n  newProgress,\n  progressDelta,\n  objectiveCompleted: isCompleted,\n  overallProgress,\n  questCompleted: overallProgress >= 100,\n  milestones,\n  timestamp: progressData.timestamp,\n  sessionId: progressData.sessionId,\n  timeSpent: progressData.metadata.timeSpent || 0,\n  location: progressData.metadata.location\n};\n\nconsole.log(`Quest progress updated: ${questData.id}, objective ${targetObjective.id}, progress ${newProgress}/${targetObjective.required}`);\n\nreturn { json: progressUpdateData };"
+      },
+      "id": "process-progress-update",
+      "name": "Process Progress Update",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process quest abandonment\nconst questData = $node[\"Fetch Quest Details\"].json;\nconst playerData = $node[\"Fetch Player Details\"].json;\nconst progressData = $node[\"Validate Progress Data\"].json;\n\n// Calculate abandonment statistics\nconst abandonmentStats = {\n  timeSpent: progressData.metadata.timeSpent || 0,\n  progressAtAbandonment: Math.round((questData.objectives.filter(obj => obj.completed).length / questData.objectives.length) * 100),\n  objectivesCompleted: questData.objectives.filter(obj => obj.completed).length,\n  totalObjectives: questData.objectives.length,\n  difficultyRating: questData.difficulty,\n  playerLevel: playerData.stats.level,\n  questType: questData.type,\n  abandonmentReason: progressData.data.reason || 'manual',\n  lastObjective: progressData.objectiveId || null\n};\n\n// Analyze abandonment patterns\nconst abandonmentAnalysis = {\n  isEarlyAbandon: abandonmentStats.timeSpent < 300000, // Less than 5 minutes\n  isLateAbandon: abandonmentStats.progressAtAbandonment > 75,\n  isDifficultyRelated: abandonmentStats.difficultyRating > playerData.stats.level / 10 + 1,\n  possibleFrustration: abandonmentStats.progressAtAbandonment < 25 && abandonmentStats.timeSpent > 600000, // Low progress after 10+ minutes\n  recommendedDifficultyAdjustment: 0\n};\n\n// Recommend difficulty adjustment\nif (abandonmentAnalysis.isEarlyAbandon || abandonmentAnalysis.possibleFrustration) {\n  abandonmentAnalysis.recommendedDifficultyAdjustment = -1;\n} else if (abandonmentAnalysis.isLateAbandon) {\n  abandonmentAnalysis.recommendedDifficultyAdjustment = 1;\n}\n\n// Prepare abandonment data\nconst abandonmentData = {\n  questId: questData.id,\n  playerId: playerData._id,\n  action: 'abandon',\n  abandonmentStats,\n  abandonmentAnalysis,\n  timestamp: progressData.timestamp,\n  sessionId: progressData.sessionId,\n  reason: progressData.data.reason || 'Player choice',\n  feedback: progressData.data.feedback || ''\n};\n\nconsole.log(`Quest ${questData.id} abandoned by player ${playerData._id} at ${abandonmentStats.progressAtAbandonment}% progress`);\n\nreturn { json: abandonmentData };"
+      },
+      "id": "process-abandonment",
+      "name": "Process Quest Abandonment",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1120, 600]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.DATABASE_API_URL || 'http://localhost:3001/api/quests/' + $json.questId + '/progress' }}",
+        "httpMethod": "PATCH",
+        "sendHeaders": true,
+        "headerParameters": {\n          "parameters": [\n            {\n              "name": "Content-Type",\n              "value": "application/json"\n            },\n            {\n              "name": "Authorization",\n              "value": "Bearer {{ $env.DATABASE_API_KEY || '' }}"\n            }\n          ]\n        },\n        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "",
+              "value": "={{ $json.action === 'complete' ? {\n  state: 'completed',\n  endTime: $json.timestamp,\n  progress: $json.completionStats.completionPercentage,\n  'stats.completionTime': $json.completionStats.totalTime,\n  'stats.completed': $json.timestamp\n} : $json.action === 'abandon' ? {\n  state: 'abandoned',\n  endTime: $json.timestamp,\n  progress: $json.abandonmentStats.progressAtAbandonment,\n  'stats.abandonment.count': 1,\n  'stats.abandonment.reasons': [$json.reason]\n} : {\n  progress: $json.overallProgress,\n  objectives: [{\n    id: $json.objectiveId,\n    current: $json.newProgress,\n    completed: $json.objectiveCompleted\n  }]\n} }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-quest-in-database",
+      "name": "Update Quest in Database",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1360, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.DATABASE_API_URL || 'http://localhost:3001/api/players/' + $json.playerId + '/quest-progress' }}",
+        "httpMethod": "PATCH",
+        "sendHeaders": true,
+        "headerParameters": {\n          "parameters": [\n            {\n              "name": "Content-Type",\n              "value": "application/json"\n            },\n            {\n              "name": "Authorization",\n              "value": "Bearer {{ $env.DATABASE_API_KEY || '' }}"\n            }\n          ]\n        },\n        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "",
+              "value": "={{ $json.action === 'complete' ? {\n  questId: $json.questId,\n  action: 'complete',\n  completionTime: $json.completionStats.totalTime,\n  rating: $json.rating,\n  feedback: $json.feedback,\n  rewards: $json.rewards,\n  achievements: $json.achievements,\n  timestamp: $json.timestamp\n} : $json.action === 'abandon' ? {\n  questId: $json.questId,\n  action: 'abandon',\n  reason: $json.reason,\n  progressAtAbandonment: $json.abandonmentStats.progressAtAbandonment,\n  timeSpent: $json.abandonmentStats.timeSpent,\n  timestamp: $json.timestamp\n} : {\n  questId: $json.questId,\n  action: 'update',\n  objectiveId: $json.objectiveId,\n  progress: $json.newProgress,\n  overallProgress: $json.overallProgress,\n  milestones: $json.milestones,\n  timestamp: $json.timestamp\n} }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-player-data",
+      "name": "Update Player Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1360, 500]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Prepare final response\nconst progressData = $input.first().json;\nconst originalData = $node[\"Validate Progress Data\"].json;\n\n// Create appropriate response based on action\nlet responseData;\n\nswitch (progressData.action) {\n  case 'complete':\n    responseData = {\n      success: true,\n      action: 'quest_completed',\n      questId: progressData.questId,\n      playerId: progressData.playerId,\n      completionStats: progressData.completionStats,\n      rewards: progressData.rewards,\n      achievements: progressData.achievements,\n      message: `Quest completed with ${progressData.completionStats.completionPercentage}% success rate`,\n      timestamp: progressData.timestamp\n    };\n    break;\n    \n  case 'abandon':\n    responseData = {\n      success: true,\n      action: 'quest_abandoned',\n      questId: progressData.questId,\n      playerId: progressData.playerId,\n      abandonmentStats: progressData.abandonmentStats,\n      recommendedAdjustment: progressData.abandonmentAnalysis.recommendedDifficultyAdjustment,\n      message: `Quest abandoned at ${progressData.abandonmentStats.progressAtAbandonment}% progress`,\n      timestamp: progressData.timestamp\n    };\n    break;\n    \n  default:\n    responseData = {\n      success: true,\n      action: 'progress_updated',\n      questId: progressData.questId,\n      playerId: progressData.playerId,\n      objectiveId: progressData.objectiveId,\n      objectiveTitle: progressData.objectiveTitle,\n      progress: progressData.newProgress,\n      progressDelta: progressData.progressDelta,\n      objectiveCompleted: progressData.objectiveCompleted,\n      overallProgress: progressData.overallProgress,\n      milestones: progressData.milestones,\n      message: progressData.objectiveCompleted \n        ? `Objective \"${progressData.objectiveTitle}\" completed!`\n        : `Progress updated: ${progressData.newProgress}/${progressData.newProgress + progressData.progressDelta}`,\n      timestamp: progressData.timestamp\n    };\n}\n\n// Add session information\nresponseData.sessionId = originalData.sessionId;\nresponseData.processingTime = Date.now() - new Date(originalData.timestamp).getTime();\n\n// Log successful update\nconsole.log(`Progress update successful: ${responseData.action} for quest ${progressData.questId}`);\n\nreturn { json: responseData };"
+      },
+      "id": "prepare-response",
+      "name": "Prepare Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1600, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "send-progress-response",
+      "name": "Send Progress Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1840, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Log progress analytics\nconst progressData = $input.first().json;\nconst originalData = $node[\"Validate Progress Data\"].json;\n\nconst analyticsData = {\n  event: `quest_${progressData.action}`,\n  timestamp: progressData.timestamp,\n  questId: progressData.questId,\n  playerId: progressData.playerId,\n  sessionId: originalData.sessionId,\n  action: progressData.action,\n  processingTime: Date.now() - new Date(originalData.timestamp).getTime(),\n  clientInfo: originalData.clientInfo\n};\n\n// Add action-specific data\nswitch (progressData.action) {\n  case 'complete':\n    analyticsData.completionStats = progressData.completionStats;\n    analyticsData.rewards = progressData.rewards;\n    analyticsData.achievements = progressData.achievements;\n    break;\n  case 'abandon':\n    analyticsData.abandonmentStats = progressData.abandonmentStats;\n    analyticsData.abandonmentAnalysis = progressData.abandonmentAnalysis;\n    break;\n  default:\n    analyticsData.progressUpdate = {\n      objectiveId: progressData.objectiveId,\n      progressDelta: progressData.progressDelta,\n      overallProgress: progressData.overallProgress,\n      milestones: progressData.milestones\n    };\n}\n\nconsole.log('Quest Progress Analytics:', JSON.stringify(analyticsData, null, 2));\n\nreturn { json: analyticsData };"
+      },
+      "id": "log-progress-analytics",
+      "name": "Log Progress Analytics",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1600, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {\n          "options": {\n            "caseSensitive": true,\n            "leftValue": "",\n            "typeValidation": "strict"\n          },\n          "conditions": [\n            {\n              "leftValue": "={{ $json.milestones && $json.milestones.length > 0 }}",\n              "rightValue": true,\n              "operator": {\n                "type": "boolean",\n                "operation": "equal"\n              }\n            }\n          ],\n          "combinator": "and"\n        }
+      },
+      "id": "check-milestones",
+      "name": "Check Milestones",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1840, 500]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.NOTIFICATION_API_URL || 'http://localhost:3001/api/notifications' }}",
+        "sendHeaders": true,
+        "headerParameters": {\n          "parameters": [\n            {\n              "name": "Content-Type",\n              "value": "application/json"\n            }\n          ]\n        },\n        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "",
+              "value": "={{ {\n  playerId: $node[\"Validate Progress Data\"].json.playerId,\n  type: 'milestone_achieved',\n  title: 'Milestone Achieved!',\n  message: `You've reached ${$json.milestones.includes('quarter_complete') ? '25%' : $json.milestones.includes('half_complete') ? '50%' : $json.milestones.includes('three_quarters_complete') ? '75%' : 'a quest milestone'}!`,\n  data: {\n    questId: $json.questId,\n    milestones: $json.milestones,\n    overallProgress: $json.overallProgress\n  },\n  priority: 'normal',\n  timestamp: new Date().toISOString()\n} }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-milestone-notification",
+      "name": "Send Milestone Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2080, 500]
+    }
+  ],
+  "connections": {
+    "Quest Progress Webhook": {
+      "main": [[{ "node": "Validate Progress Data", "type": "main", "index": 0 }]]
+    },
+    "Validate Progress Data": {
+      "main": [\n        [{\n          "node": "Fetch Quest Details",\n          "type": "main",\n          "index": 0\n        },\n        {\n          "node": "Fetch Player Details",\n          "type": "main",\n          "index": 0\n        }]\n      ]
+    },
+    "Fetch Quest Details": {
+      "main": [[{ "node": "Check Action Type", "type": "main", "index": 0 }]]
+    },
+    "Fetch Player Details": {
+      "main": [[{ "node": "Check Action Type", "type": "main", "index": 0 }]]
+    },
+    "Check Action Type": {
+      "main": [\n        [{\n          "node": "Process Quest Completion",\n          "type": "main",\n          "index": 0\n        }],\n        [{\n          "node": "Check Abandon Action",\n          "type": "main",\n          "index": 0\n        },\n        {\n          "node": "Process Progress Update",\n          "type": "main",\n          "index": 0\n        }]\n      ]
+    },
+    "Check Abandon Action": {
+      "main": [\n        [{\n          "node": "Process Quest Abandonment",\n          "type": "main",\n          "index": 0\n        }],\n        [{\n          "node": "Process Progress Update",\n          "type": "main",\n          "index": 0\n        }]\n      ]
+    },
+    "Process Quest Completion": {
+      "main": [[{ "node": "Update Quest in Database", "type": "main", "index": 0 }]]
+    },
+    "Process Progress Update": {
+      "main": [[{ "node": "Update Quest in Database", "type": "main", "index": 0 }]]
+    },
+    "Process Quest Abandonment": {
+      "main": [[{ "node": "Update Quest in Database", "type": "main", "index": 0 }]]
+    },
+    "Update Quest in Database": {
+      "main": [[{ "node": "Update Player Data", "type": "main", "index": 0 }]]
+    },
+    "Update Player Data": {
+      "main": [\n        [{\n          "node": "Prepare Response",\n          "type": "main",\n          "index": 0\n        },\n        {\n          "node": "Log Progress Analytics",\n          "type": "main",\n          "index": 0\n        }]\n      ]
+    },
+    "Prepare Response": {
+      "main": [[{ "node": "Send Progress Response", "type": "main", "index": 0 }]]
+    },
+    "Log Progress Analytics": {
+      "main": [[{ "node": "Check Milestones", "type": "main", "index": 0 }]]
+    },
+    "Check Milestones": {
+      "main": [\n        [{\n          "node": "Send Milestone Notification",\n          "type": "main",\n          "index": 0\n        }]\n      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["quest", "progress", "tracking", "completion", "abandonment"],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-20T10:00:00.000Z",
+  "versionId": "1"
+}

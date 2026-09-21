@@ -1,0 +1,301 @@
+# Voice Chat Server Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-chat-deployment
+  namespace: dmlogn8n
+  labels:
+    app: dmlogn8n
+    component: voice-chat
+    version: v1
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: dmlogn8n
+      component: voice-chat
+  template:
+    metadata:
+      labels:
+        app: dmlogn8n
+        component: voice-chat
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9091"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: dmlogn8n-app-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      containers:
+      - name: voice-chat
+        image: dmlogn8n/voice-chat:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8001
+          name: http
+          protocol: TCP
+        - containerPort: 9091
+          name: metrics
+          protocol: TCP
+        env:
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: dmlogn8n-app-config
+              key: LOG_LEVEL
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: dmlogn8n-app-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: dmlogn8n-app-config
+              key: REDIS_PORT
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dmlogn8n-app-secrets
+              key: REDIS_PASSWORD
+        - name: MAX_PARTICIPANTS_PER_ROOM
+          valueFrom:
+            configMapKeyRef:
+              name: dmlogn8n-app-config
+              key: MAX_PARTICIPANTS_PER_ROOM
+        - name: ENABLE_SPATIAL_AUDIO
+          valueFrom:
+            configMapKeyRef:
+              name: dmlogn8n-app-config
+              key: ENABLE_SPATIAL_AUDIO
+        resources:
+          requests:
+            cpu: 300m
+            memory: 512Mi
+          limits:
+            cpu: 1500m
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: logs
+          mountPath: /var/log/dmlogn8n
+        - name: uploads
+          mountPath: /app/uploads
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+      volumes:
+      - name: logs
+        emptyDir: {}
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: voice-uploads-pvc
+      imagePullSecrets:
+      - name: dmlogn8n-registry-secret
+---
+# Voice SFU Server Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-sfu-deployment
+  namespace: dmlogn8n
+  labels:
+    app: dmlogn8n
+    component: voice-sfu
+    version: v1
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: dmlogn8n
+      component: voice-sfu
+  template:
+    metadata:
+      labels:
+        app: dmlogn8n
+        component: voice-sfu
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9092"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: dmlogn8n-app-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      containers:
+      - name: voice-sfu
+        image: dmlogn8n/voice-sfu:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8002
+          name: http
+          protocol: TCP
+        - containerPort: 9092
+          name: metrics
+          protocol: TCP
+        env:
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: dmlogn8n-app-config
+              key: LOG_LEVEL
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: dmlogn8n-app-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: dmlogn8n-app-config
+              key: REDIS_PORT
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dmlogn8n-app-secrets
+              key: REDIS_PASSWORD
+        - name: MAX_CONCURRENT_STREAMS
+          valueFrom:
+            configMapKeyRef:
+              name: dmlogn8n-app-config
+              key: MAX_CONCURRENT_STREAMS
+        - name: ENABLE_STUN_TURN
+          valueFrom:
+            configMapKeyRef:
+              name: dmlogn8n-app-config
+              key: ENABLE_STUN_TURN
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8002
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: logs
+          mountPath: /var/log/dmlogn8n
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - NET_BIND_SERVICE
+          seccompProfile:
+            type: RuntimeDefault
+      volumes:
+      - name: logs
+        emptyDir: {}
+      imagePullSecrets:
+      - name: dmlogn8n-registry-secret
+---
+# Services
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-chat-service
+  namespace: dmlogn8n
+  labels:
+    app: dmlogn8n
+    component: voice-chat
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9091"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8001
+    targetPort: 8001
+    protocol: TCP
+    name: http
+  - port: 9091
+    targetPort: 9091
+    protocol: TCP
+    name: metrics
+  selector:
+    app: dmlogn8n
+    component: voice-chat
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-sfu-service
+  namespace: dmlogn8n
+  labels:
+    app: dmlogn8n
+    component: voice-sfu
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9092"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8002
+    targetPort: 8002
+    protocol: TCP
+    name: http
+  - port: 9092
+    targetPort: 9092
+    protocol: TCP
+    name: metrics
+  selector:
+    app: dmlogn8n
+    component: voice-sfu

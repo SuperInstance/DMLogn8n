@@ -1,0 +1,71 @@
+# Core dependencies
+aiohttp>=3.8.0
+aiofiles>=22.1.0
+asyncio-mqtt>=0.13.0
+
+# Data processing and analysis
+pandas>=1.5.0
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Geographic and networking
+geopy>=2.3.0
+maxminddb>=2.5.0
+geoip2>=4.7.0
+dnspython>=2.3.0
+
+# Cloud provider SDKs
+boto3>=1.26.0
+botocore>=1.29.0
+azure-mgmt-billing>=6.0.0
+azure-identity>=1.12.0
+google-cloud-billing>=1.10.0
+google-auth>=2.16.0
+
+# Kubernetes
+kubernetes>=26.1.0
+kubernetes-client>=1.0.0
+
+# Database connectivity
+psycopg2-binary>=2.9.0
+pymongo>=4.3.0
+redis>=4.5.0
+elasticsearch>=8.6.0
+
+# Security and encryption
+cryptography>=39.0.0
+pycryptodome>=3.16.0
+jwt>=1.4.0
+
+# Monitoring and metrics
+prometheus-client>=0.16.0
+statsd>=4.0.0
+datadog>=0.44.0
+
+# Configuration and utilities
+pyyaml>=6.0
+python-dotenv>=1.0.0
+schedule>=1.2.0
+click>=8.1.0
+
+# Web frameworks (for API endpoints)
+fastapi>=0.92.0
+uvicorn>=0.20.0
+
+# Testing
+pytest>=7.2.0
+pytest-asyncio>=0.21.0
+pytest-mock>=3.10.0
+
+# Development tools
+black>=23.1.0
+flake8>=6.0.0
+mypy>=1.0.0
+pre-commit>=3.0.0
+
+# Additional utilities
+python-dateutil>=2.8.0
+pytz>=2022.7
+requests>=2.28.0
+urllib3>=1.26.0
+certifi>=2022.12.0

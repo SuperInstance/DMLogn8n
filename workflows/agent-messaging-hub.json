@@ -1,0 +1,279 @@
+{
+  "name": "Agent Messaging Hub - Multi-Agent Communication Router",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent-message",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Message Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "agent-messaging-hub"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse and validate incoming message\nconst message = $input.first().json;\n\n// Required fields validation\nif (!message.from_agent || !message.content) {\n  return [{\n    json: {\n      error: 'Missing required fields: from_agent, content',\n      status: 'invalid'\n    }\n  }];\n}\n\n// Determine message type and routing\nconst messageType = message.type || 'direct';\nconst priority = message.priority || 'normal';\nconst timestamp = new Date().toISOString();\n\n// Create enhanced message object\nconst enhancedMessage = {\n  ...message,\n  id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,\n  timestamp,\n  messageType,\n  priority,\n  status: 'pending_routing'\n};\n\nreturn [{\n  json: enhancedMessage\n}];"
+      },
+      "id": "code-1",
+      "name": "Parse Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {\n          "options": {\n            "caseSensitive": true,\n            "leftValue": "",\n            "typeValidation": "strict"\n          },\n          "conditions": [\n            {\n              "leftValue": "={{ $json.messageType }}",\n              "rightValue": "broadcast",\n              "operator": {\n                "type": "string",\n                "operation": "equals"\n              }\n            }\n          ],\n          "combinator": "and"\n        }
+      },
+      "id": "if-1",
+      "name": "Route Message Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Broadcast to all agents in party\nconst message = $input.first().json;\nconst partyId = message.party_id || 'default_party';\n\n// Get all agents in the party (mock data for now)\nconst allAgents = [\n  'agent_dungeon_master',\n  'agent_narrator', \n  'agent_combat_manager',\n  'agent_scene_coordinator',\n  'agent_character_ai'\n];\n\n// Filter out sender\nconst recipients = allAgents.filter(agent => agent !== message.from_agent);\n\n// Create individual messages for each recipient\nconst broadcastMessages = recipients.map(recipient => ({\n  ...message,\n  to_agent: recipient,\n  routing_type: 'broadcast',\n  broadcast_to: recipients,\n  processed_at: new Date().toISOString()\n}));\n\nreturn broadcastMessages.map(msg => ({\n  json: msg\n}));"
+      },
+      "id": "code-2",
+      "name": "Process Broadcast",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Direct message to specific agent\nconst message = $input.first().json;\n\nif (!message.to_agent) {\n  return [{\n    json: {\n      error: 'Direct messages require to_agent field',\n      status: 'routing_failed'\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    ...message,\n    routing_type: 'direct',\n    processed_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "code-3",
+      "name": "Process Direct Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Priority message handling\nconst message = $input.first().json;\n\n// Check for urgent messages\nif (message.priority === 'urgent' || message.priority === 'critical') {\n  // Add priority handling\n  return [{\n    json: {\n      ...message,\n      priority_flag: true,\n      escalation_level: message.priority === 'critical' ? 'high' : 'medium',\n      requires_immediate_attention: true\n    }\n  }];\n}\n\nreturn [{\n  json: message\n}];"
+      },
+      "id": "code-4",
+      "name": "Priority Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/api/v1/agent/message",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-API-Key",
+              "value": "your-api-key-here"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message_data",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-1",
+      "name": "Deliver to Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log message delivery and update status\nconst deliveryResult = $input.first().json;\nconst originalMessage = $('Parse Message').first().json;\n\nconst deliveryLog = {\n  message_id: originalMessage.id,\n  from_agent: originalMessage.from_agent,\n  to_agent: originalMessage.to_agent,\n  message_type: originalMessage.messageType,\n  priority: originalMessage.priority,\n  delivery_status: deliveryResult.success ? 'delivered' : 'failed',\n  delivered_at: new Date().toISOString(),\n  delivery_response: deliveryResult\n};\n\nreturn [{\n  json: {\n    ...deliveryLog,\n    status: 'completed',\n    response: {\n      message_id: originalMessage.id,\n      status: deliveryResult.success ? 'delivered' : 'failed',\n      timestamp: deliveryLog.delivered_at\n    }\n  }\n}];"
+      },
+      "id": "code-5",
+      "name": "Log Delivery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/api/v1/messaging/log",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "log_data",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-2",
+      "name": "Store Message Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.response }}"
+      },
+      "id": "respond-1",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2000, 300]
+    }
+  ],
+  "connections": {
+    "Message Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Message": {
+      "main": [
+        [
+          {
+            "node": "Route Message Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Message Type": {
+      "main": [
+        [
+          {
+            "node": "Process Broadcast",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Direct Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Broadcast": {
+      "main": [
+        [
+          {
+            "node": "Priority Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Direct Message": {
+      "main": [
+        [
+          {
+            "node": "Priority Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Priority Handler": {
+      "main": [
+        [
+          {
+            "node": "Deliver to Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deliver to Agent": {
+      "main": [
+        [
+          {
+            "node": "Log Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Delivery": {
+      "main": [
+        [
+          {
+            "node": "Store Message Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Message Log": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T21:00:00.000Z",
+      "updatedAt": "2024-10-23T21:00:00.000Z",
+      "id": "tag-agent-communication",
+      "name": "Agent Communication"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T21:00:00.000Z",
+  "versionId": "1"
+}

@@ -1,0 +1,69 @@
+# DMLogn8n AI Research System Requirements
+
+# Core ML Frameworks
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+transformers>=4.30.0
+
+# Graph Neural Networks
+torch-geometric>=2.3.0
+torch-scatter>=2.1.0
+torch-sparse>=0.6.0
+torch-cluster>=1.6.0
+
+# Reinforcement Learning
+gymnasium>=0.28.0
+stable-baselines3>=2.0.0
+
+# Audio Processing
+librosa>=0.10.0
+soundfile>=0.12.0
+
+# Image Processing
+Pillow>=9.0.0
+opencv-python>=4.7.0
+
+# Data Processing
+numpy>=1.24.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+scipy>=1.10.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+plotly>=5.14.0
+
+# Utilities
+tqdm>=4.65.0
+wandb>=0.15.0
+einops>=0.6.0
+rotary-embedding-torch>=0.3.0
+
+# Development
+pytest>=7.4.0
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.4.0
+
+# Optional: Flash Attention (for performance)
+# flash-attn>=2.0.0  # Requires CUDA and specific build environment
+
+# Optional: Additional transformer libraries
+# bitsandbytes>=0.39.0  # For quantization
+# accelerate>=0.20.0   # For distributed training
+
+# Optional: JAX ecosystem (for research)
+# jax>=0.4.0
+# jaxlib>=0.4.0
+# flax>=0.6.0
+
+# Optional: Additional RL libraries
+# ray[rllib]>=2.5.0
+# dm-control>=1.0.0
+
+# Optional: Web deployment
+# fastapi>=0.100.0
+# uvicorn>=0.22.0
+# streamlit>=1.24.0

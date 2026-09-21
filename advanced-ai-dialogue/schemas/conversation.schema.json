@@ -1,0 +1,844 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Conversation Schema",
+  "description": "Schema for AI dialogue conversations in DMlogn8n",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique conversation identifier",
+      "pattern": "^conv_[0-9]{13}_[a-z0-9]{9}$"
+    },
+    "participants": {
+      "type": "array",
+      "description": "List of conversation participants",
+      "items": {
+        "$ref": "#/definitions/participant"
+      },
+      "minItems": 1
+    },
+    "state": {
+      "type": "string",
+      "description": "Current conversation state",
+      "enum": ["initiating", "active", "paused", "resuming", "concluding", "concluded"],
+      "default": "active"
+    },
+    "startTime": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Conversation start timestamp"
+    },
+    "endTime": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Conversation end timestamp"
+    },
+    "context": {
+      "$ref": "#/definitions/conversationContext",
+      "description": "Conversation context information"
+    },
+    "messages": {
+      "type": "array",
+      "description": "Conversation messages",
+      "items": {
+        "$ref": "#/definitions/message"
+      }
+    },
+    "metadata": {
+      "$ref": "#/definitions/conversationMetadata",
+      "description": "Conversation metadata and analytics"
+    }
+  },
+  "required": ["id", "participants", "state", "startTime", "context"],
+  "additionalProperties": false,
+  "definitions": {
+    "participant": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique participant identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Participant display name",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "role": {
+          "type": "string",
+          "description": "Participant role in conversation",
+          "enum": ["player", "dm", "npc", "narrator", "system"],
+          "default": "player"
+        },
+        "race": {
+          "type": "string",
+          "description": "Character race (for NPCs)",
+          "enum": ["human", "elf", "dwarf", "orc", "halfling", "dragonborn", "tiefling", "gnome", "half-elf", "half-orc", "other"],
+          "default": "human"
+        },
+        "class": {
+          "type": "string",
+          "description": "Character class (for players/NPCs)",
+          "enum": ["fighter", "wizard", "cleric", "rogue", "paladin", "ranger", "bard", "druid", "monk", "warlock", "sorcerer", "barbarian", "artificer", "other"],
+          "default": "other"
+        },
+        "background": {
+          "type": "string",
+          "description": "Character background",
+          "maxLength": 500
+        },
+        "disposition": {
+          "type": "string",
+          "description": "Initial disposition",
+          "enum": ["friendly", "neutral", "hostile", "unknown"],
+          "default": "neutral"
+        },
+        "voiceProfile": {
+          "$ref": "#/definitions/voiceProfile"
+        },
+        "emotionalProfile": {
+          "$ref": "#/definitions/emotionalProfile"
+        }
+      },
+      "required": ["id", "name", "role"],
+      "additionalProperties": false
+    },
+    "voiceProfile": {
+      "type": "object",
+      "properties": {
+        "race": {
+          "type": "string",
+          "description": "Voice race characteristics",
+          "default": "human"
+        },
+        "gender": {
+          "type": "string",
+          "enum": ["male", "female", "neutral", "other"],
+          "default": "neutral"
+        },
+        "age": {
+          "type": "string",
+          "enum": ["young", "adult", "middle", "old"],
+          "default": "adult"
+        },
+        "socialClass": {
+          "type": "string",
+          "enum": ["common", "noble", "merchant", "scholar", "military", "criminal"],
+          "default": "common"
+        },
+        "accent": {
+          "type": "string",
+          "description": "Voice accent",
+          "default": "standard"
+        },
+        "characteristics": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["gravelly", "melodic", "booming", "whispery", "nasal", "breathy", "resonant", "harsh", "gentle"]
+          },
+          "description": "Voice characteristics"
+        },
+        "environment": {
+          "type": "string",
+          "description": "Environmental effects on voice",
+          "enum": ["none", "echo", "reverb", "muffled", "distant", "intimate"],
+          "default": "none"
+        }
+      },
+      "additionalProperties": false
+    },
+    "emotionalProfile": {
+      "type": "object",
+      "properties": {
+        "personalityTraits": {
+          "$ref": "#/definitions/personalityTraits"
+        },
+        "baselineEmotions": {
+          "$ref": "#/definitions/emotionalState"
+        },
+        "emotionalTriggers": {
+          "type": "object",
+          "description": "Known emotional triggers",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "personalityTraits": {
+      "type": "object",
+      "properties": {
+        "openness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Openness to experience"
+        },
+        "conscientiousness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Conscientiousness and self-discipline"
+        },
+        "extraversion": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Extraversion vs introversion"
+        },
+        "agreeableness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Agreeableness and compassion"
+        },
+        "neuroticism": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Neuroticism and emotional stability"
+        }
+      },
+      "additionalProperties": false
+    },
+    "emotionalState": {
+      "type": "object",
+      "properties": {
+        "happiness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "sadness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "anger": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fear": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "surprise": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "disgust": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "trust": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "anticipation": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "conversationContext": {
+      "type": "object",
+      "properties": {
+        "campaign": {
+          "$ref": "#/definitions/campaignContext"
+        },
+        "environment": {
+          "$ref": "#/definitions/environmentContext"
+        },
+        "session": {
+          "$ref": "#/definitions/sessionContext"
+        },
+        "previousConversations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "IDs of previous conversations"
+        },
+        "initialContext": {
+          "type": "object",
+          "description": "Initial conversation context",
+          "additionalProperties": true
+        }
+      },
+      "required": ["campaign"],
+      "additionalProperties": false
+    },
+    "campaignContext": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Campaign identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Campaign name",
+          "maxLength": 200
+        },
+        "chapter": {
+          "type": "string",
+          "description": "Current chapter",
+          "maxLength": 100
+        },
+        "scene": {
+          "type": "string",
+          "description": "Current scene",
+          "maxLength": 100
+        },
+        "objectives": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Current campaign objectives"
+        },
+        "worldState": {
+          "type": "object",
+          "description": "Current world state variables",
+          "additionalProperties": true
+        }
+      },
+      "required": ["id"],
+      "additionalProperties": false
+    },
+    "environmentContext": {
+      "type": "object",
+      "properties": {
+        "location": {
+          "$ref": "#/definitions/location"
+        },
+        "time": {
+          "$ref": "#/definitions/timeContext"
+        },
+        "weather": {
+          "$ref": "#/definitions/weatherContext"
+        },
+        "atmosphere": {
+          "type": "string",
+          "description": "General atmosphere",
+          "enum": ["peaceful", "tense", "mysterious", "hostile", "chaotic", "solemn", "festive", "dangerous"],
+          "default": "neutral"
+        }
+      },
+      "required": ["location", "time"],
+      "additionalProperties": false
+    },
+    "location": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Location name",
+          "maxLength": 200
+        },
+        "type": {
+          "type": "string",
+          "enum": ["city", "town", "village", "dungeon", "forest", "mountain", "castle", "tavern", "temple", "wilderness", "other"],
+          "description": "Location type"
+        },
+        "description": {
+          "type": "string",
+          "description": "Location description",
+          "maxLength": 1000
+        },
+        "region": {
+          "type": "string",
+          "description": "Geographic region",
+          "maxLength": 100
+        },
+        "coordinates": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "description": "Map coordinates"
+        }
+      },
+      "required": ["name", "type"],
+      "additionalProperties": false
+    },
+    "timeContext": {
+      "type": "object",
+      "properties": {
+        "inGame": {
+          "type": "string",
+          "description": "In-game time",
+          "pattern": "^[0-9]{1,2}:[0-9]{2}$"
+        },
+        "inGameDay": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 365,
+          "description": "In-game day of year"
+        },
+        "inGameYear": {
+          "type": "number",
+          "description": "In-game year"
+        },
+        "season": {
+          "type": "string",
+          "enum": ["spring", "summer", "fall", "winter"],
+          "description": "Current season"
+        }
+      },
+      "required": ["inGame"],
+      "additionalProperties": false
+    },
+    "weatherContext": {
+      "type": "object",
+      "properties": {
+        "condition": {
+          "type": "string",
+          "enum": ["clear", "cloudy", "rainy", "stormy", "snowy", "foggy", "windy"],
+          "description": "Weather condition"
+        },
+        "temperature": {
+          "type": "string",
+          "description": "Temperature description",
+          "enum": ["freezing", "cold", "cool", "mild", "warm", "hot", "scorching"]
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["excellent", "good", "moderate", "poor", "terrible"],
+          "description": "Visibility conditions"
+        }
+      },
+      "required": ["condition"],
+      "additionalProperties": false
+    },
+    "sessionContext": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Session identifier"
+        },
+        "number": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Session number in campaign"
+        },
+        "startTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Session start time"
+        },
+        "dm": {
+          "type": "string",
+          "description": "DM name or ID"
+        },
+        "players": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Player names or IDs"
+        }
+      },
+      "required": ["id", "number"],
+      "additionalProperties": false
+    },
+    "message": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique message identifier"
+        },
+        "speakerId": {
+          "type": "string",
+          "description": "Speaker participant ID"
+        },
+        "content": {
+          "type": "string",
+          "description": "Message content",
+          "minLength": 1,
+          "maxLength": 10000
+        },
+        "type": {
+          "type": "string",
+          "enum": ["dialogue", "narration", "system", "action", "thought", "description"],
+          "default": "dialogue",
+          "description": "Message type"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Message timestamp"
+        },
+        "context": {
+          "$ref": "#/definitions/messageContext"
+        },
+        "processed": {
+          "type": "boolean",
+          "description": "Whether message has been processed",
+          "default": false
+        },
+        "analysis": {
+          "$ref": "#/definitions/messageAnalysis"
+        },
+        "responses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Response suggestions"
+        }
+      },
+      "required": ["id", "speakerId", "content", "timestamp"],
+      "additionalProperties": false
+    },
+    "messageContext": {
+      "type": "object",
+      "properties": {
+        "environmental": {
+          "type": "object",
+          "description": "Environmental context at message time",
+          "additionalProperties": true
+        },
+        "relational": {
+          "type": "object",
+          "description": "Relationship context between speaker and listeners",
+          "additionalProperties": true
+        },
+        "campaign": {
+          "type": "object",
+          "description": "Campaign-specific context",
+          "additionalProperties": true
+        },
+        "temporal": {
+          "type": "object",
+          "description": "Temporal context",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "messageAnalysis": {
+      "type": "object",
+      "properties": {
+        "emotionalState": {
+          "$ref": "#/definitions/emotionalState"
+        },
+        "sentiment": {
+          "$ref": "#/definitions/sentimentAnalysis"
+        },
+        "topics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Extracted topics"
+        },
+        "tone": {
+          "$ref": "#/definitions/toneAnalysis"
+        },
+        "language": {
+          "type": "string",
+          "description": "Detected language",
+          "default": "en"
+        },
+        "complexity": {
+          "type": "object",
+          "properties": {
+            "readability": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "vocabulary": {
+              "type": "string",
+              "enum": ["simple", "moderate", "complex", "advanced"]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "sentimentAnalysis": {
+      "type": "object",
+      "properties": {
+        "score": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1,
+          "description": "Sentiment score (-1 to 1)"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Confidence in sentiment analysis"
+        },
+        "label": {
+          "type": "string",
+          "enum": ["positive", "negative", "neutral"],
+          "description": "Sentiment label"
+        },
+        "emotions": {
+          "type": "object",
+          "description": "Emotion breakdown",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "required": ["score", "confidence", "label"],
+      "additionalProperties": false
+    },
+    "toneAnalysis": {
+      "type": "object",
+      "properties": {
+        "intensity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Tone intensity"
+        },
+        "formality": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Formality level"
+        },
+        "urgency": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Urgency level"
+        },
+        "sarcasm": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Sarcasm detection"
+        },
+        "questioning": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Questioning tone"
+        },
+        "emotional": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Emotional content"
+        }
+      },
+      "additionalProperties": false
+    },
+    "conversationMetadata": {
+      "type": "object",
+      "properties": {
+        "turns": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Number of conversation turns"
+        },
+        "topics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Main conversation topics"
+        },
+        "emotionalTrajectory": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/emotionalState"
+          },
+          "description": "Emotional state progression"
+        },
+        "keyMoments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/keyMoment"
+          },
+          "description": "Significant moments in conversation"
+        },
+        "analytics": {
+          "$ref": "#/definitions/conversationAnalytics"
+        },
+        "summary": {
+          "type": "string",
+          "description": "Conversation summary",
+          "maxLength": 2000
+        },
+        "outcome": {
+          "type": "string",
+          "enum": ["successful", "partial", "failed", "ongoing"],
+          "description": "Conversation outcome"
+        }
+      },
+      "additionalProperties": false
+    },
+    "keyMoment": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["emotional_peak", "decision_point", "conflict", "resolution", "discovery", "revelation"],
+          "description": "Type of key moment"
+        },
+        "message": {
+          "type": "string",
+          "description": "Message ID or content",
+          "maxLength": 500
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the moment occurred"
+        },
+        "significance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Significance level"
+        },
+        "impact": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "critical"],
+          "description": "Impact on conversation"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the key moment",
+          "maxLength": 500
+        }
+      },
+      "required": ["type", "timestamp", "significance"],
+      "additionalProperties": false
+    },
+    "conversationAnalytics": {
+      "type": "object",
+      "properties": {
+        "duration": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Conversation duration in seconds"
+        },
+        "messageCount": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Total number of messages"
+        },
+        "averageResponseTime": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Average response time in milliseconds"
+        },
+        "engagement": {
+          "$ref": "#/definitions/engagementMetrics"
+        },
+        "effectiveness": {
+          "$ref": "#/definitions/effectivenessMetrics"
+        },
+        "satisfaction": {
+          "$ref": "#/definitions/satisfactionMetrics"
+        }
+      },
+      "additionalProperties": false
+    },
+    "engagementMetrics": {
+      "type": "object",
+      "properties": {
+        "participation": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Participant engagement level"
+        },
+        "responsiveness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Response rate and speed"
+        },
+        "interaction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Quality of interactions"
+        }
+      },
+      "additionalProperties": false
+    },
+    "effectivenessMetrics": {
+      "type": "object",
+      "properties": {
+        "goalAchievement": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Conversation goal achievement"
+        },
+        "clarity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Communication clarity"
+        },
+        "efficiency": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Conversation efficiency"
+        }
+      },
+      "additionalProperties": false
+    },
+    "satisfactionMetrics": {
+      "type": "object",
+      "properties": {
+        "overall": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Overall satisfaction score"
+        },
+        "emotional": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Emotional satisfaction"
+        },
+        "outcome": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Outcome satisfaction"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

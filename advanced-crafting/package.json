@@ -1,0 +1,199 @@
+{
+  "name": "@dmlogn8n/advanced-crafting",
+  "version": "1.0.0",
+  "description": "Advanced Crafting System for D&D and roleplaying games with multi-tier crafting, social features, and n8n automation",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:crafting": "jest --testPathPattern=crafting",
+    "test:materials": "jest --testPathPattern=materials",
+    "test:social": "jest --testPathPattern=social",
+    "test:integration": "jest --testPathPattern=integration",
+    "lint": "eslint . --ext .js",
+    "lint:fix": "eslint . --ext .js --fix",
+    "format": "prettier --write .",
+    "db:init": "node scripts/init-database.js",
+    "db:migrate": "node scripts/migrate.js",
+    "db:seed": "node scripts/seed.js",
+    "db:reset": "npm run db:init && npm run db:migrate && npm run db:seed",
+    "build": "npm run lint && npm run test && npm run build:docs",
+    "build:docs": "jsdoc -c jsdoc.conf.json",
+    "docker:build": "docker build -t crafting-system .",
+    "docker:run": "docker run -p 3000:3000 --env-file .env crafting-system"
+  },
+  "keywords": [
+    "dnd",
+    "roleplaying",
+    "crafting",
+    "game",
+    "automation",
+    "n8n",
+    "rpg",
+    "fantasy",
+    "multiplayer",
+    "guild",
+    "blacksmithing",
+    "alchemy",
+    "enchanting"
+  ],
+  "author": "DMlogn8n Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/DMlogn8n.git",
+    "directory": "advanced-crafting"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/DMlogn8n/issues"
+  },
+  "homepage": "https://github.com/your-org/DMlogn8n/tree/main/advanced-crafting#readme",
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "mongoose": "^7.5.0",
+    "pg": "^8.11.3",
+    "redis": "^4.6.7",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "helmet": "^7.0.0",
+    "compression": "^1.7.4",
+    "morgan": "^1.10.0",
+    "winston": "^3.10.0",
+    "prom-client": "^14.2.0",
+    "node-cron": "^3.0.2",
+    "uuid": "^9.0.0",
+    "lodash": "^4.17.21",
+    "moment": "^2.29.4",
+    "joi": "^17.9.2",
+    "dotenv": "^16.3.1",
+    "axios": "^1.5.0",
+    "socket.io": "^4.7.2",
+    "nodemailer": "^6.9.4",
+    "multer": "^1.4.5-lts.1",
+    "sharp": "^0.32.5",
+    "pdf-lib": "^1.17.1",
+    "csv-parser": "^3.0.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "jest": "^29.6.2",
+    "nodemon": "^3.0.1",
+    "eslint": "^8.47.0",
+    "prettier": "^3.0.2",
+    "jsdoc": "^4.0.2",
+    "supertest": "^6.3.3",
+    "@types/jest": "^29.5.4",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.28.1",
+    "prettier-config-airbnb-base": "^0.1.0",
+    "husky": "^8.0.3",
+    "lint-staged": "^14.0.1",
+    "artillery": "^2.0.0",
+    "nock": "^13.3.2",
+    "mongodb-memory-server": "^8.15.1"
+  },
+  "peerDependencies": {
+    "n8n": ">=0.200.0"
+  },
+  "optionalDependencies": {
+    "pm2": "^5.3.0",
+    "newrelic": "^11.0.0",
+    "dd-trace": "^3.3.0"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged",
+      "pre-push": "npm run test"
+    }
+  },
+  "lint-staged": {
+    "*.js": [
+      "eslint --fix",
+      "prettier --write",
+      "git add"
+    ]
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "collectCoverageFrom": [
+      "**/*.js",
+      "!**/node_modules/**",
+      "!**/coverage/**",
+      "!**/docs/**",
+      "!jest.config.js",
+      "!coverage/**"
+    ],
+    "coverageDirectory": "coverage",
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ],
+    "testMatch": [
+      "**/tests/**/*.test.js",
+      "**/__tests__/**/*.js"
+    ]
+  },
+  "eslintConfig": {
+    "extends": [
+      "airbnb-base"
+    ],
+    "rules": {
+      "no-console": "warn",
+      "max-len": [
+        "error",
+        {
+          "code": 120
+        }
+      ],
+      "no-unused-vars": [
+        "error",
+        {
+          "argsIgnorePattern": "^_"
+        }
+      ]
+    }
+  },
+  "prettier": {
+    "extends": "prettier-config-airbnb-base",
+    "singleQuote": true,
+    "trailingComma": "es5",
+    "tabWidth": 2,
+    "semi": true,
+    "printWidth": 120
+  },
+  "files": [
+    "index.js",
+    "core/",
+    "professions/",
+    "materials/",
+    "workflows/",
+    "config/",
+    "docs/",
+    "README.md",
+    "LICENSE"
+  ],
+  "n8n": {
+    "nodes": [
+      {
+        "name": "CraftingSystem",
+        "description": "Advanced crafting system node for n8n",
+        "category": "Productivity",
+        "icon": "🔨"
+      }
+    ]
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/your-org"
+  }
+}

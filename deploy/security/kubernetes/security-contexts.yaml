@@ -1,0 +1,266 @@
+# Security Contexts for DMLog Components
+# Ensures pods run with minimal privileges and security settings
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-contexts-config
+  namespace: dmlog
+data:
+  backend-security-context.yaml: |
+    # Security Context for Backend Application
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+      fsGroup: 1000
+      seccompProfile:
+        type: RuntimeDefault
+      capabilities:
+        drop:
+        - ALL
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+
+  container-security-context.yaml: |
+    # Container-specific Security Context
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+        add:
+        - NET_BIND_SERVICE  # Only if binding to privileged ports
+      seccompProfile:
+        type: RuntimeDefault
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+
+  database-security-context.yaml: |
+    # Security Context for Database
+    securityContext:
+      runAsUser: 999  # PostgreSQL user
+      runAsGroup: 999
+      fsGroup: 999
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: false  # Database needs to write
+      capabilities:
+        drop:
+        - ALL
+        add:
+        - CHOWN
+        - SETGID
+        - SETUID
+      seccompProfile:
+        type: RuntimeDefault
+
+  redis-security-context.yaml: |
+    # Security Context for Redis
+    securityContext:
+      runAsUser: 999
+      runAsGroup: 999
+      fsGroup: 999
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: false
+      capabilities:
+        drop:
+        - ALL
+        add:
+        - SETGID
+        - SETUID
+      seccompProfile:
+        type: RuntimeDefault
+
+  monitoring-security-context.yaml: |
+    # Security Context for Monitoring Components
+    securityContext:
+      runAsUser: 65534  # nobody user
+      runAsGroup: 65534
+      fsGroup: 65534
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+      seccompProfile:
+        type: RuntimeDefault
+---
+# Pod Security Standards Enforcement
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pod-security-standards
+  namespace: dmlog
+data:
+  restricted-profile.yaml: |
+    # Restricted Profile - Maximum Security
+    apiVersion: policy/v1beta1
+    kind: PodSecurityPolicy
+    metadata:
+      name: restricted
+    spec:
+      privileged: false
+      allowPrivilegeEscalation: false
+      requiredDropCapabilities:
+        - ALL
+      volumes:
+        - 'configMap'
+        - 'emptyDir'
+        - 'projected'
+        - 'secret'
+        - 'downwardAPI'
+        - 'persistentVolumeClaim'
+      runAsUser:
+        rule: 'MustRunAsNonRoot'
+      seLinux:
+        rule: 'RunAsAny'
+      fsGroup:
+        rule: 'RunAsAny'
+      readOnlyRootFilesystem: true
+
+  baseline-profile.yaml: |
+    # Baseline Profile - Good Security
+    apiVersion: policy/v1beta1
+    kind: PodSecurityPolicy
+    metadata:
+      name: baseline
+    spec:
+      privileged: false
+      allowPrivilegeEscalation: false
+      requiredDropCapabilities:
+        - NET_RAW
+      volumes:
+        - 'configMap'
+        - 'emptyDir'
+        - 'projected'
+        - 'secret'
+        - 'downwardAPI'
+        - 'persistentVolumeClaim'
+      runAsUser:
+        rule: 'MustRunAsNonRoot'
+      seLinux:
+        rule: 'RunAsAny'
+      fsGroup:
+        rule: 'RunAsAny'
+---
+# Security Context for Init Containers
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: init-container-security
+  namespace: dmlog
+data:
+  init-security-context.yaml: |
+    # Security Context for Init Containers
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+      seccompProfile:
+        type: RuntimeDefault
+---
+# AppArmor and SELinux Profiles
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-profiles
+  namespace: dmlog
+data:
+  apparmor-profile.yaml: |
+    # AppArmor Profile for DMLog Backend
+    #!/usr/bin/env apparmor_parser
+    #include <tunables/global>
+
+    profile dmlog-backend flags=(attach_disconnected,mediate_deleted) {
+      #include <abstractions/base>
+
+      # Network access
+      network inet tcp,
+      network inet udp,
+      network inet6 tcp,
+      network inet6 udp,
+
+      # File system access
+      / r,
+      /bin/** ix,
+      /sbin/** ix,
+      /usr/bin/** ix,
+      /usr/sbin/** ix,
+      /lib/** mr,
+      /lib64/** mr,
+      /usr/lib/** mr,
+      /usr/lib64/** mr,
+
+      # Application files
+      /app/** r,
+      /tmp/** rw,
+      /var/tmp/** rw,
+
+      # Deny everything else
+      deny /** m,
+    }
+
+  selinux-policy.yaml: |
+    # SELinux Policy for DMLog
+    policy_module(dmlog, 1.0.0)
+
+    ########################################
+    #
+    # Declarations
+    #
+
+    type dmlog_t;
+    type dmlog_exec_t;
+    domain_type(dmlog_t)
+    init_daemon_domain(dmlog_t, dmlog_exec_t)
+
+    type dmlog_var_run_t;
+    files_pid_file(dmlog_var_run_t)
+
+    type dmlog_log_t;
+    logging_log_file(dmlog_log_t)
+
+    ########################################
+    #
+    # dmlog local policy
+    #
+
+    allow dmlog_t self:capability { setuid setgid };
+    allow dmlog_t self:process { signal fork };
+    allow dmlog_t self:fifo_file rw_fifo_file_perms;
+    allow dmlog_t self:unix_stream_socket create_stream_socket_perms;
+
+    manage_dirs_pattern(dmlog_t, dmlog_var_run_t, dmlog_var_run_t)
+    manage_files_pattern(dmlog_t, dmlog_var_run_t, dmlog_var_run_t)
+    files_pid_filetrans(dmlog_t, dmlog_var_run_t, { file dir })
+
+    manage_dirs_pattern(dmlog_t, dmlog_log_t, dmlog_log_t)
+    manage_files_pattern(dmlog_t, dmlog_log_t, dmlog_log_t)
+    logging_log_filetrans(dmlog_t, dmlog_log_t, { file dir })
+
+    corenet_tcp_sendrecv_generic_if(dmlog_t)
+    corenet_tcp_sendrecv_generic_node(dmlog_t)
+    corenet_tcp_bind_generic_node(dmlog_t)
+    corenet_tcp_sendrecv_http_port(dmlog_t)
+    corenet_tcp_bind_http_port(dmlog_t)
+
+    files_read_etc_files(dmlog_t)
+    libs_use_ld_so(dmlog_t)
+    libs_use_shared_libs(dmlog_t)

@@ -1,0 +1,301 @@
+# Stress Testing Configuration
+# Extreme load testing to find breaking points and system limits
+
+tests:
+  - name: "Stress Test - Progressive Load"
+    scenario: "agent_simulation"
+    target_url: "http://localhost:8000"
+    duration: 1800  # 30 minutes
+    users: 2000
+    spawn_rate: 20  # agents per second
+    ramp_up: 300  # seconds (gradual ramp-up)
+    ramp_down: 300  # seconds
+    think_time: 0.2  # minimal think time
+    timeout: 120  # extended timeout
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "DMLogn8n-StressTester/1.0"
+    auth:
+      type: "bearer"
+      token: "${STRESS_AUTH_TOKEN}"
+    test_data:
+      agent_types: ["dm_assistant", "npc", "combat_agent", "world_state", "dialogue_manager", "quest_giver", "merchant", "guardian", "storyteller", "combat_logician", "emotion_engine", "memory_keeper"]
+      complexity_levels: [8, 9, 10]
+      interaction_patterns: ["stress", "chaos", "extreme_load"]
+      memory_sizes: [1024, 2048]  # MB
+      failure_injection: true
+      resource_exhaustion: true
+    monitoring:
+      metrics_interval: 2  # seconds
+      system_monitoring: true
+      detailed_logging: true
+      resource_tracking: true
+      network_monitoring: true
+      error_tracking: true
+      bottleneck_detection: true
+    reporting:
+      generate_html: true
+      generate_json: true
+      generate_dashboard: true
+      include_charts: true
+      include_recommendations: true
+      baseline_comparison: true
+      performance_regression: true
+      stress_analysis: true
+
+  - name: "Stress Test - Spike Load"
+    scenario: "user_journey"
+    target_url: "http://localhost:8000"
+    duration: 1200  # 20 minutes
+    users: 3000
+    spawn_rate: 100  # users per second (massive spike)
+    ramp_up: 30  # seconds (immediate spike)
+    ramp_down: 180  # seconds
+    think_time: 0.1  # minimal think time
+    timeout: 180  # extended timeout
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "DMLogn8n-StressTester/1.0"
+    auth:
+      type: "session"
+      session_cookie: "${STRESS_SESSION_COOKIE}"
+    test_data:
+      user_personas: ["power_player", "dungeon_master", "regular_player", "social_player", "casual_gamer"]
+      journey_stages: ["login", "concurrent_sessions", "peak_gameplay", "stress_interactions"]
+      device_types: ["mobile", "tablet", "desktop"]
+      network_speeds: ["slow", "average", "fast"]
+      spike_behavior: true
+      concurrent_sessions: true
+      resource_intensive_actions: true
+    monitoring:
+      metrics_interval: 1  # seconds (very frequent)
+      system_monitoring: true
+      detailed_logging: true
+      resource_tracking: true
+      network_monitoring: true
+      error_tracking: true
+      bottleneck_detection: true
+      connection_pool_monitoring: true
+      database_monitoring: true
+    reporting:
+      generate_html: true
+      generate_json: true
+      generate_dashboard: true
+      include_charts: true
+      include_recommendations: true
+      baseline_comparison: true
+      performance_regression: true
+      stress_analysis: true
+      capacity_analysis: true
+
+  - name: "Stress Test - Combat Engine"
+    scenario: "combat_stress"
+    target_url: "http://localhost:8000"
+    duration: 1500  # 25 minutes
+    users: 1500
+    spawn_rate: 50  # combat scenarios per second
+    ramp_up: 60  # seconds
+    ramp_down: 120  # seconds
+    think_time: 0.05  # minimal think time (rapid combat)
+    timeout: 90  # extended timeout
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "DMLogn8n-CombatStressTester/1.0"
+    auth:
+      type: "bearer"
+      token: "${STRESS_AUTH_TOKEN}"
+    test_data:
+      combat_scenarios: ["mass_battle", "boss_fight", "arena_tournament", "war_simulation"]
+      participants_per_combat: [10, 20, 50]  # high participant counts
+      combat_complexity: ["extreme", "chaotic", "rule_heavy"]
+      simultaneous_combats: true
+      resource_intensive_calculations: true
+    monitoring:
+      metrics_interval: 1  # seconds
+      combat_metrics: true
+      turn_time_tracking: true
+      calculation_complexity_monitoring: true
+      state_synchronization_tracking: true
+      resource_monitoring: true
+      error_tracking: true
+    reporting:
+      generate_html: true
+      generate_json: true
+      generate_dashboard: true
+      include_charts: true
+      include_combat_analysis: true
+      include_performance_profiling: true
+      stress_analysis: true
+
+  - name: "Stress Test - Dialogue System"
+    scenario: "dialogue_load"
+    target_url: "http://localhost:8000"
+    duration: 1200  # 20 minutes
+    users: 2000
+    spawn_rate: 80  # conversations per second
+    ramp_up: 45  # seconds
+    ramp_down: 90  # seconds
+    think_time: 0.3  # minimal think time
+    timeout: 120  # extended timeout
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "DMLogn8n-DialogueStressTester/1.0"
+    auth:
+      type: "bearer"
+      token: "${STRESS_AUTH_TOKEN}"
+    test_data:
+      conversation_complexity: ["complex", "multi_participant", "emotion_intensive"]
+      participants_per_conversation: [5, 10, 20]
+      dialogue_topics: ["complex_negotiation", "political_discussion", "emotional_conflict"]
+      ai_processing_intensity: "high"
+      memory_intensive_dialogue: true
+    monitoring:
+      metrics_interval: 2  # seconds
+      dialogue_metrics: true
+      response_time_tracking: true
+      ai_processing_monitoring: true
+      memory_usage_tracking: true
+      conversation_state_monitoring: true
+      error_tracking: true
+    reporting:
+      generate_html: true
+      generate_json: true
+      generate_dashboard: true
+      include_charts: true
+      include_dialogue_analysis: true
+      include_ai_performance_analysis: true
+      stress_analysis: true
+
+  - name: "Stress Test - System Breakpoint"
+    scenario: "agent_simulation"
+    target_url: "http://localhost:8000"
+    duration: 2400  # 40 minutes
+    users: 5000  # very high user count
+    spawn_rate: 200  # users per second (extreme load)
+    ramp_up: 60  # seconds (immediate extreme load)
+    ramp_down: 300  # seconds
+    think_time: 0.01  # minimal think time
+    timeout: 300  # very extended timeout
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "DMLogn8n-BreakpointTester/1.0"
+    auth:
+      type: "bearer"
+      token: "${STRESS_AUTH_TOKEN}"
+    test_data:
+      agent_types: ["all_available"]
+      complexity_levels: [10]  # maximum complexity
+      interaction_patterns: ["chaos", "system_breakdown"]
+      memory_sizes: [2048, 4096]  # very high memory usage
+      resource_exhaustion: true
+      network_congestion: true
+      database_overload: true
+      cascading_failures: true
+    monitoring:
+      metrics_interval: 0.5  # seconds (very frequent)
+      system_monitoring: true
+      detailed_logging: true
+      resource_tracking: true
+      network_monitoring: true
+      error_tracking: true
+      bottleneck_detection: true
+      failure_propagation_tracking: true
+      recovery_monitoring: true
+    reporting:
+      generate_html: true
+      generate_json: true
+      generate_dashboard: true
+      include_charts: true
+      include_recommendations: true
+      baseline_comparison: true
+      performance_regression: true
+      stress_analysis: true
+      capacity_analysis: true
+      failure_analysis: true
+      recovery_analysis: true
+
+# Global settings
+global:
+  # Load testing parameters
+  max_concurrent_tests: 1  # Only one stress test at a time
+  test_cleanup: true
+  resource_monitoring: true
+  automatic_rollback: true
+  health_check_interval: 10  # seconds
+
+  # Stress testing specific settings
+  break_point_detection: true
+  resource_limit_testing: true
+  failure_injection: true
+  recovery_testing: true
+  performance_degradation_tracking: true
+
+  # Database settings
+  metrics_storage: "sqlite"
+  metrics_retention_days: 60  # Extended retention for stress tests
+
+  # Reporting settings
+  reports_output_dir: "./reports/stress"
+  auto_open_reports: false
+  detailed_failure_analysis: true
+
+  # Alerting settings
+  alert_thresholds:
+    response_time_p95: 5000  # ms (very lenient for stress tests)
+    error_rate: 20.0  # % (acceptable for stress tests)
+    cpu_usage: 95.0  # %
+    memory_usage: 95.0  # %
+    disk_usage: 90.0  # %
+    connection_pool_exhaustion: true
+
+  # Performance baselines
+  baseline_comparison:
+    enabled: false  # Disabled for stress tests
+    deviation_threshold: 50.0  # % (very lenient)
+
+  # Safety mechanisms
+  safety_limits:
+    max_cpu_usage: 98.0  # %
+    max_memory_usage: 98.0  # %
+    max_error_rate: 50.0  # %
+    automatic_stop_on_critical_failure: true
+    emergency_shutdown: true
+
+# Environment-specific overrides
+environments:
+  development:
+    target_url: "http://localhost:8000"
+    users_multiplier: 0.2
+    safety_limits:
+      max_cpu_usage: 90.0  # % (conservative for dev)
+      max_memory_usage: 90.0  # %
+    monitoring:
+      detailed_logging: true
+      debug_mode: true
+
+  staging:
+    target_url: "https://staging.dmlogn8n.com"
+    users_multiplier: 0.6
+    safety_limits:
+      max_cpu_usage: 95.0  # %
+      max_memory_usage: 95.0  # %
+    monitoring:
+      detailed_logging: true
+      system_monitoring: true
+
+  production:
+    target_url: "https://api.dmlogn8n.com"
+    users_multiplier: 0.3  # Conservative for production stress testing
+    safety_limits:
+      max_cpu_usage: 85.0  # % (very conservative for production)
+      max_memory_usage: 85.0  # %
+      max_error_rate: 10.0  # %
+    monitoring:
+      detailed_logging: false
+      privacy_mode: true
+      real_time_alerting: true
+    auth:
+      type: "oauth2"
+      client_id: "${OAUTH_CLIENT_ID}"
+      client_secret: "${OAUTH_CLIENT_SECRET}"
+      scope: "stress_testing"

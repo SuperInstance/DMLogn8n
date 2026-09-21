@@ -1,0 +1,218 @@
+{
+  "name": "Dynamic Quest Generation Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "quest-generation",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "quest-generation-webhook",
+      "name": "Quest Generation Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "quest-generation-trigger"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Validate incoming quest generation request\nconst { playerId, questType, category, difficulty, options } = $input.first().json;\n\n// Validate required fields\nif (!playerId) {\n  throw new Error('Player ID is required');\n}\n\n// Set default values\nconst requestData = {\n  playerId,\n  questType: questType || 'side_quest',\n  category: category || 'combat',\n  difficulty: difficulty || 3,\n  options: options || {},\n  timestamp: new Date().toISOString(),\n  requestId: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`\n};\n\n// Add context analysis\nrequestData.contextAnalysis = {\n  playerLevel: options.playerLevel || 1,\n  playerClass: options.playerClass || 'warrior',\n  preferences: options.preferences || {\n    combat: 0.5,\n    exploration: 0.5,\n    social: 0.5,\n    mystery: 0.5,\n    crafting: 0.5\n  },\n  completionRate: options.completionRate || 0.8,\n  recentPerformance: options.recentPerformance || 0.7\n};\n\n// Determine if AI generation should be used\nconst useAI = difficulty >= 4 || options.forceAI || Math.random() > 0.3;\nrequestData.useAI = useAI;\n\n// Log the request\nconsole.log(`Quest generation request: ${requestData.requestId} for player ${playerId}`);\n\nreturn { json: requestData };"
+      },
+      "id": "validate-request",
+      "name": "Validate & Prepare Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {\n          "options": {\n            "caseSensitive": true,\n            "leftValue": "",\n            "typeValidation": "strict"\n          },\n          "conditions": [\n            {\n              "leftValue": "={{ $json.useAI }}",\n              "rightValue": true,\n              "operator": {\n                "type": "boolean",\n                "operation": "equal"\n              }\n            }\n          ],\n          "combinator": "and"\n        }
+      },
+      "id": "check-ai-generation",
+      "name": "Check AI Generation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.OPENAI_API_ENDPOINT || 'https://api.openai.com/v1/chat/completions' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {\n          "parameters": [\n            {\n              "name": "Content-Type",\n              "value": "application/json"\n            },\n            {\n              "name": "Authorization",\n              "value": "Bearer {{ $env.OPENAI_API_KEY }}"\n            }\n          ]\n        },\n        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "={{ $env.OPENAI_MODEL || 'gpt-4' }}"
+            },
+            {
+              "name": "messages",
+              "value": "={{ [\n  {\n    role: 'system',\n    content: `You are a master dungeon master and quest designer for a fantasy RPG. Generate engaging, personalized quests based on the provided context.`\n  },\n  {\n    role: 'user',\n    content: `Generate a quest with the following parameters:\\n\\nQuest Type: ${{ $json.questType }}\\nCategory: ${{ $json.category }}\\nDifficulty: ${{ $json.difficulty }}/7\\n\\nPlayer Context:\\n- Level: ${{ $json.contextAnalysis.playerLevel }}\\n- Class: ${{ $json.contextAnalysis.playerClass }}\\n- Preferences: Combat ${{ $json.contextAnalysis.preferences.combat }}, Exploration ${{ $json.contextAnalysis.preferences.exploration }}, Social ${{ $json.contextAnalysis.preferences.social }}, Mystery ${{ $json.contextAnalysis.preferences.mystery }}, Crafting ${{ $json.contextAnalysis.preferences.crafting }}\\n\\nGenerate a complete quest with:\\n1. Engaging title and description\\n2. Clear objectives\\n3. Appropriate rewards\\n4. Story elements\\n5. Optional branching choices\\n\\nReturn the quest as structured JSON.`\n  }\n] }}"
+            },
+            {
+              "name": "temperature",
+              "value": "={{ $env.AI_TEMPERATURE || 0.7 }}"
+            },
+            {
+              "name": "max_tokens",
+              "value": "={{ $env.AI_MAX_TOKENS || 2000 }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ai-quest-generation",
+      "name": "AI Quest Generation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [920, 200]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "template-generation",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "template-generation-webhook",
+      "name": "Template Generation Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [920, 400],
+      "webhookId": "template-generation-trigger"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process AI-generated quest content\nconst aiResponse = $input.first().json;\nlet questData;\n\ntry {\n  // Parse AI response\n  if (aiResponse.choices && aiResponse.choices[0] && aiResponse.choices[0].message) {\n    const content = aiResponse.choices[0].message.content;\n    \n    // Try to extract JSON from the response\n    const jsonMatch = content.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      questData = JSON.parse(jsonMatch[0]);\n    } else {\n      throw new Error('No valid JSON found in AI response');\n    }\n  } else {\n    throw new Error('Invalid AI response format');\n  }\n  \n  // Standardize quest structure\n  const standardizedQuest = {\n    id: `ai_quest_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,\n    title: questData.title || 'Generated Quest',\n    description: questData.description || 'A mysterious quest awaits.',\n    type: questData.type || 'side_quest',\n    category: questData.category || 'combat',\n    difficulty: questData.difficulty || 3,\n    levelRequirement: questData.levelRequirement || 1,\n    \n    // Story elements\n    story: {\n      introduction: questData.introduction || '',\n      background: questData.background || '',\n      climax: questData.climax || '',\n      resolution: questData.resolution || ''\n    },\n    \n    // Objectives\n    objectives: (questData.objectives || []).map((obj, index) => ({\n      id: `obj_${index + 1}`,\n      title: obj.title || `Objective ${index + 1}`,\n      description: obj.description || '',\n      type: obj.type || 'kill',\n      target: obj.target || 'enemy',\n      current: 0,\n      required: obj.required || 1,\n      completed: false,\n      optional: obj.optional || false,\n      hidden: obj.hidden || false,\n      rewards: obj.rewards || []\n    })),\n    \n    // Rewards\n    rewards: {\n      base: (questData.rewards || []).map(reward => ({\n        type: reward.type || 'experience',\n        amount: reward.amount || 100,\n        description: reward.description || ''\n      })),\n      bonus: [],\n      choice: questData.choiceRewards || { enabled: false, options: [] }\n    },\n    \n    // Metadata\n    generatedBy: 'ai',\n    aiGenerated: true,\n    aiModel: $env.OPENAI_MODEL || 'gpt-4',\n    aiConfidence: 0.8,\n    source: 'ai',\n    tags: ['ai-generated', questData.category || 'general'],\n    \n    // Branching support\n    branching: {\n      enabled: questData.branching || false,\n      currentPath: null,\n      completedPaths: [],\n      availablePaths: questData.availablePaths || [],\n      pathHistory: []\n    },\n    \n    // State\n    state: 'active',\n    active: true,\n    personalized: true\n  };\n  \n  return { json: standardizedQuest };\n  \n} catch (error) {\n  console.error('Error processing AI quest:', error);\n  \n  // Fallback to basic quest structure\n  return {\n    json: {\n      id: `fallback_quest_${Date.now()}`,\n      title: 'Mysterious Adventure',\n      description: 'An unexpected journey awaits you.',\n      type: 'side_quest',\n      category: 'exploration',\n      difficulty: 3,\n      levelRequirement: 1,\n      objectives: [{\n        id: 'obj_1',\n        title: 'Explore the Unknown',\n        description: 'Discover what lies beyond the familiar paths.',\n        type: 'explore',\n        target: 'unknown_location',\n        current: 0,\n        required: 1,\n        completed: false\n      }],\n      rewards: {\n        base: [{\n          type: 'experience',\n          amount: 200,\n          description: 'Experience for your adventures'\n        }],\n        bonus: [],\n        choice: { enabled: false, options: [] }\n      },\n      generatedBy: 'fallback',\n      aiGenerated: false,\n      state: 'active',\n      active: true\n    }\n  };\n}"
+      },
+      "id": "process-ai-response",
+      "name": "Process AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1160, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process template-generated quest\nconst templateResponse = $input.first().json;\nconst originalRequest = $node[\"Validate & Prepare Request\"].json;\n\n// Create standardized quest from template\nconst questFromTemplate = {\n  id: `template_quest_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,\n  title: templateResponse.title || `${originalRequest.category} Quest`,\n  description: templateResponse.description || 'A quest generated from template.',\n  type: originalRequest.questType,\n  category: originalRequest.category,\n  difficulty: originalRequest.difficulty,\n  levelRequirement: templateResponse.levelRequirement || Math.max(1, originalRequest.contextAnalysis.playerLevel - 2),\n  \n  // Story elements from template\n  story: templateResponse.story || {\n    introduction: '',\n    background: '',\n    climax: '',\n    resolution: ''\n  },\n  \n  // Objectives from template\n  objectives: (templateResponse.objectives || []).map((obj, index) => ({\n    id: `obj_${index + 1}`,\n    title: obj.title || `Objective ${index + 1}`,\n    description: obj.description || '',\n    type: obj.type || 'kill',\n    target: obj.target || 'target',\n    current: 0,\n    required: obj.required || 1,\n    completed: false,\n    optional: obj.optional || false,\n    hidden: obj.hidden || false,\n    rewards: obj.rewards || []\n  })),\n  \n  // Rewards from template\n  rewards: templateResponse.rewards || {\n    base: [{\n      type: 'experience',\n      amount: 100 * originalRequest.difficulty,\n      description: 'Quest completion reward'\n    }, {\n      type: 'gold',\n      amount: 50 * originalRequest.difficulty,\n      description: 'Gold reward'\n    }],\n    bonus: [],\n    choice: { enabled: false, options: [] }\n  },\n  \n  // Metadata\n  generatedBy: 'template',\n  aiGenerated: false,\n  source: 'template',\n  template: templateResponse.template || 'default',\n  tags: ['template-generated', originalRequest.category],\n  \n  // Branching support\n  branching: {\n    enabled: templateResponse.branching || false,\n    currentPath: null,\n    completedPaths: [],\n    availablePaths: templateResponse.availablePaths || [],\n    pathHistory: []\n  },\n  \n  // State\n  state: 'active',\n  active: true,\n  personalized: false\n};\n\nreturn { json: questFromTemplate };"
+      },
+      "id": "process-template-response",
+      "name": "Process Template Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1160, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.DATABASE_API_URL || 'http://localhost:3001/api/quests' }}",
+        "sendHeaders": true,
+        "headerParameters": {\n          "parameters": [\n            {\n              "name": "Content-Type",\n              "value": "application/json"\n            },\n            {\n              "name": "Authorization",\n              "value": "Bearer {{ $env.DATABASE_API_KEY || '' }}"\n            }\n          ]\n        },\n        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save-quest-to-database",
+      "name": "Save Quest to Database",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Prepare final response\nconst questData = $input.first().json;\nconst originalRequest = $node[\"Validate & Prepare Request\"].json;\n\n// Create success response\nconst response = {\n  success: true,\n  requestId: originalRequest.requestId,\n  quest: {\n    id: questData.id,\n    title: questData.title,\n    description: questData.description,\n    type: questData.type,\n    category: questData.category,\n    difficulty: questData.difficulty,\n    levelRequirement: questData.levelRequirement,\n    objectives: questData.objectives,\n    rewards: questData.rewards,\n    generatedBy: questData.generatedBy,\n    aiGenerated: questData.aiGenerated,\n    estimatedTime: Math.round(questData.objectives.length * 15), // 15 minutes per objective\n    tags: questData.tags\n  },\n  message: `Quest \"${questData.title}\" generated successfully`,\n  timestamp: new Date().toISOString(),\n  metadata: {\n    generationMethod: questData.aiGenerated ? 'ai' : 'template',\n    processingTime: Date.now() - new Date(originalRequest.timestamp).getTime(),\n    personalized: questData.personalized\n  }\n};\n\n// Log successful generation\nconsole.log(`Quest generated successfully: ${questData.id} using ${questData.generatedBy}`);\n\n// Trigger follow-up workflows if needed\nif (questData.difficulty >= 5) {\n  // Trigger high-difficulty quest notification\n  console.log(`High difficulty quest generated: ${questData.id}`);\n}\n\nif (questData.aiGenerated) {\n  // Log AI generation for analytics\n  console.log(`AI quest generated for player ${originalRequest.playerId}`);\n}\n\nreturn { json: response };"
+      },
+      "id": "prepare-final-response",
+      "name": "Prepare Final Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1640, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "send-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1880, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.NOTIFICATION_API_URL || 'http://localhost:3001/api/notifications' }}",
+        "sendHeaders": true,
+        "headerParameters": {\n          "parameters": [\n            {\n              "name": "Content-Type",\n              "value": "application/json"\n            }\n          ]\n        },\n        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "",
+              "value": "={{ {\n  playerId: $node[\"Validate & Prepare Request\"].json.playerId,\n  type: 'quest_generated',\n  title: 'New Quest Available!',\n  message: `A new quest \"${$json.quest.title}\" has been generated for you.`,\n  data: {\n    questId: $json.quest.id,\n    questType: $json.quest.type,\n    difficulty: $json.quest.difficulty,\n    estimatedTime: $json.quest.estimatedTime\n  },\n  priority: $json.quest.difficulty >= 5 ? 'high' : 'normal',\n  timestamp: new Date().toISOString()\n} }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-notification",
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1880, 500]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Log generation analytics\nconst questData = $input.first().json;\nconst originalRequest = $node[\"Validate & Prepare Request\"].json;\n\nconst analyticsData = {\n  event: 'quest_generated',\n  timestamp: new Date().toISOString(),\n  playerId: originalRequest.playerId,\n  questId: questData.id,\n  questType: questData.type,\n  questCategory: questData.category,\n  difficulty: questData.difficulty,\n  generationMethod: questData.aiGenerated ? 'ai' : 'template',\n  processingTime: Date.now() - new Date(originalRequest.timestamp).getTime(),\n  personalized: questData.personalized,\n  objectiveCount: questData.objectives.length,\n  hasRewards: questData.rewards.base.length > 0,\n  hasBranching: questData.branching.enabled,\n  aiModel: questData.aiModel || null,\n  aiConfidence: questData.aiConfidence || null,\n  context: {\n    playerLevel: originalRequest.contextAnalysis.playerLevel,\n    playerClass: originalRequest.contextAnalysis.playerClass,\n    completionRate: originalRequest.contextAnalysis.completionRate,\n    recentPerformance: originalRequest.contextAnalysis.recentPerformance\n  }\n};\n\nconsole.log('Quest Generation Analytics:', JSON.stringify(analyticsData, null, 2));\n\n// Could send to analytics service\n// await fetch('http://analytics-service/api/events', {\n//   method: 'POST',\n//   headers: { 'Content-Type': 'application/json' },\n//   body: JSON.stringify(analyticsData)\n// });\n\nreturn { json: analyticsData };"
+      },
+      "id": "log-analytics",
+      "name": "Log Analytics",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1400, 500]
+    }
+  ],
+  "connections": {
+    "Quest Generation Webhook": {
+      "main": [[{ "node": "Validate & Prepare Request", "type": "main", "index": 0 }]]
+    },
+    "Validate & Prepare Request": {
+      "main": [[{ "node": "Check AI Generation", "type": "main", "index": 0 }]]
+    },
+    "Check AI Generation": {
+      "main": [\n        [{\n          "node": "AI Quest Generation",\n          "type": "main",\n          "index": 0\n        }],\n        [{\n          "node": "Template Generation Webhook",\n          "type": "main",\n          "index": 0\n        }]\n      ]
+    },
+    "AI Quest Generation": {
+      "main": [[{ "node": "Process AI Response", "type": "main", "index": 0 }]]
+    },
+    "Template Generation Webhook": {
+      "main": [[{ "node": "Process Template Response", "type": "main", "index": 0 }]]
+    },
+    "Process AI Response": {
+      "main": [[{ "node": "Save Quest to Database", "type": "main", "index": 0 }]]
+    },
+    "Process Template Response": {
+      "main": [[{ "node": "Save Quest to Database", "type": "main", "index": 0 }]]
+    },
+    "Save Quest to Database": {
+      "main": [\n        [{\n          "node": "Prepare Final Response",\n          "type": "main",\n          "index": 0\n        },\n        {\n          "node": "Log Analytics",\n          "type": "main",\n          "index": 0\n        }]\n      ]
+    },
+    "Prepare Final Response": {
+      "main": [\n        [{\n          "node": "Send Response",\n          "type": "main",\n          "index": 0\n        },\n        {\n          "node": "Send Notification",\n          "type": "main",\n          "index": 0\n        }]\n      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["quest", "generation", "ai", "rpg", "dynamic"],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-20T10:00:00.000Z",
+  "versionId": "1"
+}

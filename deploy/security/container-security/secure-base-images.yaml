@@ -1,0 +1,647 @@
+# Secure Base Images for DMLog
+# Defines secure base images with minimal attack surface
+
+---
+# Secure Python Base Image Dockerfile
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: secure-python-base-dockerfile
+  namespace: dmlog
+data:
+  Dockerfile: |
+    # Multi-stage build for secure Python application
+    FROM python:3.11-slim-bullseye AS builder
+
+    # Install security updates and minimal dependencies
+    RUN apt-get update && \
+        apt-get upgrade -y && \
+        apt-get install -y --no-install-recommends \
+            build-essential \
+            ca-certificates \
+            curl && \
+        rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+    # Create non-root user
+    RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+    # Set up secure directory structure
+    WORKDIR /app
+
+    # Copy requirements and install dependencies
+    COPY requirements.txt .
+    RUN pip install --no-cache-dir --user -r requirements.txt && \
+        pip install safety bandit && \
+        find /root/.local -type d -name __pycache__ -exec rm -rf {} +
+
+    # Production stage
+    FROM python:3.11-slim-bullseye AS production
+
+    # Security labels and metadata
+    LABEL maintainer="DMLog Security Team" \
+          version="1.0.0" \
+          description="Secure Python base image for DMLog" \
+          security.scan="enabled" \
+          security.base="distroless"
+
+    # Install runtime security packages only
+    RUN apt-get update && \
+        apt-get upgrade -y && \
+        apt-get install -y --no-install-recommends \
+            ca-certificates \
+            tini && \
+        rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* && \
+        apt-get clean
+
+    # Create non-root user with restricted permissions
+    RUN groupadd -r appuser && \
+        useradd -r -g appuser -s /bin/false -d /app appuser
+
+    # Copy installed packages from builder
+    COPY --from=builder /root/.local /home/appuser/.local
+
+    # Set up secure application directory
+    WORKDIR /app
+    COPY --chown=appuser:appuser . .
+
+    # Secure permissions
+    RUN chmod -R 755 /app && \
+        chmod -R 644 /app/*.py /app/*.txt && \
+        chown -R appuser:appuser /app
+
+    # Set security environment variables
+    ENV PYTHONUNBUFFERED=1 \
+        PYTHONDONTWRITEBYTECODE=1 \
+        PATH=/home/appuser/.local/bin:$PATH \
+        HOME=/home/appuser
+
+    # Switch to non-root user
+    USER appuser
+
+    # Use tini as init system
+    ENTRYPOINT ["/usr/bin/tini", "--"]
+
+    # Health check
+    HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+        CMD curl -f http://localhost:8000/health || exit 1
+
+    CMD ["python", "app.py"]
+
+  security-context.yaml: |
+    # Security context for Python containers
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+      fsGroup: 1000
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+      seccompProfile:
+        type: RuntimeDefault
+
+---
+# Secure Node.js Base Image Dockerfile
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: secure-nodejs-base-dockerfile
+  namespace: dmlog
+data:
+  Dockerfile: |
+    # Multi-stage build for secure Node.js application
+    FROM node:18-alpine AS builder
+
+    # Install security updates and build tools
+    RUN apk update && \
+        apk upgrade && \
+        apk add --no-cache \
+            build-base \
+            python3 \
+            make \
+            g++ && \
+        rm -rf /var/cache/apk/*
+
+    # Create non-root user
+    RUN addgroup -g 1000 -S appuser && \
+        adduser -S -D -H -u 1000 -h /app -s /sbin/nologin -G appuser appuser
+
+    WORKDIR /app
+
+    # Copy package files and install dependencies
+    COPY package*.json ./
+    RUN npm ci --only=production && \
+        npm audit fix && \
+        npm cache clean --force
+
+    # Production stage with minimal Node.js
+    FROM node:18-alpine AS production
+
+    # Security labels
+    LABEL maintainer="DMLog Security Team" \
+          version="1.0.0" \
+          description="Secure Node.js base image for DMLog" \
+          security.scan="enabled"
+
+    # Install runtime dependencies only
+    RUN apk update && \
+        apk upgrade && \
+        apk add --no-cache \
+            ca-certificates \
+            dumb-init && \
+        rm -rf /var/cache/apk/* /tmp/* /var/tmp/*
+
+    # Create non-root user
+    RUN addgroup -g 1000 -S appuser && \
+        adduser -S -D -H -u 1000 -h /app -s /sbin/nologin -G appuser appuser
+
+    # Copy dependencies and application
+    WORKDIR /app
+    COPY --from=builder --chown=appuser:appuser /app/node_modules ./node_modules
+    COPY --chown=appuser:appuser . .
+
+    # Secure permissions
+    RUN chown -R appuser:appuser /app && \
+        find /app -type d -exec chmod 755 {} + && \
+        find /app -type f -exec chmod 644 {} + && \
+        chmod +x /app/start.sh
+
+    # Switch to non-root user
+    USER appuser
+
+    # Environment variables
+    ENV NODE_ENV=production \
+        NODE_OPTIONS="--max-old-space-size=512" \
+        PATH="/app/node_modules/.bin:$PATH"
+
+    # Health check
+    HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+        CMD node healthcheck.js
+
+    ENTRYPOINT ["dumb-init", "--"]
+    CMD ["node", "server.js"]
+
+---
+# Distroless Container Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: distroless-config
+  namespace: dmlog
+data:
+  distroless-python-dockerfile: |
+    # Distroless Python container for maximum security
+    FROM gcr.io/distroless/python3-debian11 AS production
+
+    LABEL maintainer="DMLog Security Team" \
+          security.level="maximum" \
+          security.type="distroless"
+
+    # Copy application and dependencies from builder
+    COPY --from=python-builder /app /app
+    WORKDIR /app
+
+    # User is already non-root in distroless images
+    # No shell, no package manager, minimal attack surface
+
+    # Application must be statically linked and self-contained
+    CMD ["app.py"]
+
+  distroless-nodejs-dockerfile: |
+    # Distroless Node.js container for maximum security
+    FROM gcr.io/distroless/nodejs18-debian11 AS production
+
+    LABEL maintainer="DMLog Security Team" \
+          security.level="maximum" \
+          security.type="distroless"
+
+    # Copy application and dependencies from builder
+    COPY --from=node-builder /app /app
+    WORKDIR /app
+
+    # No shell, no package manager, minimal attack surface
+    CMD ["server.js"]
+
+---
+# Container Security Policies
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: container-security-policies
+  namespace: dmlog
+data:
+  image-policies.yaml: |
+    # Image Security Policies
+    policies:
+      allowed-registries:
+        - "docker.io/dmlog/*"
+        - "gcr.io/dmlog-project/*"
+        - "ecr.amazonaws.com/dmlog/*"
+        - "registry.k8s.io/*"
+
+      blocked-registries:
+        - "docker.io/library/*"  # Block untrusted base images
+        - "*:latest"  # Block floating tags
+
+      required-labels:
+        - "security.scan"
+        - "version"
+        - "maintainer"
+
+      vulnerability-thresholds:
+        critical: 0
+        high: 0
+        medium: 5
+        low: 10
+
+      required-scanners:
+        - "trivy"
+        - "safety"
+        - "bandit"
+
+  security-checks.yaml: |
+    # Pre-deployment Security Checks
+    checks:
+      - name: "Root User Check"
+        description: "Ensure containers don't run as root"
+        command: "docker run --rm --user 0 ${IMAGE} whoami"
+        expected_output: "root"
+        action: "block"
+
+      - name: "Sensitive Files Check"
+        description: "Check for sensitive files in image"
+        command: "docker run --rm ${IMAGE} ls -la /etc/shadow"
+        expected_output: "No such file or directory"
+        action: "warn"
+
+      - name: "Package Manager Check"
+        description: "Ensure package managers are removed"
+        command: "docker run --rm ${IMAGE} which apt-get yum apk"
+        expected_output: ""
+        action: "warn"
+
+      - name: "Shell Access Check"
+        description: "Check for shell access"
+        command: "docker run --rm ${IMAGE} which bash sh"
+        expected_output: ""
+        action: "warn"
+
+  build-security.yaml: |
+    # Build-time Security Configuration
+    build-args:
+      BUILDKIT_INLINE_CACHE: "1"
+      BUILDKIT_MULTI_PLATFORM: "1"
+      DOCKER_BUILDKIT: "1"
+
+    security-options:
+      - "--no-new-privileges"
+      - "--userns-remap=default"
+      - "--seccomp=default"
+
+    labels:
+      org.opencontainers.image.vendor: "DMLog"
+      org.opencontainers.image.licenses: "MIT"
+      org.opencontainers.image.source: "https://github.com/dmlog/app"
+      security.scan.date: "${BUILD_DATE}"
+      security.scan.tool: "trivy"
+
+---
+# Container Runtime Security
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: runtime-security-config
+  namespace: dmlog
+data:
+  seccomp-profile.json: |
+    {
+      "defaultAction": "SCMP_ACT_ERRNO",
+      "architectures": [
+        "SCMP_ARCH_X86_64",
+        "SCMP_ARCH_X86",
+        "SCMP_ARCH_X32"
+      ],
+      "syscalls": [
+        {
+          "names": [
+            "accept",
+            "accept4",
+            "access",
+            "adjtimex",
+            "alarm",
+            "bind",
+            "brk",
+            "capget",
+            "capset",
+            "chdir",
+            "chmod",
+            "chown",
+            "chown32",
+            "clock_getres",
+            "clock_gettime",
+            "clock_nanosleep",
+            "close",
+            "connect",
+            "copy_file_range",
+            "creat",
+            "dup",
+            "dup2",
+            "dup3",
+            "epoll_create",
+            "epoll_create1",
+            "epoll_ctl",
+            "epoll_ctl_old",
+            "epoll_pwait",
+            "epoll_wait",
+            "epoll_wait_old",
+            "eventfd",
+            "eventfd2",
+            "execve",
+            "execveat",
+            "exit",
+            "exit_group",
+            "faccessat",
+            "fadvise64",
+            "fadvise64_64",
+            "fallocate",
+            "fanotify_mark",
+            "fchdir",
+            "fchmod",
+            "fchmodat",
+            "fchown",
+            "fchown32",
+            "fchownat",
+            "fcntl",
+            "fcntl64",
+            "fdatasync",
+            "fgetxattr",
+            "flistxattr",
+            "flock",
+            "fork",
+            "fremovexattr",
+            "fsetxattr",
+            "fstat",
+            "fstat64",
+            "fstatat64",
+            "fstatfs",
+            "fstatfs64",
+            "fsync",
+            "ftruncate",
+            "ftruncate64",
+            "futex",
+            "getcwd",
+            "getdents",
+            "getdents64",
+            "getegid",
+            "getegid32",
+            "geteuid",
+            "geteuid32",
+            "getgid",
+            "getgid32",
+            "getgroups",
+            "getgroups32",
+            "getitimer",
+            "getpeername",
+            "getpgid",
+            "getpgrp",
+            "getpid",
+            "getppid",
+            "getpriority",
+            "getrandom",
+            "getresgid",
+            "getresgid32",
+            "getresuid",
+            "getresuid32",
+            "getrlimit",
+            "get_robust_list",
+            "getrusage",
+            "getsid",
+            "getsockname",
+            "getsockopt",
+            "get_thread_area",
+            "gettid",
+            "gettimeofday",
+            "getuid",
+            "getuid32",
+            "getxattr",
+            "inotify_add_watch",
+            "inotify_init",
+            "inotify_init1",
+            "inotify_rm_watch",
+            "io_cancel",
+            "ioctl",
+            "io_destroy",
+            "io_getevents",
+            "ioprio_get",
+            "ioprio_set",
+            "io_setup",
+            "io_submit",
+            "ipc",
+            "kill",
+            "lchown",
+            "lchown32",
+            "lgetxattr",
+            "link",
+            "linkat",
+            "listen",
+            "listxattr",
+            "llistxattr",
+            "lremovexattr",
+            "lseek",
+            "lsetxattr",
+            "lstat",
+            "lstat64",
+            "madvise",
+            "memfd_create",
+            "mincore",
+            "mkdir",
+            "mkdirat",
+            "mknod",
+            "mknodat",
+            "mlock",
+            "mlock2",
+            "mlockall",
+            "mmap",
+            "mmap2",
+            "mprotect",
+            "mq_getsetattr",
+            "mq_notify",
+            "mq_open",
+            "mq_timedreceive",
+            "mq_timedsend",
+            "mq_unlink",
+            "mremap",
+            "msgctl",
+            "msgget",
+            "msgrcv",
+            "msgsnd",
+            "msync",
+            "munlock",
+            "munlockall",
+            "munmap",
+            "nanosleep",
+            "newfstatat",
+            "open",
+            "openat",
+            "pause",
+            "pipe",
+            "pipe2",
+            "poll",
+            "ppoll",
+            "prctl",
+            "pread64",
+            "prlimit64",
+            "pselect6",
+            "ptrace",
+            "pwrite64",
+            "read",
+            "readahead",
+            "readlink",
+            "readlinkat",
+            "readv",
+            "recv",
+            "recvfrom",
+            "recvmmsg",
+            "recvmsg",
+            "remap_file_pages",
+            "removexattr",
+            "rename",
+            "renameat",
+            "renameat2",
+            "restart_syscall",
+            "rmdir",
+            "rt_sigaction",
+            "rt_sigpending",
+            "rt_sigprocmask",
+            "rt_sigqueueinfo",
+            "rt_sigreturn",
+            "rt_sigsuspend",
+            "rt_sigtimedwait",
+            "rt_tgsigqueueinfo",
+            "sched_getaffinity",
+            "sched_getattr",
+            "sched_getparam",
+            "sched_get_priority_max",
+            "sched_get_priority_min",
+            "sched_getscheduler",
+            "sched_rr_get_interval",
+            "sched_setaffinity",
+            "sched_setattr",
+            "sched_setparam",
+            "sched_setscheduler",
+            "sched_yield",
+            "seccomp",
+            "select",
+            "semctl",
+            "semget",
+            "semop",
+            "semtimedop",
+            "send",
+            "sendfile",
+            "sendfile64",
+            "sendmmsg",
+            "sendmsg",
+            "sendto",
+            "setfsgid",
+            "setfsgid32",
+            "setfsuid",
+            "setfsuid32",
+            "setgid",
+            "setgid32",
+            "setgroups",
+            "setgroups32",
+            "setitimer",
+            "setpgid",
+            "setpriority",
+            "setregid",
+            "setregid32",
+            "setresgid",
+            "setresgid32",
+            "setresuid",
+            "setresuid32",
+            "setreuid",
+            "setreuid32",
+            "setrlimit",
+            "set_robust_list",
+            "setsid",
+            "setsockopt",
+            "set_thread_area",
+            "set_tid_address",
+            "setuid",
+            "setuid32",
+            "setxattr",
+            "shmat",
+            "shmctl",
+            "shmdt",
+            "shmget",
+            "shutdown",
+            "sigaltstack",
+            "signalfd",
+            "signalfd4",
+            "sigreturn",
+            "socket",
+            "socketcall",
+            "socketpair",
+            "splice",
+            "stat",
+            "stat64",
+            "statfs",
+            "statfs64",
+            "statx",
+            "symlink",
+            "symlinkat",
+            "sync",
+            "sync_file_range",
+            "syncfs",
+            "sysinfo",
+            "tee",
+            "tgkill",
+            "time",
+            "timer_create",
+            "timer_delete",
+            "timerfd_create",
+            "timerfd_gettime",
+            "timerfd_settime",
+            "timer_getoverrun",
+            "timer_gettime",
+            "timer_settime",
+            "times",
+            "tkill",
+            "truncate",
+            "truncate64",
+            "ugetrlimit",
+            "umask",
+            "uname",
+            "unlink",
+            "unlinkat",
+            "utime",
+            "utimensat",
+            "utimes",
+            "vfork",
+            "vmsplice",
+            "wait4",
+            "waitid",
+            "waitpid",
+            "write",
+            "writev"
+          ],
+          "action": "SCMP_ACT_ALLOW"
+        },
+        {
+          "names": [
+            "clone",
+            "fork",
+            "vfork",
+            "execve",
+            "execveat",
+            "openat",
+            "ptrace",
+            "process_vm_readv",
+            "process_vm_writev"
+          ],
+          "action": "SCMP_ACT_ERRNO"
+        }
+      ]
+    }

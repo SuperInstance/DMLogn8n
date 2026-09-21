@@ -1,0 +1,146 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: n8n
+  namespace: dmlogn8n
+  labels:
+    app: n8n
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: n8n
+  template:
+    metadata:
+      labels:
+        app: n8n
+    spec:
+      containers:
+      - name: n8n
+        image: n8nio/n8n:latest
+        ports:
+        - containerPort: 5678
+          name: n8n
+        env:
+        - name: N8N_BASIC_AUTH_ACTIVE
+          value: "true"
+        - name: N8N_BASIC_AUTH_USER
+          value: "admin"
+        - name: N8N_BASIC_AUTH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dmlogn8n-secrets
+              key: n8n-basic-auth-password
+        - name: N8N_HOST
+          value: "localhost"
+        - name: N8N_PORT
+          value: "5678"
+        - name: N8N_PROTOCOL
+          value: "http"
+        - name: WEBHOOK_URL
+          value: "http://n8n.dmlogn8n.com/"
+        - name: DB_TYPE
+          value: "mysql"
+        - name: DB_MYSQLDB_HOST
+          value: "mysql"
+        - name: DB_MYSQLDB_PORT
+          value: "3306"
+        - name: DB_MYSQLDB_DATABASE
+          value: "n8n"
+        - name: DB_MYSQLDB_USER
+          value: "n8n_user"
+        - name: DB_MYSQLDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dmlogn8n-secrets
+              key: mysql-password
+        - name: QUEUE_BULL_REDIS_HOST
+          value: "redis"
+        - name: QUEUE_BULL_REDIS_PORT
+          value: "6379"
+        - name: N8N_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: dmlogn8n-secrets
+              key: n8n-encryption-key
+        - name: N8N_JWT_AUTH_HEADER
+          value: "authorization"
+        - name: N8N_JWT_AUTH_HEADER_VALUE_PREFIX
+          value: "Bearer"
+        - name: N8N_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: dmlogn8n-secrets
+              key: n8n-jwt-secret
+        - name: TZ
+          valueFrom:
+            configMapKeyRef:
+              name: dmlogn8n-config
+              key: TZ
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: dmlogn8n-config
+              key: LOG_LEVEL
+        volumeMounts:
+        - name: n8n-storage
+          mountPath: /home/node/.n8n
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1500m"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 5678
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 5678
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      - name: n8n-storage
+        persistentVolumeClaim:
+          claimName: n8n-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: n8n
+  namespace: dmlogn8n
+  labels:
+    app: n8n
+spec:
+  ports:
+  - port: 5678
+    targetPort: 5678
+    protocol: TCP
+    name: n8n
+  selector:
+    app: n8n
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: n8n-pvc
+  namespace: dmlogn8n
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: fast-ssd

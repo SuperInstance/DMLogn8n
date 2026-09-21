@@ -1,0 +1,114 @@
+# Optimized Dockerfile for NVIDIA Jetson devices
+FROM nvcr.io/nvidia/l4t-pytorch:r35.4.1-pth2.0-py3
+
+# Set environment variables for Jetson optimization
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    CUDA_HOME=/usr/local/cuda \
+    PATH=/usr/local/cuda/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    PYTHONPATH=/app:$PYTHONPATH \
+    JETSON_OPTIMIZATIONS=true
+
+# Set Jetson-specific optimizations
+ENV OPENBLAS_NUM_THREADS=1 \
+    OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    VECLIB_MAXIMUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    git \
+    libpq-dev \
+    libhdf5-dev \
+    libssl-dev \
+    libffi-dev \
+    postgresql-client \
+    redis-tools \
+    htop \
+    python3-dev \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Upgrade pip and install core Python packages
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Create non-root user
+RUN groupadd -r dmlog && useradd -r -g dmlog dmlog
+
+# Set work directory
+WORKDIR /app
+
+# Copy requirements files
+COPY ../../source_code/backend/requirements.txt .
+COPY production_env/docker/requirements.jetson.txt .
+
+# Install Python dependencies with Jetson optimizations
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir -r requirements.jetson.txt
+
+# Install Jetson-optimized packages
+RUN pip install --no-cache-dir \
+    torch==2.0.1 \
+    torchvision==0.15.2 \
+    torchaudio==2.0.2 \
+    --index-url https://download.pytorch.org/whl/cu118
+
+# Create necessary directories with proper permissions
+RUN mkdir -p /app/logs /app/models /app/data /app/tmp \
+    && chown -R dmlog:dmlog /app \
+    && chmod 755 /app/tmp
+
+# Copy application code
+COPY --chown=dmlog:dmlog ../../source_code/backend/ .
+
+# Copy Jetson-specific optimizations
+COPY --chown=dmlog:dmlog production_env/docker/jetson_optimizations.py /app/jetson_optimizations.py
+
+# Switch to non-root user
+USER dmlog
+
+# Create startup script with Jetson optimizations
+RUN echo '#!/bin/bash\n\
+echo "=== DMLog Jetson Startup ==="\n\
+echo "Jetson Model: $(cat /proc/device-tree/model)"\n\
+echo "CUDA Version: $(nvcc --version 2>/dev/null | grep release || echo \"N/A\")"\n\
+echo "Python Version: $(python --version)"\n\
+echo "PyTorch Version: $(python -c \"import torch; print(torch.__version__)\")"\n\
+echo "CUDA Available: $(python -c \"import torch; print(torch.cuda.is_available())\")"\n\
+echo "GPU Count: $(python -c \"import torch; print(torch.cuda.device_count())\")"\n\
+echo "GPU Name: $(python -c \"import torch; print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else \\\"N/A\\\")\")"\n\
+echo "Memory Info: $(free -h | grep Mem)"\n\
+echo "============================="\n\
+\n\
+# Apply Jetson optimizations\n\
+python jetson_optimizations.py\n\
+\n\
+# Start based on service type\n\
+if [ "$1" = "worker" ]; then\n\
+    echo "Starting RQ Worker..."\n\
+    exec rq worker --url redis://redis:6379/0 high medium low --with-scheduler\n\
+elif [ "$1" = "ml-trainer" ]; then\n\
+    echo "Starting ML Training Service..."\n\
+    exec python -m uvicorn training_service:app --host 0.0.0.0 --port 8001\n\
+else\n\
+    echo "Starting API Server..."\n\
+    exec uvicorn api_server:app --host 0.0.0.0 --port 8000 --workers 1\n\
+fi' > /app/start.sh && chmod +x /app/start.sh
+
+# Health check optimized for Jetson
+HEALTHCHECK --interval=60s --timeout=30s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Expose ports
+EXPOSE 8000 8001
+
+# Default command
+CMD ["/app/start.sh"]

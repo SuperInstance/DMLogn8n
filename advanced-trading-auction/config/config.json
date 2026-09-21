@@ -1,0 +1,88 @@
+{
+  "development": {
+    "database": {
+      "client": "postgresql",
+      "connection": {
+        "host": "localhost",
+        "port": 5432,
+        "database": "dmlogn8n_trading_dev",
+        "user": "postgres",
+        "password": "password"
+      },
+      "pool": {
+        "min": 2,
+        "max": 10
+      },
+      "migrations": {
+        "directory": "./database/migrations"
+      },
+      "seeds": {
+        "directory": "./database/seeds"
+      }
+    },
+    "redis": {
+      "host": "localhost",
+      "port": 6379,
+      "db": 0
+    },
+    "server": {
+      "port": 3001,
+      "host": "0.0.0.0"
+    },
+    "economy": {
+      "baseTaxRate": 0.05,
+      "auctionFee": 0.02,
+      "tradeFee": 0.01,
+      "marketManipulationThreshold": 100000,
+      "priceUpdateInterval": 30000,
+      "auctionExtensionTime": 300000,
+      "maxBidIncrement": 0.10,
+      "minReservePrice": 100
+    },
+    "logging": {
+      "level": "debug",
+      "file": "./logs/trading.log"
+    }
+  },
+  "production": {
+    "database": {
+      "client": "postgresql",
+      "connection": {
+        "host": "${DB_HOST}",
+        "port": "${DB_PORT}",
+        "database": "${DB_NAME}",
+        "user": "${DB_USER}",
+        "password": "${DB_PASSWORD}",
+        "ssl": true
+      },
+      "pool": {
+        "min": 5,
+        "max": 20
+      }
+    },
+    "redis": {
+      "host": "${REDIS_HOST}",
+      "port": "${REDIS_PORT}",
+      "password": "${REDIS_PASSWORD}",
+      "db": 0
+    },
+    "server": {
+      "port": "${PORT}",
+      "host": "0.0.0.0"
+    },
+    "economy": {
+      "baseTaxRate": 0.05,
+      "auctionFee": 0.02,
+      "tradeFee": 0.01,
+      "marketManipulationThreshold": 100000,
+      "priceUpdateInterval": 30000,
+      "auctionExtensionTime": 300000,
+      "maxBidIncrement": 0.10,
+      "minReservePrice": 100
+    },
+    "logging": {
+      "level": "info",
+      "file": "./logs/trading.log"
+    }
+  }
+}

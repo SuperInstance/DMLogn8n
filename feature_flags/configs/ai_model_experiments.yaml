@@ -1,0 +1,390 @@
+# AI Model A/B Testing Experiments Configuration
+# DMLogn8n Multi-Agent Platform
+
+experiments:
+  # Experiment 1: AI Model Comparison
+  exp_ai_model_comparison_v2:
+    name: "AI Model Comparison Test v2"
+    description: "Compare different AI models for dialogue generation quality and performance"
+    status: "draft"
+    tags: ["ai", "dialogue", "model_comparison", "performance"]
+
+    hypothesis:
+      primary_metric: "dialogue_quality_score"
+      expected_effect: "increase"
+      expected_magnitude: 0.15
+      confidence_level: 0.95
+
+    variants:
+      - id: "control_gpt4"
+        name: "GPT-4 (Control)"
+        description: "Standard GPT-4 model with default settings"
+        traffic_percentage: 40.0
+        is_control: true
+        config:
+          model: "gpt-4"
+          temperature: 0.7
+          max_tokens: 150
+          top_p: 0.9
+          frequency_penalty: 0.0
+          presence_penalty: 0.0
+          system_prompt: "You are a helpful AI assistant in a fantasy RPG game."
+
+      - id: "variant_gpt4_turbo"
+        name: "GPT-4 Turbo"
+        description: "Faster GPT-4 Turbo model with optimized settings"
+        traffic_percentage: 30.0
+        config:
+          model: "gpt-4-turbo"
+          temperature: 0.8
+          max_tokens: 200
+          top_p: 0.95
+          frequency_penalty: 0.1
+          presence_penalty: 0.1
+          system_prompt: "You are an engaging AI storyteller in a fantasy RPG game. Be creative and immersive."
+
+      - id: "variant_claude_sonnet"
+        name: "Claude 3 Sonnet"
+        description: "Claude 3 Sonnet model with balanced creativity"
+        traffic_percentage: 30.0
+        config:
+          model: "claude-3-sonnet"
+          temperature: 0.75
+          max_tokens: 180
+          top_p: 0.92
+          frequency_penalty: 0.05
+          presence_penalty: 0.05
+          system_prompt: "You are a creative AI companion in a fantasy RPG adventure. Provide rich, detailed responses."
+
+    metrics:
+      - id: "dialogue_quality_score"
+        name: "Dialogue Quality Score"
+        description: "User-rated dialogue quality (1-10 scale)"
+        metric_type: "engagement"
+        target_value: "higher"
+        statistical_test: "t_test"
+        significance_level: 0.05
+        minimum_effect_size: 0.1
+
+      - id: "response_time"
+        name: "AI Response Time"
+        description: "Time to generate AI response in milliseconds"
+        metric_type: "performance"
+        target_value: "lower"
+        statistical_test: "mann_whitney"
+        significance_level: 0.05
+        minimum_effect_size: 0.2
+
+      - id: "user_satisfaction"
+        name: "User Satisfaction"
+        description: "User satisfaction with AI responses (1-5 scale)"
+        metric_type: "engagement"
+        target_value: "higher"
+        statistical_test: "t_test"
+        significance_level: 0.05
+        minimum_effect_size: 0.15
+
+      - id: "conversation_continuation_rate"
+        name: "Conversation Continuation Rate"
+        description: "Percentage of users who continue conversation after AI response"
+        metric_type: "engagement"
+        target_value: "higher"
+        statistical_test: "z_test"
+        significance_level: 0.05
+        minimum_effect_size: 0.05
+
+      - id: "token_efficiency"
+        name: "Token Efficiency"
+        description: "Quality score per token used"
+        metric_type: "performance"
+        target_value: "higher"
+        statistical_test: "t_test"
+        significance_level: 0.05
+        minimum_effect_size: 0.1
+
+    traffic_allocation_type: "uniform"
+    target_audience:
+      all_users: false
+      level_range: [5, 50]
+      platforms: ["web", "desktop", "mobile"]
+      exclude_premium: false
+      min_sessions: 3
+
+    sample_size_requirements:
+      minimum_sample_size: 2000
+      desired_power: 0.8
+      expected_effect_size: 0.15
+
+    duration:
+      planned_days: 21
+      minimum_days: 14
+      maximum_days: 30
+
+    auto_stop_settings:
+      enabled: true
+      early_stopping_threshold: 0.95
+      minimum_sample_size_per_variant: 500
+
+    rollout_plan:
+      phase_1:
+        percentage: 10
+        duration_days: 3
+        description: "Initial rollout to small group"
+      phase_2:
+        percentage: 50
+        duration_days: 10
+        description: "Expanded rollout"
+      phase_3:
+        percentage: 100
+        duration_days: 8
+        description: "Full rollout"
+
+  # Experiment 2: Temperature and Creativity Settings
+  exp_ai_creativity_settings:
+    name: "AI Creativity Settings Test"
+    description: "Test different temperature and creativity settings for AI responses"
+    status: "draft"
+    tags: ["ai", "creativity", "dialogue", "settings"]
+
+    hypothesis:
+      primary_metric: "engagement_score"
+      expected_effect: "increase"
+      expected_magnitude: 0.10
+      confidence_level: 0.90
+
+    variants:
+      - id: "control_balanced"
+        name: "Balanced Creativity (Control)"
+        description: "Standard balanced creativity settings"
+        traffic_percentage: 25.0
+        is_control: true
+        config:
+          temperature: 0.7
+          top_p: 0.9
+          frequency_penalty: 0.0
+          presence_penalty: 0.0
+          creativity_level: "balanced"
+
+      - id: "variant_high_creativity"
+        name: "High Creativity"
+        description: "Higher creativity settings for more imaginative responses"
+        traffic_percentage: 25.0
+        config:
+          temperature: 0.9
+          top_p: 0.95
+          frequency_penalty: 0.2
+          presence_penalty: 0.3
+          creativity_level: "high"
+
+      - id: "variant_focused"
+        name: "Focused Responses"
+        description: "Lower temperature for more focused, consistent responses"
+        traffic_percentage: 25.0
+        config:
+          temperature: 0.5
+          top_p: 0.8
+          frequency_penalty: 0.0
+          presence_penalty: 0.0
+          creativity_level: "focused"
+
+      - id: "variant_adaptive"
+        name: "Adaptive Creativity"
+        description: "Creativity adapts based on user interaction patterns"
+        traffic_percentage: 25.0
+        config:
+          temperature: "adaptive"
+          top_p: "adaptive"
+          frequency_penalty: "adaptive"
+          presence_penalty: "adaptive"
+          creativity_level: "adaptive"
+          adaptation_factors:
+            - "user_engagement_level"
+            - "session_duration"
+            - "dialogue_complexity"
+
+    metrics:
+      - id: "engagement_score"
+        name: "Engagement Score"
+        description: "Composite engagement metric based on user interactions"
+        metric_type: "engagement"
+        target_value: "higher"
+        statistical_test: "t_test"
+        significance_level: 0.05
+
+      - id: "response_diversity"
+        name: "Response Diversity"
+        description: "Measure of response diversity and uniqueness"
+        metric_type: "engagement"
+        target_value: "higher"
+        statistical_test: "mann_whitney"
+        significance_level: 0.05
+
+      - id: "user_retention"
+        name: "User Retention"
+        description: "7-day user retention rate"
+        metric_type: "retention"
+        target_value: "higher"
+        statistical_test: "z_test"
+        significance_level: 0.05
+
+    traffic_allocation_type: "uniform"
+    target_audience:
+      all_users: false
+      segments: ["power_users", "story_lovers"]
+      min_account_age_days: 7
+
+    sample_size_requirements:
+      minimum_sample_size: 1500
+      desired_power: 0.8
+
+    duration:
+      planned_days: 14
+
+  # Experiment 3: Context Window Optimization
+  exp_context_window_optimization:
+    name: "Context Window Optimization"
+    description: "Test different context window sizes and management strategies"
+    status: "draft"
+    tags: ["ai", "performance", "context", "optimization"]
+
+    hypothesis:
+      primary_metric: "response_relevance"
+      expected_effect: "increase"
+      expected_magnitude: 0.12
+      confidence_level: 0.95
+
+    variants:
+      - id: "control_standard"
+        name: "Standard Context (Control)"
+        description: "Standard context window management"
+        traffic_percentage: 33.3
+        is_control: true
+        config:
+          context_window_size: 4000
+          context_summary_strategy: "recent"
+          memory_retention: "full_session"
+
+      - id: "variant_extended"
+        name: "Extended Context"
+        description: "Larger context window with smart summarization"
+        traffic_percentage: 33.3
+        config:
+          context_window_size: 8000
+          context_summary_strategy: "intelligent"
+          memory_retention: "multi_session"
+          summarization_model: "gpt-3.5-turbo"
+
+      - id: "variant_adaptive"
+        name: "Adaptive Context"
+        description: "Dynamic context window based on conversation complexity"
+        traffic_percentage: 33.4
+        config:
+          context_window_size: "adaptive"
+          min_context_size: 2000
+          max_context_size: 12000
+          context_summary_strategy: "adaptive"
+          memory_retention: "smart"
+          adaptation_triggers:
+            - "conversation_length"
+            - "topic_complexity"
+            - "user_engagement"
+
+    metrics:
+      - id: "response_relevance"
+        name: "Response Relevance"
+        description: "How relevant AI responses are to conversation context"
+        metric_type: "engagement"
+        target_value: "higher"
+        statistical_test: "t_test"
+        significance_level: 0.05
+
+      - id: "context_efficiency"
+        name: "Context Efficiency"
+        description: "Relevance per token of context used"
+        metric_type: "performance"
+        target_value: "higher"
+        statistical_test: "t_test"
+        significance_level: 0.05
+
+      - id: "processing_time"
+        name: "Processing Time"
+        description: "Time to process context and generate response"
+        metric_type: "performance"
+        target_value: "lower"
+        statistical_test: "mann_whitney"
+        significance_level: 0.05
+
+    traffic_allocation_type: "uniform"
+    target_audience:
+      all_users: false
+      min_sessions_per_week: 5
+      platforms: ["web", "desktop"]
+
+    sample_size_requirements:
+      minimum_sample_size: 1200
+      desired_power: 0.8
+
+    duration:
+      planned_days: 18
+
+# Global settings for AI experiments
+global_settings:
+  api_rate_limits:
+    requests_per_minute: 100
+    tokens_per_minute: 10000
+    concurrent_requests: 10
+
+  monitoring:
+    response_time_thresholds:
+      warning: 5000  # 5 seconds
+      critical: 10000  # 10 seconds
+
+    error_rate_thresholds:
+      warning: 0.05  # 5%
+      critical: 0.10  # 10%
+
+  data_collection:
+    log_all_responses: true
+    store_full_conversations: true
+    anonymize_user_data: true
+    retention_days: 90
+
+  safety_filters:
+    content_filtering: true
+    personal_data_detection: true
+    toxicity_detection: true
+
+  cost_management:
+    daily_budget_limit: 1000  # in API credits
+    cost_per_token_alerts: true
+    usage_anomaly_detection: true
+
+# Rollout criteria and success metrics
+success_criteria:
+  primary_metric_improvement: 0.10  # 10% improvement in primary metric
+  secondary_metric_maintainence: 0.95  # 95% of control performance
+  user_satisfaction_threshold: 4.0  # out of 5
+  performance_regression_limit: 0.20  # no more than 20% slower
+
+rollback_conditions:
+  critical_errors: true
+  performance_regression: 0.30  # 30% slower
+  user_satisfaction_drop: 0.5  # 0.5 point drop
+  error_rate_increase: 0.05  # 5% increase
+
+# Integration settings
+integrations:
+  analytics:
+    real_time_dashboards: true
+    automated_reports: true
+    alerting_systems: true
+
+  monitoring:
+    health_checks: true
+    performance_metrics: true
+    error_tracking: true
+
+  user_feedback:
+    in_game_ratings: true
+    survey_integration: true
+    feedback_collection: true

@@ -1,0 +1,228 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database (Jetson-optimized)
+  postgres:
+    image: postgres:15-alpine
+    container_name: dmlog_postgres_jetson
+    environment:
+      POSTGRES_DB: dmlog_jetson
+      POSTGRES_USER: dmlog_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_jetson:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - dmlog_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Redis Cache (Jetson-optimized)
+  redis:
+    image: arm64v8/redis:7-alpine
+    container_name: dmlog_redis_jetson
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_jetson:/data
+    networks:
+      - dmlog_network
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+
+  # Qdrant Vector Database (ARM64)
+  qdrant:
+    image: qdrant/qdrant:v1.6.0
+    container_name: dmlog_qdrant_jetson
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data_jetson:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__LOG_LEVEL=INFO
+      - QDRANT__STORAGE__PERFORMANCE__MAX_SEARCH_THREADS=2
+    networks:
+      - dmlog_network
+    restart: unless-stopped
+
+  # API Server (Jetson-optimized)
+  api:
+    build:
+      context: ../../source_code
+      dockerfile: production_env/docker/Dockerfile.jetson
+    container_name: dmlog_api_jetson
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://dmlog_user:${POSTGRES_PASSWORD}@postgres:5432/dmlog_jetson
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ENVIRONMENT=jetson
+      - LOG_LEVEL=info
+      - JETSON_OPTIMIZATIONS=true
+    volumes:
+      - api_logs_jetson:/app/logs
+      - /tmp:/tmp
+      - /dev/shm:/dev/shm
+    networks:
+      - dmlog_network
+    depends_on:
+      - postgres
+      - redis
+      - qdrant
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    runtime: nvidia
+
+  # Task Queue Worker (Jetson)
+  worker:
+    build:
+      context: ../../source_code
+      dockerfile: production_env/docker/Dockerfile.jetson
+    container_name: dmlog_worker_jetson
+    environment:
+      - DATABASE_URL=postgresql://dmlog_user:${POSTGRES_PASSWORD}@postgres:5432/dmlog_jetson
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ENVIRONMENT=jetson
+      - LOG_LEVEL=info
+    volumes:
+      - worker_logs_jetson:/app/logs
+      - /tmp:/tmp
+    networks:
+      - dmlog_network
+    depends_on:
+      - redis
+      - postgres
+    restart: unless-stopped
+    command: rq worker --url redis://redis:6379/0 high medium low --with-scheduler
+
+  # ML Training Service (Jetson GPU)
+  ml-trainer:
+    build:
+      context: ../../source_code
+      dockerfile: production_env/docker/Dockerfile.jetson
+    container_name: dmlog_ml_trainer_jetson
+    environment:
+      - DATABASE_URL=postgresql://dmlog_user:${POSTGRES_PASSWORD}@postgres:5432/dmlog_jetson
+      - REDIS_URL=redis://redis:6379/0
+      - CUDA_VISIBLE_DEVICES=0
+      - ENVIRONMENT=jetson
+      - LOG_LEVEL=info
+      - JETSON_MODEL_PATH=/app/models/jetson
+      - TORCH_CUDA_ARCH_LIST="7.2;8.7"
+    volumes:
+      - ml_models_jetson:/app/models
+      - ml_logs_jetson:/app/logs
+      - /tmp:/tmp
+      - /dev/shm:/dev/shm
+    networks:
+      - dmlog_network
+    depends_on:
+      - redis
+      - postgres
+    restart: unless-stopped
+    runtime: nvidia
+    command: python -m uvicorn training_service:app --host 0.0.0.0 --port 8001
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Monitoring (Lightweight for Jetson)
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: dmlog_node_exporter_jetson
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks:
+      - dmlog_network
+    restart: unless-stopped
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+
+  # cAdvisor for container monitoring
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.0
+    container_name: dmlog_cadvisor_jetson
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - dmlog_network
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg
+
+  # Jetson Stats Monitor
+  jetson-stats:
+    build:
+      context: production_env/docker
+      dockerfile: Dockerfile.jetson-stats
+    container_name: dmlog_jetson_stats
+    ports:
+      - "8081:8081"
+    volumes:
+      - /sys/devices/gpu.0:/sys/devices/gpu.0:ro
+      - /sys/devices/platform/tegra-fuse:/sys/devices/platform/tegra-fuse:ro
+      - /sys/devices/platform/tegra-i2c:/sys/devices/platform/tegra-i2c:ro
+    networks:
+      - dmlog_network
+    restart: unless-stopped
+    privileged: true
+
+networks:
+  dmlog_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.22.0.0/16
+
+volumes:
+  postgres_data_jetson:
+  redis_data_jetson:
+  qdrant_data_jetson:
+  api_logs_jetson:
+  worker_logs_jetson:
+  ml_logs_jetson:
+  ml_models_jetson:

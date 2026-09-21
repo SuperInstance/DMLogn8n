@@ -1,0 +1,479 @@
+{
+  "name": "Advanced Crafting Automation Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "crafting-request",
+        "options": {}
+      },
+      "id": "crafting-webhook",
+      "name": "Crafting Request Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "crafting-automation"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.body.craftingType }}",
+              "rightValue": "individual",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "crafting-type-router",
+      "name": "Crafting Type Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Validate crafting request\nconst craftingRequest = $input.first().json.body;\n\n// Basic validation\nif (!craftingRequest.crafterId || !craftingRequest.recipeId || !craftingRequest.materials) {\n  return [{ json: { error: 'Missing required fields: crafterId, recipeId, materials' } }];\n}\n\n// Check materials availability\nconst materialValidation = {\n  valid: true,\n  missing: [],\n  insufficient: []\n};\n\nfor (const material of craftingRequest.materials) {\n  // This would integrate with inventory system\n  const availableQuantity = await getMaterialQuantity(material.id, craftingRequest.crafterId);\n  \n  if (availableQuantity === 0) {\n    materialValidation.valid = false;\n    materialValidation.missing.push(material.id);\n  } else if (availableQuantity < material.quantity) {\n    materialValidation.valid = false;\n    materialValidation.insufficient.push({\n      id: material.id,\n      required: material.quantity,\n      available: availableQuantity\n    });\n  }\n}\n\nif (!materialValidation.valid) {\n  return [{\n    json: {\n      error: 'Material validation failed',\n      details: materialValidation\n    }\n  }];\n}\n\n// Validate crafter skill level\nconst crafter = await getCrafter(craftingRequest.crafterId);\nconst recipe = await getRecipe(craftingRequest.recipeId);\n\nif (!crafter || !recipe) {\n  return [{ json: { error: 'Invalid crafter or recipe' } }];\n}\n\nif (crafter.skills[recipe.profession] < recipe.requiredSkill) {\n  return [{\n    json: {\n      error: 'Insufficient skill level',\n      required: recipe.requiredSkill,\n      current: crafter.skills[recipe.profession]\n    }\n  }];\n}\n\n// Calculate crafting parameters\nconst craftingParams = {\n  successChance: calculateSuccessChance(crafter, recipe, craftingRequest.materials),\n  qualityModifier: calculateQualityModifier(crafter, recipe, craftingRequest.materials),\n  timeMultiplier: calculateTimeModifier(crafter, recipe),\n  experienceGain: calculateExperienceGain(recipe, craftingRequest.options)\n};\n\nreturn [{\n  json: {\n    valid: true,\n    craftingRequest: craftingRequest,\n    crafter: crafter,\n    recipe: recipe,\n    params: craftingParams\n  }\n}];\n\n// Helper functions (would be implemented in actual system)\nasync function getMaterialQuantity(materialId, crafterId) {\n  // Integration with inventory system\n  return 100; // Placeholder\n}\n\nasync function getCrafter(crafterId) {\n  // Integration with user system\n  return { skills: { BLACKSMITHING: 150 }, stats: {} }; // Placeholder\n}\n\nasync function getRecipe(recipeId) {\n  // Integration with recipe database\n  return { profession: 'BLACKSMITHING', requiredSkill: 100 }; // Placeholder\n}\n\nfunction calculateSuccessChance(crafter, recipe, materials) {\n  return 0.75; // Placeholder calculation\n}\n\nfunction calculateQualityModifier(crafter, recipe, materials) {\n  return 1.2; // Placeholder calculation\n}\n\nfunction calculateTimeModifier(crafter, recipe) {\n  return 1.0; // Placeholder calculation\n}\n\nfunction calculateExperienceGain(recipe, options) {\n  return recipe.experience || 100; // Placeholder\n}"
+      },
+      "id": "validate-request",
+      "name": "Validate Crafting Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        680,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "crafting/begin",
+        "options": {}
+      },
+      "id": "start-crafting",
+      "name": "Start Crafting Process",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        900,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crafting-api-auth",
+          "name": "Crafting API Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "interval": 10000,
+        "unit": "milliseconds"
+      },
+      "id": "crafting-timer",
+      "name": "Crafting Timer",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Simulate crafting completion\nconst craftingData = $input.first().json;\nconst successRoll = Math.random();\nconst successChance = craftingData.params.successChance;\n\nconst isSuccessful = successRoll < successChance;\nconst isCriticalSuccess = successRoll < (successChance * 0.1);\nconst isCriticalFailure = successRoll > (successChance + 0.1);\n\nlet result = {\n  crafterId: craftingData.craftingRequest.crafterId,\n  recipeId: craftingData.craftingRequest.recipeId,\n  timestamp: new Date().toISOString(),\n  success: isSuccessful,\n  criticalSuccess: isCriticalSuccess,\n  criticalFailure: isCriticalFailure\n};\n\nif (isSuccessful) {\n  // Calculate item quality\n  const baseQuality = 50;\n  const skillBonus = (craftingData.crafter.skills[craftingData.recipe.profession] / 100) * 20;\n  const materialBonus = (craftingData.params.qualityModifier - 1) * 30;\n  const criticalBonus = isCriticalSuccess ? 25 : 0;\n  \n  result.quality = Math.max(1, Math.min(100, Math.floor(\n    baseQuality + skillBonus + materialBonus + criticalBonus + (Math.random() - 0.5) * 20\n  )));\n  \n  // Generate item properties\n  result.item = {\n    id: generateItemId(),\n    name: craftingData.recipe.name,\n    type: craftingData.recipe.type,\n    quality: result.quality,\n    properties: generateItemProperties(craftingData.recipe, result.quality, isCriticalSuccess),\n    durability: calculateDurability(craftingData.recipe, result.quality, isCriticalSuccess),\n    value: calculateItemValue(craftingData.recipe, result.quality)\n  };\n  \n  result.experience = Math.floor(craftingData.params.experienceGain * (isCriticalSuccess ? 2 : 1));\n} else {\n  result.failureType = isCriticalFailure ? 'critical' : 'normal';\n  result.experience = Math.floor(craftingData.params.experienceGain * (isCriticalFailure ? 0.1 : 0.3));\n  \n  if (isCriticalFailure) {\n    result.penalties = generateFailurePenalties(craftingData.recipe);\n  }\n}\n\n// Update crafter statistics\nawait updateCrafterStats(craftingData.crafterId, result);\n\nreturn [{ json: result }];\n\nfunction generateItemId() {\n  return 'item_' + Date.now().toString(36) + Math.random().toString(36).substr(2);\n}\n\nfunction generateItemProperties(recipe, quality, isCritical) {\n  const properties = { ...recipe.baseProperties };\n  \n  if (quality >= 90) {\n    properties.legendary = true;\n    properties.bonusStats = { damage: Math.floor(quality * 1.5) };\n  } else if (quality >= 75) {\n    properties.epic = true;\n    properties.bonusStats = { damage: Math.floor(quality * 1.25) };\n  }\n  \n  if (isCritical) {\n    properties.masterwork = true;\n    properties.additionalSlots = 1;\n  }\n  \n  return properties;\n}\n\nfunction calculateDurability(recipe, quality, isCritical) {\n  const baseDurability = recipe.baseProperties?.durability || 100;\n  const qualityMultiplier = quality / 100;\n  const criticalBonus = isCritical ? 1.5 : 1;\n  \n  return Math.floor(baseDurability * qualityMultiplier * criticalBonus);\n}\n\nfunction calculateItemValue(recipe, quality) {\n  const baseValue = recipe.value || 100;\n  const qualityMultiplier = 1 + (quality - 50) / 50;\n  \n  return Math.floor(baseValue * qualityMultiplier);\n}\n\nfunction generateFailurePenalties(recipe) {\n  return {\n    materialLoss: 0.5,\n    durabilityDamage: 25,\n    experiencePenalty: 0.2\n  };\n}\n\nasync function updateCrafterStats(crafterId, result) {\n  // Integration with player stats system\n  console.log(`Updating stats for crafter ${crafterId}`);\n}"
+      },
+      "id": "complete-crafting",
+      "name": "Complete Crafting Process",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "inventory/add",
+        "options": {}
+      },
+      "id": "add-to-inventory",
+      "name": "Add to Inventory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1560,
+        200
+      ],
+      "condition": "={{ $json.success }}"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "crafting-response",
+      "name": "Crafting Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Mass production branch\nconst productionRequest = $input.first().json.body;\n\nif (!productionRequest.orderId || !productionRequest.items) {\n  return [{ json: { error: 'Missing mass production parameters' } }];\n}\n\n// Get production order details\nconst productionOrder = await getProductionOrder(productionRequest.orderId);\nif (!productionOrder) {\n  return [{ json: { error: 'Invalid production order' } }];\n}\n\n// Calculate production requirements\nconst productionPlan = {\n  orderId: productionRequest.orderId,\n  items: productionRequest.items,\n  totalQuantity: productionRequest.items.reduce((sum, item) => sum + item.quantity, 0),\n  estimatedTime: calculateTotalProductionTime(productionOrder, productionRequest.items),\n  requiredMaterials: calculateTotalMaterials(productionRequest.items),\n  qualityAssurance: setupQualityAssurance(productionOrder),\n  progressTracking: setupProgressTracking(productionOrder)\n};\n\nreturn [{ json: productionPlan }];\n\nasync function getProductionOrder(orderId) {\n  // Integration with order management system\n  return {\n    id: orderId,\n    clientId: 'client_123',\n    items: [],\n    deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)\n  };\n}\n\nfunction calculateTotalProductionTime(order, items) {\n  return items.reduce((total, item) => {\n    return total + (item.craftingTime * item.quantity);\n  }, 0);\n}\n\nfunction calculateTotalMaterials(items) {\n  const materials = {};\n  \n  items.forEach(item => {\n    item.materials?.forEach(material => {\n      if (!materials[material.id]) {\n        materials[material.id] = 0;\n      }\n      materials[material.id] += material.quantity * item.quantity;\n    });\n  });\n  \n  return materials;\n}\n\nfunction setupQualityAssurance(order) {\n  return {\n    sampleRate: 0.1,\n    qualityThreshold: 70,\n    inspectionPoints: ['mid_production', 'completion']\n  };\n}\n\nfunction setupProgressTracking(order) {\n  return {\n    updateInterval: 300000, // 5 minutes\n    milestones: generateMilestones(order.items)\n  };\n}\n\nfunction generateMilestones(items) {\n  return items.map((item, index) => ({\n    id: `milestone_${index}`,\n    item: item.name,\n    targetQuantity: item.quantity,\n    completed: 0\n  }));\n}"
+      },
+      "id": "mass-production-handler",
+      "name": "Mass Production Handler",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        680,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/webhook/crafting-progress",
+        "httpMethod": "POST",
+        "options": {}
+      },
+      "id": "production-progress-webhook",
+      "name": "Production Progress Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "interval": 60000,
+        "unit": "milliseconds"
+      },
+      "id": "production-progress-timer",
+      "name": "Production Progress Timer",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Update production progress\nconst productionData = $input.first().json;\nconst currentTime = new Date().toISOString();\n\n// Calculate progress for each item\nconst progress = productionData.items.map(item => {\n  const itemProgress = Math.min(100, Math.floor(\n    (Date.now() - productionData.startTime) / (item.estimatedTime / item.quantity) * 100\n  ));\n  \n  return {\n    itemId: item.id,\n    itemName: item.name,\n    targetQuantity: item.quantity,\n    completedQuantity: Math.floor(item.quantity * itemProgress / 100),\n    progressPercentage: itemProgress,\n    estimatedCompletion: new Date(Date.now() + (item.estimatedTime * (100 - itemProgress) / 100)).toISOString()\n  };\n});\n\n// Check quality assurance samples\nconst qualityResults = [];\nif (productionData.qualityAssurance && Math.random() < productionData.qualityAssurance.sampleRate) {\n  const sampleResult = performQualitySample(productionData);\n  qualityResults.push(sampleResult);\n}\n\n// Update production status\nconst productionUpdate = {\n  orderId: productionData.orderId,\n  timestamp: currentTime,\n  progress: progress,\n  overallProgress: Math.floor(progress.reduce((sum, item) => sum + item.progressPercentage, 0) / progress.length),\n  qualityAssurance: qualityResults,\n  status: determineProductionStatus(progress)\n};\n\n// Send progress update\nawait sendProgressUpdate(productionUpdate);\n\n// Check if production is complete\nif (productionUpdate.overallProgress >= 100) {\n  return [{ json: { ...productionUpdate, completed: true } }];\n}\n\nreturn [{ json: productionUpdate }];\n\nfunction performQualitySample(productionData) {\n  return {\n    sampleId: generateSampleId(),\n    timestamp: new Date().toISOString(),\n    quality: Math.floor(70 + Math.random() * 30),\n    defects: Math.random() < 0.1 ? generateDefects() : [],\n    passed: Math.random() < 0.95\n  };\n}\n\nfunction generateDefects() {\n  const defectTypes = ['surface_imperfection', 'dimensional_error', 'material_flaw', 'assembly_error'];\n  const numDefects = Math.floor(Math.random() * 3) + 1;\n  \n  return Array.from({ length: numDefects }, () => ({\n    type: defectTypes[Math.floor(Math.random() * defectTypes.length)],\n    severity: Math.random() < 0.3 ? 'major' : 'minor'\n  }));\n}\n\nfunction determineProductionStatus(progress) {\n  const overallProgress = progress.reduce((sum, item) => sum + item.progressPercentage, 0) / progress.length;\n  \n  if (overallProgress >= 100) return 'completed';\n  if (overallProgress >= 75) return 'final_stages';\n  if (overallProgress >= 50) return 'halfway';\n  if (overallProgress >= 25) return 'underway';\n  return 'started';\n}\n\nfunction generateSampleId() {\n  return 'sample_' + Date.now().toString(36) + Math.random().toString(36).substr(2);\n}\n\nasync function sendProgressUpdate(update) {\n  // Integration with notification system\n  console.log('Sending production progress update:', update.orderId);\n}"
+      },
+      "id": "update-production-progress",
+      "name": "Update Production Progress",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "production-complete",
+              "leftValue": "={{ $json.completed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "production-completion-check",
+      "name": "Production Completion Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "production/complete",
+        "options": {}
+      },
+      "id": "complete-production",
+      "name": "Complete Production Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1780,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "crafting/guild-workshop",
+        "options": {}
+      },
+      "id": "guild-workshop-webhook",
+      "name": "Guild Workshop Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Handle guild workshop operations\nconst workshopRequest = $input.first().json.body;\n\nswitch (workshopRequest.operation) {\n  case 'create':\n    return handleWorkshopCreation(workshopRequest);\n  case 'upgrade':\n    return handleWorkshopUpgrade(workshopRequest);\n  case 'craft':\n    return handleGuildCrafting(workshopRequest);\n  case 'manage':\n    return handleWorkshopManagement(workshopRequest);\n  default:\n    return [{ json: { error: 'Invalid workshop operation' } }];\n}\n\nasync function handleWorkshopCreation(request) {\n  const workshop = {\n    id: generateWorkshopId(),\n    guildId: request.guildId,\n    type: request.workshopType,\n    level: 1,\n    resources: request.initialResources || 1000,\n    members: [request.creatorId],\n    upgrades: [],\n    bonuses: calculateWorkshopBonuses(request.workshopType, 1),\n    createdAt: new Date().toISOString(),\n    status: 'active'\n  };\n  \n  // Save workshop to database\n  await saveWorkshop(workshop);\n  \n  return [{ json: { success: true, workshop: workshop } }];\n}\n\nasync function handleWorkshopUpgrade(request) {\n  const workshop = await getWorkshop(request.workshopId);\n  if (!workshop) {\n    return [{ json: { error: 'Workshop not found' } }];\n  }\n  \n  const upgradeCost = calculateUpgradeCost(workshop.level);\n  if (workshop.resources < upgradeCost) {\n    return [{ json: { error: 'Insufficient resources for upgrade' } }];\n  }\n  \n  workshop.level += 1;\n  workshop.resources -= upgradeCost;\n  workshop.bonuses = calculateWorkshopBonuses(workshop.type, workshop.level);\n  workshop.upgrades.push({\n    type: 'level_upgrade',\n    timestamp: new Date().toISOString(),\n    cost: upgradeCost\n  });\n  \n  await saveWorkshop(workshop);\n  \n  return [{ json: { success: true, workshop: workshop } }];\n}\n\nasync function handleGuildCrafting(request) {\n  const workshop = await getWorkshop(request.workshopId);\n  if (!workshop) {\n    return [{ json: { error: 'Workshop not found' } }];\n  }\n  \n  // Apply workshop bonuses to crafting\n  const enhancedRequest = {\n    ...request.craftingRequest,\n    workshopBonuses: workshop.bonuses\n  };\n  \n  // Process crafting with bonuses\n  const craftingResult = await processGuildCrafting(enhancedRequest);\n  \n  return [{ json: craftingResult }];\n}\n\nfunction calculateWorkshopBonuses(type, level) {\n  const baseBonuses = {\n    blacksmithing: { successChance: 0.1, quality: 1.1, speed: 1.2 },\n    alchemy: { successChance: 0.15, potency: 1.2, duration: 1.3 },\n    enchanting: { successChance: 0.12, power: 1.25, stability: 1.15 },\n    tailoring: { successChance: 0.08, durability: 1.15, comfort: 1.2 }\n  };\n  \n  const bonuses = baseBonuses[type] || baseBonuses.blacksmithing;\n  const levelMultiplier = 1 + (level - 1) * 0.05;\n  \n  Object.keys(bonuses).forEach(key => {\n    bonuses[key] *= levelMultiplier;\n  });\n  \n  return bonuses;\n}\n\nfunction calculateUpgradeCost(currentLevel) {\n  return Math.floor(1000 * Math.pow(1.5, currentLevel));\n}\n\nfunction generateWorkshopId() {\n  return 'workshop_' + Date.now().toString(36) + Math.random().toString(36).substr(2);\n}\n\nasync function saveWorkshop(workshop) {\n  // Integration with database\n  console.log('Saving workshop:', workshop.id);\n}\n\nasync function getWorkshop(workshopId) {\n  // Integration with database\n  return null; // Placeholder\n}\n\nasync function processGuildCrafting(request) {\n  // Integration with crafting system\n  return { success: true, result: 'Guild crafting completed' };\n}"
+      },
+      "id": "workshop-operations",
+      "name": "Workshop Operations Handler",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        460,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "workshop-response",
+      "name": "Workshop Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        680,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "Crafting Request Webhook": {
+      "main": [
+        [
+          {
+            "node": "Crafting Type Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crafting Type Router": {
+      "main": [
+        [
+          {
+            "node": "Validate Crafting Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mass Production Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Crafting Request": {
+      "main": [
+        [
+          {
+            "node": "Start Crafting Process",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Crafting Process": {
+      "main": [
+        [
+          {
+            "node": "Crafting Timer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crafting Timer": {
+      "main": [
+        [
+          {
+            "node": "Complete Crafting Process",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete Crafting Process": {
+      "main": [
+        [
+          {
+            "node": "Add to Inventory",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Crafting Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to Inventory": {
+      "main": [
+        [
+          {
+            "node": "Crafting Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mass Production Handler": {
+      "main": [
+        [
+          {
+            "node": "Production Progress Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Production Progress Webhook": {
+      "main": [
+        [
+          {
+            "node": "Production Progress Timer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Production Progress Timer": {
+      "main": [
+        [
+          {
+            "node": "Update Production Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Production Progress": {
+      "main": [
+        [
+          {
+            "node": "Production Completion Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Production Completion Check": {
+      "main": [
+        [
+          {
+            "node": "Complete Production Order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Production Progress Timer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guild Workshop Webhook": {
+      "main": [
+        [
+          {
+            "node": "Workshop Operations Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workshop Operations Handler": {
+      "main": [
+        [
+          {
+            "node": "Workshop Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-15T10:00:00.000Z",
+      "updatedAt": "2024-01-15T10:00:00.000Z",
+      "id": "crafting-automation",
+      "name": "Crafting Automation"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T15:30:00.000Z",
+  "versionId": "1.0.0"
+}

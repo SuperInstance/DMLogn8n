@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D&D Dice Roller Overlay</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Text:wght@400;600&display=swap" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: transparent;
+            overflow: hidden;
+            font-family: 'Crimson Text', serif;
+            color: #fff;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+        }
+
+        .dice-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        .dice-container.active {
+            opacity: 1;
+        }
+
+        .dice-result {
+            font-family: 'Cinzel', serif;
+            font-size: 120px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-align: center;
+            margin-bottom: 20px;
+            position: relative;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            from {
+                text-shadow: 0 0 10px #667eea, 0 0 20px #667eea, 0 0 30px #667eea;
+            }
+            to {
+                text-shadow: 0 0 20px #764ba2, 0 0 30px #764ba2, 0 0 40px #764ba2;
+            }
+        }
+
+        .dice-type {
+            font-size: 32px;
+            font-weight: 600;
+            color: #ffd700;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        .dice-rolls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .die {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(145deg, #2a2a3e, #16161d);
+            border: 2px solid #444;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            font-weight: bold;
+            color: #fff;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            position: relative;
+            animation: diceRoll 0.6s ease-out;
+        }
+
+        .die.critical-success {
+            background: linear-gradient(145deg, #28a745, #1e7e34);
+            border-color: #28a745;
+            animation: criticalSuccess 1s ease-in-out;
+        }
+
+        .die.critical-failure {
+            background: linear-gradient(145deg, #dc3545, #bd2130);
+            border-color: #dc3545;
+            animation: criticalFailure 1s ease-in-out;
+        }
+
+        @keyframes diceRoll {
+            0% {
+                transform: rotateX(0deg) rotateY(0deg) scale(0.8);
+            }
+            50% {
+                transform: rotateX(720deg) rotateY(360deg) scale(1.2);
+            }
+            100% {
+                transform: rotateX(1440deg) rotateY(720deg) scale(1);
+            }
+        }
+
+        @keyframes criticalSuccess {
+            0%, 100% {
+                transform: scale(1) rotate(0deg);
+            }
+            25% {
+                transform: scale(1.2) rotate(-5deg);
+            }
+            75% {
+                transform: scale(1.2) rotate(5deg);
+            }
+        }
+
+        @keyframes criticalFailure {
+            0%, 100% {
+                transform: scale(1) rotate(0deg);
+            }
+            25% {
+                transform: scale(1.2) rotate(5deg);
+            }
+            75% {
+                transform: scale(1.2) rotate(-5deg);
+            }
+        }
+
+        .modifier {
+            font-size: 28px;
+            color: #17a2b8;
+            margin: 0 10px;
+        }
+
+        .total-label {
+            font-size: 24px;
+            color: #6c757d;
+            margin-right: 10px;
+        }
+
+        .player-name {
+            font-size: 36px;
+            color: #ffc107;
+            margin-bottom: 20px;
+            font-family: 'Cinzel', serif;
+        }
+
+        .roll-details {
+            font-size: 20px;
+            color: #adb5bd;
+            text-align: center;
+            max-width: 600px;
+            line-height: 1.4;
+        }
+
+        .sparkle {
+            position: absolute;
+            pointer-events: none;
+            animation: sparkle 1s ease-out forwards;
+        }
+
+        @keyframes sparkle {
+            0% {
+                transform: translateY(0) scale(0);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-100px) scale(1);
+                opacity: 0;
+            }
+        }
+
+        .sparkle::before {
+            content: '✨';
+            font-size: 24px;
+            position: absolute;
+        }
+
+        .magic-particles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: #ffd700;
+            border-radius: 50%;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0) translateX(0);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-100px) translateX(50px);
+                opacity: 0;
+            }
+        }
+
+        .hide-animation {
+            animation: fadeOut 0.5s ease-out forwards;
+        }
+
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+            to {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.8);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="magic-particles" id="particles"></div>
+
+    <div class="dice-container" id="diceContainer">
+        <div class="player-name" id="playerName"></div>
+        <div class="dice-type" id="diceType"></div>
+        <div class="dice-rolls" id="diceRolls"></div>
+        <div class="dice-result" id="diceResult"></div>
+        <div class="roll-details" id="rollDetails"></div>
+    </div>
+
+    <script>
+        const socket = io();
+        const container = document.getElementById('diceContainer');
+        const playerName = document.getElementById('playerName');
+        const diceType = document.getElementById('diceType');
+        const diceRolls = document.getElementById('diceRolls');
+        const diceResult = document.getElementById('diceResult');
+        const rollDetails = document.getElementById('rollDetails');
+        const particles = document.getElementById('particles');
+
+        let currentTimeout = null;
+
+        function createParticles() {
+            particles.innerHTML = '';
+            for (let i = 0; i < 20; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.animationDelay = Math.random() * 3 + 's';
+                particle.style.backgroundColor = ['#ffd700', '#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24'][Math.floor(Math.random() * 5)];
+                particles.appendChild(particle);
+            }
+        }
+
+        function createSparkles() {
+            for (let i = 0; i < 10; i++) {
+                setTimeout(() => {
+                    const sparkle = document.createElement('div');
+                    sparkle.className = 'sparkle';
+                    sparkle.style.left = Math.random() * 100 + '%';
+                    sparkle.style.top = Math.random() * 100 + '%';
+                    container.appendChild(sparkle);
+
+                    setTimeout(() => sparkle.remove(), 1000);
+                }, i * 100);
+            }
+        }
+
+        function showDiceRoll(data) {
+            if (currentTimeout) {
+                clearTimeout(currentTimeout);
+            }
+
+            container.classList.remove('active', 'hide-animation');
+            void container.offsetWidth; // Force reflow
+
+            playerName.textContent = data.playerName || 'Unknown';
+            diceType.textContent = `${data.diceType}${data.modifier >= 0 ? ' +' : ' '}${data.modifier}`;
+
+            // Show individual dice
+            diceRolls.innerHTML = '';
+            if (data.rolls && data.rolls.length > 1) {
+                data.rolls.forEach((roll, index) => {
+                    const die = document.createElement('div');
+                    die.className = 'die';
+
+                    if (roll === 20 && data.diceType === 'd20') {
+                        die.classList.add('critical-success');
+                    } else if (roll === 1 && data.diceType === 'd20') {
+                        die.classList.add('critical-failure');
+                    }
+
+                    die.textContent = roll;
+                    die.style.animationDelay = `${index * 0.1}s`;
+                    diceRolls.appendChild(die);
+                });
+            }
+
+            // Show total
+            setTimeout(() => {
+                diceResult.innerHTML = `
+                    <span class="total-label">Total:</span>
+                    <span style="color: #28a745; font-size: 140px;">${data.total}</span>
+                `;
+
+                if (data.isCritical) {
+                    diceResult.innerHTML += `<div style="font-size: 48px; color: #28a745; margin-top: 20px;">CRITICAL ${data.isCritical === 'success' ? 'SUCCESS' : 'FAILURE'}!</div>`;
+                }
+            }, 800);
+
+            // Show roll details
+            let details = [];
+            if (data.rolls && data.rolls.length > 1) {
+                details.push(`Rolls: ${data.rolls.join(' + ')}`);
+            }
+            if (data.modifier !== 0) {
+                details.push(`Modifier: ${data.modifier >= 0 ? '+' : ''}${data.modifier}`);
+            }
+            rollDetails.textContent = details.join(' | ');
+
+            // Show container
+            container.classList.add('active');
+            createParticles();
+            createSparkles();
+
+            // Auto hide after 8 seconds
+            currentTimeout = setTimeout(() => {
+                container.classList.add('hide-animation');
+                setTimeout(() => {
+                    container.classList.remove('active', 'hide-animation');
+                }, 500);
+            }, 8000);
+        }
+
+        // Socket events
+        socket.on('dice-roll', showDiceRoll);
+
+        // Manual hide
+        socket.on('hide-dice', () => {
+            if (currentTimeout) {
+                clearTimeout(currentTimeout);
+            }
+            container.classList.add('hide-animation');
+            setTimeout(() => {
+                container.classList.remove('active', 'hide-animation');
+            }, 500);
+        });
+
+        // Configuration
+        socket.on('dice-config', (config) => {
+            if (config.fontSize) {
+                document.documentElement.style.setProperty('--font-size', config.fontSize + 'px');
+            }
+            if (config.position) {
+                container.style.top = config.position.top || '50%';
+                container.style.left = config.position.left || '50%';
+            }
+        });
+    </script>
+</body>
+</html>

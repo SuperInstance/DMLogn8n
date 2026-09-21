@@ -1,0 +1,603 @@
+{
+  "name": "Context-Aware Conversation Management",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "conversation/process",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "conversation-webhook",
+      "name": "Webhook - Conversation Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "conversation-management-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse conversation management request\nconst requestData = JSON.parse($input.first().json.body);\n\n// Determine conversation type\nconst conversationType = determineConversationType(requestData);\n\n// Prepare conversation data\nconst conversationData = {\n  type: conversationType,\n  conversationId: requestData.conversationId || generateConversationId(),\n  participants: requestData.participants || [],\n  messages: requestData.messages || [],\n  context: {\n    campaign: requestData.campaign || {},\n    environment: requestData.environment || {},\n    session: requestData.session || {},\n    previousConversations: requestData.previousConversations || []\n  },\n  metadata: {\n    timestamp: new Date().toISOString(),\n    source: 'dialogue-system',\n    version: '1.0',\n    priority: requestData.priority || 'normal'\n  }\n};\n\nfunction determineConversationType(request) {\n  if (request.action === 'initiate') return 'initiate';\n  if (request.action === 'process') return 'process';\n  if (request.action === 'conclude') return 'conclude';\n  if (request.action === 'pause') return 'pause';\n  if (request.action === 'resume') return 'resume';\n  return 'process'; // default\n}\n\nfunction generateConversationId() {\n  return 'conv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);\n}\n\n// Add action-specific data\nif (requestData.action === 'initiate') {\n  conversationData.initialContext = requestData.initialContext || {};\n  conversationData.objectives = requestData.objectives || [];\n} else if (requestData.action === 'process') {\n  conversationData.newMessage = requestData.newMessage;\n  conversationData.speakerId = requestData.speakerId;\n  conversationData.additionalContext = requestData.additionalContext || {};\n} else if (requestData.action === 'conclude') {\n  conversationData.conclusionReason = requestData.reason || 'natural';\n  conversationData.summary = requestData.summary || '';\n}\n\nreturn { json: conversationData };"
+      },
+      "id": "parse-conversation-request",
+      "name": "Parse Conversation Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.type}}",
+              "operation": "equal",
+              "value2": "initiate"
+            }
+          ]
+        }
+      },
+      "id": "conversation-type-router",
+      "name": "Conversation Type Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/conversation/initiate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "participants",
+              "value": "={{$json.participants}}"
+            },
+            {
+              "name": "context",
+              "value": "={{$json.context}}"
+            },
+            {
+              "name": "initialContext",
+              "value": "={{$json.initialContext}}"
+            },
+            {
+              "name": "objectives",
+              "value": "={{$json.objectives}}"
+            }
+          ]
+        }
+      },
+      "id": "initiate-conversation",
+      "name": "Initiate Conversation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/conversation/process-message",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "conversationId",
+              "value": "={{$json.conversationId}}"
+            },
+            {
+              "name": "message",
+              "value": "={{$json.newMessage}}"
+            },
+            {
+              "name": "speakerId",
+              "value": "={{$json.speakerId}}"
+            },
+            {
+              "name": "additionalContext",
+              "value": "={{$json.additionalContext}}"
+            }
+          ]
+        }
+      },
+      "id": "process-message",
+      "name": "Process Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/conversation/conclude",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "conversationId",
+              "value": "={{$json.conversationId}}"
+            },
+            {
+              "name": "reason",
+              "value": "={{$json.conclusionReason}}"
+            },
+            {
+              "name": "summary",
+              "value": "={{$json.summary}}"
+            }
+          ]
+        }
+      },
+      "id": "conclude-conversation",
+      "name": "Conclude Conversation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process conversation results and generate comprehensive response\nconst originalData = items[0].json; // Original request data\nconst resultData = $input.first().json; // API response data\n\n// Build unified response structure\nconst conversationResponse = {\n  requestId: originalData.metadata.timestamp,\n  conversationId: originalData.conversationId,\n  action: originalData.type,\n  success: resultData.success !== false,\n  timestamp: new Date().toISOString(),\n  data: {\n    conversation: resultData.conversation || resultData,\n    context: resultData.context || {},\n    suggestions: resultData.suggestions || [],\n    metadata: resultData.metadata || {}\n  },\n  analytics: {\n    processingTime: resultData.processingTime || 0,\n    messageCount: resultData.messages?.length || 0,\n    participantCount: resultData.participants?.length || 0,\n    emotionalState: resultData.emotionalState || {},\n    topics: resultData.topics || []\n  }\n};\n\n// Add action-specific data\nif (originalData.type === 'initiate') {\n  conversationResponse.data.openingSuggestions = resultData.suggestions?.openingLines || [];\n  conversationResponse.data.initialContext = resultData.context?.initialContext || {};\n} else if (originalData.type === 'process') {\n  conversationResponse.data.responseSuggestions = resultData.suggestions || [];\n  conversationResponse.data.messageAnalysis = {\n    sentiment: resultData.sentiment || {},\n    emotionalState: resultData.emotionalState || {},\n    contextRelevance: resultData.contextRelevance || 0.5\n  };\n} else if (originalData.type === 'conclude') {\n  conversationResponse.data.summary = resultData.summary || '';\n  conversationResponse.data.analytics = resultData.analytics || {};\n  conversationResponse.data.nextSteps = resultData.nextSteps || [];\n}\n\n// Add conversation state information\nconversationResponse.state = {\n  status: resultData.state || 'active',\n  duration: resultData.duration || 0,\n  lastActivity: resultData.lastActivity || new Date().toISOString(),\n  nextActions: determineNextActions(originalData.type, resultData)\n};\n\nfunction determineNextActions(actionType, result) {\n  const actions = [];\n  \n  switch (actionType) {\n    case 'initiate':\n      actions.push({\n        type: 'send_message',\n        suggested: true,\n        description: 'Send first message to start conversation'\n      });\n      actions.push({\n        type: 'set_emotional_tone',\n        suggested: false,\n        description: 'Set emotional tone for the conversation'\n      });\n      break;\n      \n    case 'process':\n      actions.push({\n        type: 'respond',\n        suggested: true,\n        description: 'Generate response to processed message'\n      });\n      actions.push({\n        type: 'analyze_emotion',\n        suggested: true,\n        description: 'Analyze emotional content of message'\n      });\n      break;\n      \n    case 'conclude':\n      actions.push({\n        type: 'save_conversation',\n        suggested: true,\n        description: 'Save conversation to history'\n      });\n      actions.push({\n        type: 'generate_summary',\n        suggested: false,\n        description: 'Generate detailed conversation summary'\n      });\n      break;\n  }\n  \n  return actions;\n}\n\nreturn { json: conversationResponse };"
+      },
+      "id": "process-conversation-results",
+      "name": "Process Conversation Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.action}}",
+              "operation": "equal",
+              "value2": "process"
+            }
+          ]
+        }
+      },
+      "id": "emotion-analysis-trigger",
+      "name": "Trigger Emotion Analysis",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/webhooks/emotion-analyze",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{$json.data.message}}"
+            },
+            {
+              "name": "speakerId",
+              "value": "={{$json.data.speakerId}}"
+            },
+            {
+              "name": "conversationId",
+              "value": "={{$json.conversationId}}"
+            },
+            {
+              "name": "context",
+              "value": "={{$json.data.context}}"
+            }
+          ]
+        }
+      },
+      "id": "emotion-analysis-webhook",
+      "name": "Trigger Emotion Analysis Workflow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.action}}",
+              "operation": "equal",
+              "value2": "process"
+            }
+          ]
+        }
+      },
+      "id": "voice-synthesis-trigger",
+      "name": "Trigger Voice Synthesis",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1340, 600]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/webhooks/voice-synthesize",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{$json.data.suggestedResponse}}"
+            },
+            {
+              "name": "voiceConfig",
+              "value": "={{$json.data.speakerVoiceProfile}}"
+            },
+            {
+              "name": "emotionalState",
+              "value": "={{$json.analytics.emotionalState}}"
+            },
+            {
+              "name": "conversationId",
+              "value": "={{$json.conversationId}}"
+            }
+          ]
+        }
+      },
+      "id": "voice-synthesis-webhook",
+      "name": "Trigger Voice Synthesis Workflow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 600]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/analytics/conversation-track",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "conversationId",
+              "value": "={{$json.conversationId}}"
+            },
+            {
+              "name": "action",
+              "value": "={{$json.action}}"
+            },
+            {
+              "name": "analytics",
+              "value": "={{$json.analytics}}"
+            },
+            {
+              "name": "metadata",
+              "value": "={{$json.data.metadata}}"
+            }
+          ]
+        }
+      },
+      "id": "track-conversation-analytics",
+      "name": "Track Conversation Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1780, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}"
+      },
+      "id": "conversation-response",
+      "name": "Return Conversation Results",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2000, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.type}}",
+              "operation": "equal",
+              "value2": "conclude"
+            }
+          ]
+        }
+      },
+      "id": "conclusion-branch",
+      "name": "Conversation Conclusion",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [680, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.type}}",
+              "operation": "equal",
+              "value2": "process"
+            }
+          ]
+        }
+      },
+      "id": "process-branch",
+      "name": "Message Processing",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare context update data\nconst response = $input.first().json;\n\nconst contextUpdate = {\n  conversationId: response.conversationId,\n  updates: {\n    lastActivity: response.timestamp,\n    participantEngagement: calculateEngagement(response.analytics),\n    conversationHealth: assessConversationHealth(response.analytics),\n    contextualElements: extractContextualElements(response.data)\n  },\n  metadata: {\n    updateType: response.action,\n    timestamp: response.timestamp,\n    automated: true\n  }\n};\n\nfunction calculateEngagement(analytics) {\n  const messageCount = analytics.messageCount || 0;\n  const participantCount = analytics.participantCount || 1;\n  const avgMessagesPerParticipant = messageCount / participantCount;\n  \n  return {\n    score: Math.min(1.0, avgMessagesPerParticipant / 10),\n    messageCount,\n    participantCount,\n    averageMessagesPerParticipant: avgMessagesPerParticipant\n  };\n}\n\nfunction assessConversationHealth(analytics) {\n  const emotionalState = analytics.emotionalState || {};\n  const emotionalIntensity = Object.values(emotionalState).reduce((sum, val) => sum + val, 0) / Object.keys(emotionalState).length;\n  \n  let healthScore = 0.5; // Base health\n  \n  // Positive emotions increase health\n  if (emotionalState.happiness > 0.3) healthScore += 0.2;\n  if (emotionalState.trust > 0.3) healthScore += 0.2;\n  \n  // Negative emotions decrease health\n  if (emotionalState.anger > 0.5) healthScore -= 0.3;\n  if (emotionalState.sadness > 0.5) healthScore -= 0.2;\n  \n  return {\n    score: Math.max(0, Math.min(1, healthScore)),\n    emotionalIntensity,\n    dominantEmotion: Object.entries(emotionalState).sort((a, b) => b[1] - a[1])[0]?.[0] || 'neutral',\n    needsAttention: healthScore < 0.3\n  };\n}\n\nfunction extractContextualElements(data) {\n  const elements = {\n    topics: data.topics || [],\n    emotionalTone: data.emotionalState || {},\n    participants: data.participants || [],\n    environment: data.environment || {},\n    keyMoments: data.keyMoments || []\n  };\n  \n  // Identify significant contextual elements\n  elements.significant = {\n    emotionalShifts: detectEmotionalShifts(data.emotionalState),\n    topicChanges: detectTopicChanges(data.topics),\n    participantChanges: detectParticipantChanges(data.participants)\n  };\n  \n  return elements;\n}\n\nfunction detectEmotionalShifts(emotionalState) {\n  // Placeholder for emotional shift detection\n  return {\n    detected: false,\n    from: 'neutral',\n    to: 'neutral',\n    significance: 0\n  };\n}\n\nfunction detectTopicChanges(topics) {\n  // Placeholder for topic change detection\n  return {\n    detected: false,\n    previousTopic: '',\n    newTopic: '',\n    context: 'general'\n  };\n}\n\nfunction detectParticipantChanges(participants) {\n  // Placeholder for participant change detection\n  return {\n    detected: false,\n    joined: [],\n    left: [],\n    current: participants.length\n  };\n}\n\nreturn { json: contextUpdate };"
+      },
+      "id": "prepare-context-update",
+      "name": "Prepare Context Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/context/update",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "conversationId",
+              "value": "={{$json.conversationId}}"
+            },
+            {
+              "name": "updates",
+              "value": "={{$json.updates}}"
+            },
+            {
+              "name": "metadata",
+              "value": "={{$json.metadata}}"
+            }
+          ]
+        }
+      },
+      "id": "update-context",
+      "name": "Update Conversation Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 200]
+    }
+  ],
+  "connections": {
+    "Webhook - Conversation Request": {
+      "main": [
+        [
+          {
+            "node": "Parse Conversation Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Conversation Request": {
+      "main": [
+        [
+          {
+            "node": "Conversation Type Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversation Type Router": {
+      "main": [
+        [
+          {
+            "node": "Initiate Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Message Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initiate Conversation": {
+      "main": [
+        [
+          {
+            "node": "Process Conversation Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Message": {
+      "main": [
+        [
+          {
+            "node": "Process Conversation Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conclude Conversation": {
+      "main": [
+        [
+          {
+            "node": "Process Conversation Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Conversation Results": {
+      "main": [
+        [
+          {
+            "node": "Prepare Context Update",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trigger Emotion Analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trigger Voice Synthesis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Emotion Analysis": {
+      "main": [
+        [
+          {
+            "node": "Emotion Analysis Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Track Conversation Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Voice Synthesis": {
+      "main": [
+        [
+          {
+            "node": "Voice Synthesis Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Track Conversation Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Conversation Analytics": {
+      "main": [
+        [
+          {
+            "node": "Return Conversation Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Emotion Analysis Webhook": {
+      "main": [
+        [
+          {
+            "node": "Track Conversation Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice Synthesis Webhook": {
+      "main": [
+        [
+          {
+            "node": "Track Conversation Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Context Update": {
+      "main": [
+        [
+          {
+            "node": "Update Conversation Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Conversation Context": {
+      "main": [
+        [
+          {
+            "node": "Track Conversation Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversation Conclusion": {
+      "main": [
+        [
+          {
+            "node": "Conclude Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message Processing": {
+      "main": [
+        [
+          {
+            "node": "Process Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicyDefaultOption": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "conversation-management",
+      "name": "Conversation Management"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "context-aware",
+      "name": "Context-Aware"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1.0"
+}

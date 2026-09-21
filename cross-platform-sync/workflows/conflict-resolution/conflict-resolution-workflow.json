@@ -1,0 +1,735 @@
+{
+  "name": "DMlogn8n Conflict Resolution Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/conflict-detected",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "conflict-webhook",
+      "name": "Conflict Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "conflict-detection-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse and validate conflict data\nconst webhookData = $input.first().json;\n\nif (!webhookData.conflictId || !webhookData.userId || !webhookData.saveGameId) {\n  throw new Error('Missing required conflict data');\n}\n\n// Extract conflict information\nconst conflictData = {\n  conflict_id: webhookData.conflictId,\n  user_id: webhookData.userId,\n  save_game_id: webhookData.saveGameId,\n  conflict_type: webhookData.conflictType || 'data_mismatch',\n  platform_a: webhookData.platformA || 'unknown',\n  platform_b: webhookData.platformB || 'unknown',\n  severity: webhookData.severity || 'medium',\n  detected_at: webhookData.timestamp || new Date().toISOString(),\n  field_path: webhookData.fieldPath,\n  data_a: webhookData.dataA || {},\n  data_b: webhookData.dataB || {}\n};\n\nreturn [{\n  json: conflictData\n}];"
+      },
+      "id": "parse-conflict-data",
+      "name": "Parse Conflict Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": "sync_conflicts",
+        "where": {
+          "conditions": [
+            {
+              "id": "conflict-exists",
+              "condition": "id",
+              "operation": "equal",
+              "value": "={{ $json.conflict_id }}"
+            }
+          ],
+          "combinator": "and"
+        },
+        "additionalFields": {
+          "returnFields": "id, is_resolved, resolution_strategy"
+        }
+      },
+      "id": "check-existing-conflict",
+      "name": "Check Existing Conflict",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "new-conflict",
+              "leftValue": "={{ $json.allItems.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "is-new-conflict",
+      "name": "Is New Conflict",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "sync_conflicts",
+        "columns": "id, user_id, save_game_id, conflict_type, platform_a, platform_b, data_a, data_b, field_path, detected_at, resolution_strategy, is_resolved",
+        "columnValues": "={{ $json.conflict_id }},={{ $json.user_id }},={{ $json.save_game_id }},={{ $json.conflict_type }},={{ $json.platform_a }},={{ $json.platform_b }},={{ JSON.stringify($json.data_a) }},={{ JSON.stringify($json.data_b) }},={{ $json.field_path }},={{ $json.detected_at }},={{ $getRecommendedStrategy($json.conflict_type, $json.field_path, $json.severity) }},false"
+      },
+      "id": "create-conflict-record",
+      "name": "Create Conflict Record",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        1120,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyze conflict and determine resolution strategy\nconst conflictData = $json;\n\nfunction getRecommendedStrategy(conflictType, fieldPath, severity) {\n  // Conflict resolution strategy logic\n  if (conflictType === 'timestamp_mismatch' || conflictType === 'metadata_mismatch') {\n    return 'last_write_wins';\n  } else if (conflictType === 'experience_mismatch' || conflictType === 'level_mismatch') {\n    return 'numeric_max';\n  } else if (conflictType === 'inventory_mismatch' || conflictType === 'abilities_mismatch') {\n    return 'union_merge';\n  } else if (conflictType === 'progress_mismatch') {\n    return 'manual_review';\n  } else if (severity === 'low') {\n    return 'smart_merge';\n  } else if (severity === 'high') {\n    return 'manual_review';\n  } else {\n    return 'platform_priority';\n  }\n}\n\nfunction analyzeConflictComplexity(dataA, dataB) {\n  const diff = require('deep-object-diff').diff;\n  const differences = diff(dataA, dataB);\n  \n  let complexity = 0;\n  let criticalFields = [];\n  \n  function analyzeObject(obj, path = '') {\n    for (const [key, value] of Object.entries(obj)) {\n      const fullPath = path ? `${path}.${key}` : key;\n      \n      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {\n        analyzeObject(value, fullPath);\n      } else {\n        complexity++;\n        \n        // Identify critical fields\n        if (fullPath.includes('campaignState.chapter') || \n            fullPath.includes('characters.') && fullPath.includes('.level') ||\n            fullPath.includes('quest')) {\n          criticalFields.push(fullPath);\n        }\n      }\n    }\n  }\n  \n  analyzeObject(differences);\n  \n  return {\n    complexity,\n    criticalFields,\n    autoResolvable: complexity < 5 && criticalFields.length === 0\n  };\n}\n\nconst analysis = analyzeConflictComplexity(conflictData.data_a, conflictData.data_b);\nconst recommendedStrategy = getRecommendedStrategy(\n  conflictData.conflict_type, \n  conflictData.field_path, \n  conflictData.severity\n);\n\nreturn [{\n  json: {\n    ...conflictData,\n    analysis: analysis,\n    recommended_strategy: recommendedStrategy,\n    auto_resolve_possible: analysis.autoResolvable && conflictData.severity !== 'high'\n  }\n}];"
+      },
+      "id": "analyze-conflict",
+      "name": "Analyze Conflict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "auto-resolve",
+              "leftValue": "={{ $json.auto_resolve_possible }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "can-auto-resolve",
+      "name": "Can Auto Resolve",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Auto-resolve conflict using recommended strategy\nconst conflictData = $json;\nconst strategy = conflictData.recommended_strategy;\n\nfunction applyResolutionStrategy(dataA, dataB, strategy) {\n  switch (strategy) {\n    case 'last_write_wins':\n      const timestampA = new Date(dataA.metadata?.timestamp || 0);\n      const timestampB = new Date(dataB.metadata?.timestamp || 0);\n      return timestampA > timestampB ? dataA : dataB;\n      \n    case 'numeric_max':\n      return resolveNumericMax(dataA, dataB);\n      \n    case 'union_merge':\n      return unionMerge(dataA, dataB);\n      \n    case 'platform_priority':\n      const priority = {\n        'desktop': 1,\n        'mobile_ios': 2,\n        'mobile_android': 3,\n        'web': 4,\n        'vr_oculus': 5,\n        'vr_htc': 6\n      };\n      const platformA = dataA.metadata?.platform || 'unknown';\n      const platformB = dataB.metadata?.platform || 'unknown';\n      return (priority[platformA] || 999) < (priority[platformB] || 999) ? dataA : dataB;\n      \n    case 'smart_merge':\n      return smartMerge(dataA, dataB, conflictData.field_path);\n      \n    default:\n      return dataA; // Fallback\n  }\n}\n\nfunction resolveNumericMax(dataA, dataB) {\n  const result = JSON.parse(JSON.stringify(dataA));\n  \n  function mergeNumericMax(target, source) {\n    for (const [key, value] of Object.entries(source)) {\n      if (typeof value === 'number' && typeof target[key] === 'number') {\n        target[key] = Math.max(target[key], value);\n      } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {\n        if (!target[key] || typeof target[key] !== 'object') {\n          target[key] = {};\n        }\n        mergeNumericMax(target[key], value);\n      }\n    }\n  }\n  \n  mergeNumericMax(result, dataB);\n  return result;\n}\n\nfunction unionMerge(dataA, dataB) {\n  const result = JSON.parse(JSON.stringify(dataA));\n  \n  function mergeUnion(target, source) {\n    for (const [key, value] of Object.entries(source)) {\n      if (Array.isArray(value) && Array.isArray(target[key])) {\n        target[key] = [...new Set([...target[key], ...value])];\n      } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {\n        if (!target[key] || typeof target[key] !== 'object') {\n          target[key] = {};\n        }\n        mergeUnion(target[key], value);\n      } else {\n        target[key] = value;\n      }\n    }\n  }\n  \n  mergeUnion(result, dataB);\n  return result;\n}\n\nfunction smartMerge(dataA, dataB, fieldPath) {\n  // Smart merge based on field patterns\n  if (fieldPath?.includes('experiencePoints') || fieldPath?.includes('level')) {\n    return resolveNumericMax(dataA, dataB);\n  } else if (fieldPath?.includes('inventory') || fieldPath?.includes('abilities')) {\n    return unionMerge(dataA, dataB);\n  } else {\n    // Default to last write wins\n    return applyResolutionStrategy(dataA, dataB, 'last_write_wins');\n  }\n}\n\nconst resolvedData = applyResolutionStrategy(conflictData.data_a, conflictData.data_b, strategy);\nconst checksum = require('crypto').createHash('sha256').update(JSON.stringify(resolvedData)).digest('hex');\n\nreturn [{\n  json: {\n    ...conflictData,\n    resolved_data: resolvedData,\n    resolution_strategy: strategy,\n    checksum: checksum,\n    resolved_at: new Date().toISOString(),\n    auto_resolved: true\n  }\n}];"
+      },
+      "id": "auto-resolve-conflict",
+      "name": "Auto Resolve Conflict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "sync_conflicts",
+        "updateKey": "id",
+        "updateValue": "={{ $json.conflict_id }}",
+        "columns": "resolution_strategy, resolved_data, resolved_at, is_resolved, resolved_by",
+        "columnValues": "={{ $json.resolution_strategy }},={{ JSON.stringify($json.resolved_data) }},={{ $json.resolved_at }},true,auto_resolution_system"
+      },
+      "id": "update-resolved-conflict",
+      "name": "Update Resolved Conflict",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        2000,
+        120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create new save version with resolved data\nconst conflictData = $json;\n\n// Get next version number\nconst nextVersion = Date.now();\n\nconst saveVersionData = {\n  save_game_id: conflictData.save_game_id,\n  platform: 'resolved',\n  device_id: 'conflict_resolution',\n  data_json: JSON.stringify(conflictData.resolved_data),\n  sync_version: nextVersion,\n  is_current: true,\n  data_hash: conflictData.checksum,\n  metadata: JSON.stringify({\n    resolved: true,\n    strategy: conflictData.resolution_strategy,\n    resolvedAt: conflictData.resolved_at,\n    conflictId: conflictData.conflict_id\n  })\n};\n\nreturn [{\n  json: saveVersionData\n}];"
+      },
+      "id": "create-resolved-version",
+      "name": "Create Resolved Version",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "save_game_data",
+        "columns": "save_game_id, platform, device_id, data_json, sync_version, is_current, data_hash, metadata",
+        "columnValues": "={{ $json.save_game_id }},={{ $json.platform }},={{ $json.device_id }},={{ $json.data_json }},={{ $json.sync_version }},={{ $json.is_current }},={{ $json.data_hash }},={{ $json.metadata }}"
+      },
+      "id": "insert-resolved-save",
+      "name": "Insert Resolved Save",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        2440,
+        120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "save_games",
+        "updateKey": "id",
+        "updateValue": "={{ $json.save_game_id }}",
+        "columns": "updated_at, last_synced, sync_status",
+        "columnValues": "NOW(),NOW(),synced"
+      },
+      "id": "update-save-game",
+      "name": "Update Save Game",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        2660,
+        120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare notification for auto-resolved conflict\nconst conflictData = $json;\n\nconst notification = {\n  type: 'conflict_auto_resolved',\n  user_id: conflictData.user_id,\n  conflict_id: conflictData.conflict_id,\n  save_game_id: conflictData.save_game_id,\n  resolution_strategy: conflictData.resolution_strategy,\n  timestamp: conflictData.resolved_at,\n  message: `Conflict automatically resolved using ${conflictData.resolution_strategy} strategy`\n};\n\nreturn [{\n  json: notification\n}];"
+      },
+      "id": "prepare-auto-resolution-notification",
+      "name": "Prepare Auto Resolution Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "channel": "={{ $json.type }}_{{ $json.user_id }}",
+        "message": "={{ JSON.stringify($json) }}"
+      },
+      "id": "send-auto-resolution-notification",
+      "name": "Send Auto Resolution Notification",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        3100,
+        120
+      ],
+      "credentials": {
+        "redis": {
+          "id": "dmlogn8n-redis-credentials",
+          "name": "DMlogn8n Redis"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare manual resolution request\nconst conflictData = $json;\n\nconst manualResolutionRequest = {\n  type: 'conflict_manual_resolution_required',\n  user_id: conflictData.user_id,\n  conflict_id: conflictData.conflict_id,\n  save_game_id: conflictData.save_game_id,\n  conflict_type: conflictData.conflict_type,\n  platform_a: conflictData.platform_a,\n  platform_b: conflictData.platform_b,\n  severity: conflictData.severity,\n  field_path: conflictData.field_path,\n  recommended_strategy: conflictData.recommended_strategy,\n  analysis: conflictData.analysis,\n  data_a_summary: summarizeData(conflictData.data_a),\n  data_b_summary: summarizeData(conflictData.data_b),\n  created_at: new Date().toISOString(),\n  expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours\n};\n\nfunction summarizeData(data) {\n  const summary = {\n    character_count: data.characters ? data.characters.length : 0,\n    chapter: data.campaignState?.chapter || 'unknown',\n    scene: data.campaignState?.scene || 'unknown',\n    last_modified: data.metadata?.timestamp || 'unknown',\n    platform: data.metadata?.platform || 'unknown'\n  };\n  \n  if (data.characters && data.characters.length > 0) {\n    summary.characters = data.characters.map(char => ({\n      name: char.name,\n      level: char.level,\n      class: char.class\n    }));\n  }\n  \n  return summary;\n}\n\nreturn [{\n  json: manualResolutionRequest\n}];"
+      },
+      "id": "prepare-manual-resolution-request",
+      "name": "Prepare Manual Resolution Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "manual_resolution_requests",
+        "columns": "id, user_id, conflict_id, save_game_id, conflict_type, platform_a, platform_b, severity, field_path, recommended_strategy, analysis, data_a_summary, data_b_summary, created_at, expires_at, status",
+        "columnValues": "={{ $json.conflict_id }},={{ $json.user_id }},={{ $json.conflict_id }},={{ $json.save_game_id }},={{ $json.conflict_type }},={{ $json.platform_a }},={{ $json.platform_b }},={{ $json.severity }},={{ $json.field_path }},={{ $json.recommended_strategy }},={{ JSON.stringify($json.analysis) }},={{ JSON.stringify($json.data_a_summary) }},={{ JSON.stringify($json.data_b_summary) }},={{ $json.created_at }},={{ $json.expires_at }},pending"
+      },
+      "id": "create-manual-resolution-request",
+      "name": "Create Manual Resolution Request",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        2000,
+        280
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.api_endpoint || 'https://api.dmlogn8n.com/notifications' }}/conflict",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "send-email-notification",
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2220,
+        280
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dmlogn8n-api-auth",
+          "name": "DMlogn8n API Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "={{ $json.type }}_{{ $json.user_id }}",
+        "message": "={{ JSON.stringify($json) }}"
+      },
+      "id": "send-websocket-notification",
+      "name": "Send WebSocket Notification",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        2440,
+        280
+      ],
+      "credentials": {
+        "redis": {
+          "id": "dmlogn8n-redis-credentials",
+          "name": "DMlogn8n Redis"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "audit_log",
+        "columns": "id, action, resource_type, resource_id, user_id, old_values, new_values, created_at, metadata, level",
+        "columnValues": "={{ require('crypto').randomUUID() }},conflict_detected,sync_conflict,={{ $json.conflict_id }},={{ $json.user_id }},={{ JSON.stringify($json.data_a_summary) }},={{ JSON.stringify($json.data_b_summary) }},NOW(),={{ JSON.stringify({ conflict_type: $json.conflict_type, severity: $json.severity, auto_resolvable: false }) }},warn"
+      },
+      "id": "log-audit-trail",
+      "name": "Log Audit Trail",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        2660,
+        280
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "sync_analytics",
+        "updateKey": "user_id, date, platform",
+        "updateValue": "={{ $json.user_id }},={{ new Date().toISOString().split('T')[0] }},=conflict",
+        "columns": "conflicts_detected, manual_resolutions_requested",
+        "columnValues": "conflicts_detected + 1,manual_resolutions_requested + 1",
+        "additionalFields": {
+          "returnFields": "*"
+        }
+      },
+      "id": "update-conflict-analytics",
+      "name": "Update Conflict Analytics",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        2880,
+        280
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "dmlogn8n-postgres-credentials",
+          "name": "DMlogn8n PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/conflict-processed",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "conflict-processed-webhook",
+      "name": "Conflict Processed Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        3100,
+        280
+      ],
+      "webhookId": "conflict-processed-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log workflow completion statistics\nconst results = $input.all();\nconst stats = {\n  total_conflicts: results.length,\n  auto_resolved: results.filter(item => item.json.auto_resolved).length,\n  manual_resolution_required: results.filter(item => !item.json.auto_resolved).length,\n  execution_time: new Date().toISOString()\n};\n\nconsole.log('Conflict Resolution Workflow completed:', stats);\n\n// Update metrics in Redis\nconst redis = require('ioredis');\nconst redisClient = new redis({\n  host: 'localhost',\n  port: 6379,\n  password: process.env.REDIS_PASSWORD\n});\n\nredisClient.hmset('conflict_resolution_stats', {\n  last_execution: stats.execution_time,\n  total_processed: stats.total_conflicts,\n  auto_resolved: stats.auto_resolved,\n  manual_required: stats.manual_resolution_required\n});\n\nredisClient.expire('conflict_resolution_stats', 86400);\n\nredisClient.quit();\n\nreturn [{\n  json: {\n    workflow: 'conflict-resolution',\n    statistics: stats,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "log-workflow-stats",
+      "name": "Log Workflow Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3320,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle existing conflict (already resolved or being processed)\nconst existingConflict = $json;\n\nif (existingConflict.is_resolved) {\n  // Conflict already resolved - log and exit\n  return [{\n    json: {\n      message: 'Conflict already resolved',\n      conflict_id: existingConflict.id,\n      resolution_strategy: existingConflict.resolution_strategy,\n      action: 'none_required'\n    }\n  }];\n} else {\n  // Conflict exists but not resolved - continue with analysis\n  return [{\n    json: {\n      message: 'Existing conflict detected',\n      conflict_id: existingConflict.id,\n      action: 'continue_processing'\n    }\n  }];\n}"
+      },
+      "id": "handle-existing-conflict",
+      "name": "Handle Existing Conflict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Conflict Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Conflict Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Conflict Data": {
+      "main": [
+        [
+          {
+            "node": "Check Existing Conflict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Existing Conflict": {
+      "main": [
+        [
+          {
+            "node": "Is New Conflict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is New Conflict": {
+      "main": [
+        [
+          {
+            "node": "Create Conflict Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Existing Conflict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Conflict Record": {
+      "main": [
+        [
+          {
+            "node": "Analyze Conflict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Conflict": {
+      "main": [
+        [
+          {
+            "node": "Can Auto Resolve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Can Auto Resolve": {
+      "main": [
+        [
+          {
+            "node": "Auto Resolve Conflict",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Manual Resolution Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto Resolve Conflict": {
+      "main": [
+        [
+          {
+            "node": "Update Resolved Conflict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Resolved Conflict": {
+      "main": [
+        [
+          {
+            "node": "Create Resolved Version",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Resolved Version": {
+      "main": [
+        [
+          {
+            "node": "Insert Resolved Save",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Resolved Save": {
+      "main": [
+        [
+          {
+            "node": "Update Save Game",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Save Game": {
+      "main": [
+        [
+          {
+            "node": "Prepare Auto Resolution Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Auto Resolution Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Auto Resolution Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Auto Resolution Notification": {
+      "main": [
+        [
+          {
+            "node": "Conflict Processed Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Manual Resolution Request": {
+      "main": [
+        [
+          {
+            "node": "Create Manual Resolution Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Manual Resolution Request": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Notification": {
+      "main": [
+        [
+          {
+            "node": "Send WebSocket Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WebSocket Notification": {
+      "main": [
+        [
+          {
+            "node": "Log Audit Trail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Audit Trail": {
+      "main": [
+        [
+          {
+            "node": "Update Conflict Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Conflict Analytics": {
+      "main": [
+        [
+          {
+            "node": "Conflict Processed Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conflict Processed Webhook": {
+      "main": [
+        [
+          {
+            "node": "Log Workflow Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-15T10:00:00.000Z",
+      "updatedAt": "2024-01-15T10:00:00.000Z",
+      "id": "conflict-resolution-tag"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T10:00:00.000Z",
+  "versionId": "conflict-resolution-v1"
+}

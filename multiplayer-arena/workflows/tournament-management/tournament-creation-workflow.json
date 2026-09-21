@@ -1,0 +1,181 @@
+{
+  "name": "Tournament Creation and Management Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tournament-create",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Tournament Creation Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Validate tournament creation request\nconst {\n  name,\n  description,\n  tournamentType,\n  arenaType,\n  maxParticipants,\n  registrationStart,\n  registrationEnd,\n  startTime,\n  rules,\n  prizes,\n  entryFee\n} = $input.first().json;\n\nif (!name || !tournamentType || !arenaType || !maxParticipants) {\n  throw new Error('Name, tournament type, arena type, and max participants are required');\n}\n\n// Validate tournament type\nconst validTournamentTypes = ['single_elimination', 'double_elimination', 'round_robin', 'swiss', 'league'];\nif (!validTournamentTypes.includes(tournamentType)) {\n  throw new Error(`Invalid tournament type: ${tournamentType}`);\n}\n\n// Validate arena type\nconst validArenaTypes = ['1v1_duel', 'team_competition', 'battle_royale'];\nif (!validArenaTypes.includes(arenaType)) {\n  throw new Error(`Invalid arena type for tournament: ${arenaType}`);\n}\n\n// Generate tournament ID\nconst tournamentId = `tournament_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;\n\n// Set default dates if not provided\nconst now = new Date();\nconst defaultRegistrationStart = now.toISOString();\nconst defaultRegistrationEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days from now\nconst defaultStartTime = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString(); // 14 days from now\n\nreturn {\n  tournamentId,\n  name,\n  description: description || '',\n  tournamentType,\n  arenaType,\n  maxParticipants,\n  registrationStart: registrationStart || defaultRegistrationStart,\n  registrationEnd: registrationEnd || defaultRegistrationEnd,\n  startTime: startTime || defaultStartTime,\n  rules: rules || {},\n  prizes: prizes || {},\n  entryFee: entryFee || 0,\n  status: 'registration',\n  createdAt: now.toISOString(),\n  currentParticipants: 0,\n  matches: [],\n  bracket: null\n};"
+      },
+      "id": "function-1",
+      "name": "Validate Tournament Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "resource": "document",
+        "database": "dmlogn8n_tournaments",
+        "collection": "tournaments",
+        "documentId": "={{ $json.tournamentId }}",
+        "returnAll": true
+      },
+      "id": "mongodb-1",
+      "name": "Check Tournament Exists",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "mongodb": {
+          "id": "mongodb_credential_id",
+          "name": "MongoDB Atlas"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json }}",
+              "operation": "isEmpty"
+            }
+          ]
+        }
+      },
+      "id": "if-1",
+      "name": "Tournament Already Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Generate tournament bracket structure based on type\nconst tournament = $input.first().json;\nlet bracket = null;\n\nswitch (tournament.tournamentType) {\n  case 'single_elimination':\n    bracket = this.generateSingleEliminationBracket(tournament.maxParticipants);\n    break;\n  case 'double_elimination':\n    bracket = this.generateDoubleEliminationBracket(tournament.maxParticipants);\n    break;\n  case 'round_robin':\n    bracket = this.generateRoundRobinBracket(tournament.maxParticipants);\n    break;\n  case 'swiss':\n    bracket = this.generateSwissBracket(tournament.maxParticipants, tournament.rules.swissRounds || 5);\n    break;\n  case 'league':\n    bracket = this.generateLeagueBracket(tournament.maxParticipants);\n    break;\n  default:\n    throw new Error(`Unsupported tournament type: ${tournament.tournamentType}`);\n}\n\nreturn { \n  ...tournament, \n  bracket,\n  estimatedDuration: this.calculateEstimatedDuration(tournament.tournamentType, tournament.maxParticipants)\n};\n\n// Helper functions\nfunction generateSingleEliminationBracket(maxParticipants) {\n  const powerOfTwo = Math.pow(2, Math.ceil(Math.log2(maxParticipants)));\n  const rounds = Math.log2(powerOfTwo);\n  const bracket = {\n    type: 'single_elimination',\n    totalSlots: powerOfTwo,\n    rounds: rounds,\n    matches: [],\n    byes: powerOfTwo - maxParticipants\n  };\n  \n  // Generate matches for each round\n  for (let round = 1; round <= rounds; round++) {\n    const matchesInRound = powerOfTwo / Math.pow(2, round);\n    for (let match = 1; match <= matchesInRound; match++) {\n      bracket.matches.push({\n        id: `R${round}M${match}`,\n        round: round,\n        matchNumber: match,\n        participants: [],\n        winner: null,\n        status: 'pending',\n        nextMatch: round < rounds ? `R${round + 1}M${Math.ceil(match / 2)}` : null\n      });\n    }\n  }\n  \n  return bracket;\n}\n\nfunction generateDoubleEliminationBracket(maxParticipants) {\n  return {\n    type: 'double_elimination',\n    winnersBracket: generateSingleEliminationBracket(maxParticipants),\n    losersBracket: {},\n    grandFinal: null\n  };\n}\n\nfunction generateRoundRobinBracket(maxParticipants) {\n  const matches = [];\n  const participants = Array.from({ length: maxParticipants }, (_, i) => i + 1);\n  \n  // Generate all possible matchups\n  for (let i = 0; i < participants.length; i++) {\n    for (let j = i + 1; j < participants.length; j++) {\n      matches.push({\n        id: `RR_M${matches.length + 1}`,\n        participant1: participants[i],\n        participant2: participants[j],\n        winner: null,\n        status: 'pending'\n      });\n    }\n  }\n  \n  return {\n    type: 'round_robin',\n    participants: maxParticipants,\n    totalMatches: matches.length,\n    matches: matches\n  };\n}\n\nfunction generateSwissBracket(maxParticipants, rounds) {\n  return {\n    type: 'swiss',\n    participants: maxParticipants,\n    rounds: rounds,\n    matches: []\n  };\n}\n\nfunction generateLeagueBracket(maxParticipants) {\n  return {\n    type: 'league',\n    participants: maxParticipants,\n    standings: []\n  };\n}\n\nfunction calculateEstimatedDuration(type, participants) {\n  const baseMatchTime = 15; // 15 minutes per match\n  \n  switch (type) {\n    case 'single_elimination':\n      return Math.ceil(Math.log2(participants)) * baseMatchTime;\n    case 'double_elimination':\n      return Math.ceil(Math.log2(participants)) * 2 * baseMatchTime;\n    case 'round_robin':\n      return (participants * (participants - 1) / 2) * baseMatchTime;\n    case 'swiss':\n      return 5 * baseMatchTime; // 5 rounds by default\n    case 'league':\n      return (participants - 1) * 2 * baseMatchTime; // Home and away\n    default:\n      return 120; // 2 hours default\n  }\n}"
+      },
+      "id": "function-2",
+      "name": "Generate Tournament Bracket",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "resource": "document",
+        "database": "dmlogn8n_tournaments",
+        "collection": "tournaments",
+        "fields": {
+          "tournamentId": "={{ $json.tournamentId }}",
+          "name": "={{ $json.name }}",
+          "description": "={{ $json.description }}",
+          "tournamentType": "={{ $json.tournamentType }}",
+          "arenaType": "={{ $json.arenaType }}",
+          "maxParticipants": "={{ $json.maxParticipants }}",
+n          "registrationStart": "={{ $json.registrationStart }}",
+          "registrationEnd": "={{ $json.registrationEnd }}",
+          "startTime": "={{ $json.startTime }}",
+          "rules": "={{ $json.rules }}",
+          "prizes": "={{ $json.prizes }}",
+          "entryFee": "={{ $json.entryFee }}",
+          "status": "={{ $json.status }}",
+          "createdAt": "={{ $json.createdAt }}",
+          "currentParticipants": "={{ $json.currentParticipants }}",
+          "bracket": "={{ $json.bracket }}",
+          "estimatedDuration": "={{ $json.estimatedDuration }}",
+          "matches": "={{ $json.matches || [] }}",
+          "participants": "={{ [] }}",
+          "organizers": "={{ [] }}",
+n          "sponsorship": "{{ {} }}",
+n          "broadcastSettings": "{{ {} }}",
+n          "prizePool": "{{ $json.entryFee * $json.maxParticipants }}"
+        }
+      },
+      "id": "mongodb-2",
+      "name": "Save Tournament to Database",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Create tournament registration endpoints and notifications\nconst tournament = $input.first().json;\n\n// Generate registration page URL\nconst registrationUrl = `https://dmlogn8n.com/tournaments/${tournament.tournamentId}/register`;\n\n// Create initial notifications\nconst notifications = [\n  {\n    type: 'tournament_created',\n    title: 'New Tournament Created!',\n    message: `Tournament \"${tournament.name}\" is now open for registration!`,\n    targetAudience: 'all_players',\n    data: {\n      tournamentId: tournament.tournamentId,\n      name: tournament.name,\n      arenaType: tournament.arenaType,\n      maxParticipants: tournament.maxParticipants,\n      entryFee: tournament.entryFee,\n      registrationEnd: tournament.registrationEnd,\n      startTime: tournament.startTime,\n      registrationUrl: registrationUrl\n    },\n    timestamp: new Date().toISOString()\n  }\n];\n\n// Create social media posts\nconst socialPosts = [\n  {\n    platform: 'twitter',\n    content: `🏆 New tournament alert! Join \"${tournament.name}\" - ${tournament.arenaType} competition with ${tournament.maxParticipants} slots. Register now: ${registrationUrl} #DnD #Gaming #Tournament`,\n    imageUrl: 'https://dmlogn8n.com/images/tournament-banner.jpg'\n  },\n  {\n    platform: 'discord',\n    content: `@everyone A new tournament has been created!\\n\\n🎮 ${tournament.name}\\n📋 Type: ${tournament.tournamentType}\\n⚔️ Arena: ${tournament.arenaType}\\n👥 Max Participants: ${tournament.maxParticipants}\\n💰 Entry Fee: ${tournament.entryFee} gold\\n📅 Registration ends: ${new Date(tournament.registrationEnd).toLocaleDateString()}\\n\\nRegister here: ${registrationUrl}`\n  }\n];\n\nreturn {\n  tournamentId: tournament.tournamentId,\n  registrationUrl,\n  notifications,\n  socialPosts,\n  organizerActions: [\n    {\n      action: 'setup_broadcast',\n      description: 'Configure streaming settings for tournament matches'\n    },\n    {\n      action: 'invite_staff',\n      description: 'Add referees, commentators, and moderators'\n    },\n    {\n      action: 'configure_prizes',\n      description: 'Set up automatic prize distribution'\n    }\n  ]\n};"
+      },
+      "id": "function-3",
+      "name": "Create Tournament Materials",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "resource": "document",
+        "database": "dmlogn8n_tournaments",
+        "collection": "notifications",
+        "fields": {
+          "tournamentId": "={{ $json.tournamentId }}",
+          "notifications": "={{ $json.notifications }}",
+          "socialPosts": "={{ $json.socialPosts }}",
+          "registrationUrl": "={{ $json.registrationUrl }}",
+          "createdAt": "={{ new Date().toISOString() }}"
+        }
+      },
+      "id": "mongodb-3",
+      "name": "Save Tournament Notifications",
+      "type": "n8n-nodes-base.mongodb",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        400
+      ]
+    },
+    {
+      "parameters": {
+n        "httpMethod": "POST",\n        "path": "social-media/post-tournament",\n        "body": {\n          "posts": "={{ $json.socialPosts }}"\n        }\n      },\n      "id": "http-request-1",\n      "name": "Post to Social Media",\n      "type": "n8n-nodes-base.httpRequest",\n      "typeVersion": 3,\n      "position": [\n        1580,\n        300\n      ]\n    },\n    {\n      "parameters": {\n        "functionCode": "// Set up tournament scheduling and reminders\nconst tournament = $node[\"Save Tournament to Database\"].json;\nconst reminders = [];\n\n// Registration reminder (2 days before registration ends)\nconst registrationReminderDate = new Date(tournament.registrationEnd);\nregistrationReminderDate.setDate(registrationReminderDate.getDate() - 2);\nreminders.push({\n  id: `reg_reminder_${tournament.tournamentId}`,\n  tournamentId: tournament.tournamentId,\n  type: 'registration_ending',\n  scheduledFor: registrationReminderDate.toISOString(),\n  message: `Registration for \"${tournament.name}\" ends in 2 days! Don't miss out!`,\n  targetAudience: 'potential_participants'\n});\n\n// Tournament start reminder (1 day before)\nconst startReminderDate = new Date(tournament.startTime);\nstartReminderDate.setDate(startReminderDate.getDate() - 1);\nreminders.push({\n  id: `start_reminder_${tournament.tournamentId}`,\n  tournamentId: tournament.tournamentId,\n  type: 'tournament_starting',\n  scheduledFor: startReminderDate.toISOString(),\n  message: `\"${tournament.name}\" starts tomorrow! Get ready for battle!`,\n  targetAudience: 'registered_participants'\n});\n\n// Tournament start notification\nreminders.push({\n  id: `start_notification_${tournament.tournamentId}`,\n  tournamentId: tournament.tournamentId,\n  type: 'tournament_started',\n  scheduledFor: tournament.startTime,\n  message: `\"${tournament.name}\" has officially begun! Good luck to all participants!`,\n  targetAudience: 'registered_participants'\n});\n\nreturn { reminders };"
+      },
+      "id": "function-4",
+      "name": "Schedule Tournament Reminders",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1140,\n        600
+      ]
+    },
+    {
+      "parameters": {
+n        "operation": "insert",\n        "resource": "document",\n        "database": "dmlogn8n_tournaments",\n        "collection": "scheduled_reminders",\n        "fields": "={{ $json.reminders }}"\n      },\n      "id": "mongodb-4",\n      "name": "Save Scheduled Reminders",\n      "type": "n8n-nodes-base.mongodb",\n      "typeVersion": 1,\n      "position": [\n        1360,\n        600\n      ]\n    },\n    {\n      "parameters": {\n        "respondWith": "json",\n        "responseBody": "={{ {\n  success: true,\n  tournamentId: $json.tournamentId,\n  name: $json.name,\n  tournamentType: $json.tournamentType,\n  arenaType: $json.arenaType,\n  maxParticipants: $json.maxParticipants,\n  registrationStart: $json.registrationStart,\n  registrationEnd: $json.registrationEnd,\n  startTime: $json.startTime,\n  entryFee: $json.entryFee,\n  estimatedDuration: $json.estimatedDuration,\n  registrationUrl: $node[\"Create Tournament Materials\"].json.registrationUrl,\n  bracketGenerated: true,\n  socialMediaPostsCreated: $node[\"Create Tournament Materials\"].json.socialPosts.length,\n  remindersScheduled: $node[\"Schedule Tournament Reminders\"].json.reminders.length\n} }}"\n      },\n      "id": "webhook-response-1",\n      "name": "Return Success Response",\n      "type": "n8n-nodes-base.respondToWebhook",\n      "typeVersion": 1,\n      "position": [\n        1800,\n        300\n      ]\n    },\n    {\n      "parameters": {\n        "respondWith": "json",\n        "responseBody": "={{ {\n  success: false,\n  error: 'Tournament already exists',\n  tournamentId: $json.tournamentId\n} }}"\n      },\n      "id": "webhook-response-2",\n      "name": "Return Error Response",\n      "type": "n8n-nodes-base.respondToWebhook",\n      "typeVersion": 1,\n      "position": [\n        1140,\n        800\n      ]\n    }\n  ],\n  "connections": {\n    "Tournament Creation Trigger": {\n      "main": [\n        [\n          {\n            "node": "Validate Tournament Request",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Validate Tournament Request": {\n      "main": [\n        [\n          {\n            "node": "Check Tournament Exists",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Check Tournament Exists": {\n      "main": [\n        [\n          {\n            "node": "Tournament Already Exists?",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Tournament Already Exists?": {\n      "main": [\n        [\n          {\n            "node": "Generate Tournament Bracket",\n            "type": "main",\n            "index": 0\n          },\n          {\n            "node": "Create Tournament Materials",\n            "type": "main",\n            "index": 0\n          },\n          {\n            "node": "Schedule Tournament Reminders",\n            "type": "main",\n            "index": 0\n          }\n        ],\n        [\n          {\n            "node": "Return Error Response",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Generate Tournament Bracket": {\n      "main": [\n        [\n          {\n            "node": "Save Tournament to Database",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Create Tournament Materials": {\n      "main": [\n        [\n          {\n            "node": "Save Tournament Notifications",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Save Tournament Notifications": {\n      "main": [\n        [\n          {\n            "node": "Post to Social Media",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Schedule Tournament Reminders": {\n      "main": [\n        [\n          {\n            "node": "Save Scheduled Reminders",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    },\n    "Post to Social Media": {\n      "main": [\n        [\n          {\n            "node": "Return Success Response",\n            "type": "main",\n            "index": 0\n          }\n        ]\n      ]\n    }\n  },\n  "settings": {\n    "executionOrder": "v1"\n  },\n  "staticData": null,\n  "tags": [\n    {\n      "createdAt": "2024-01-01T00:00:00.000Z",\n      "updatedAt": "2024-01-01T00:00:00.000Z",\n      "id": "3",\n      "name": "Tournament"\n    }\n  ],\n  "triggerCount": 0,\n  "updatedAt": "2024-01-01T00:00:00.000Z",\n  "versionId": "1"\n}

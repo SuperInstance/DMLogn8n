@@ -1,0 +1,478 @@
+# DMLogn8n Auto-Scaling Configuration
+# Comprehensive configuration for the auto-scaling system
+
+# Global configuration
+global:
+  environment: "production"
+  debug: false
+  log_level: "INFO"
+  region: "us-west-2"
+  namespace: "dmlogn8n"
+
+# Redis configuration for caching and coordination
+redis:
+  host: "redis.autoscaling.svc.cluster.local"
+  port: 6379
+  password: ""
+  database: 0
+  connection_pool_size: 10
+  socket_timeout: 30
+  socket_connect_timeout: 30
+
+# Metrics collection configuration
+metrics:
+  collection_interval: 30
+  retention_period: 3600
+  prometheus:
+    enabled: true
+    port: 8080
+    path: "/metrics"
+    labels:
+      service: "autoscaling"
+      environment: "production"
+  custom_metrics:
+    enabled: true
+    aggregation_window: 300
+    history_retention: 7  # days
+
+# Predictive scaling configuration
+prediction:
+  enabled: true
+  model_path: "/models/scaling_predictor.pkl"
+  model_backup_path: "/models/scaling_predictor_backup.pkl"
+  prediction_window: 300      # 5 minutes ahead
+  training_window: 604800     # 7 days of data
+  min_training_samples: 1000
+  model_retraining_interval: 86400  # Retrain daily
+  confidence_threshold: 0.75
+  algorithms:
+    - "random_forest"
+    - "lstm"
+    - "prophet"
+  features:
+    - "cpu_usage"
+    - "memory_usage"
+    - "request_rate"
+    - "response_time"
+    - "error_rate"
+    - "hour_of_day"
+    - "day_of_week"
+    - "is_weekend"
+    - "time_series_trend"
+
+# Cost optimization configuration
+cost:
+  enabled: true
+  cost_threshold: 500         # $500 per hour budget
+  optimization_interval: 300  # Check every 5 minutes
+  cost_history_retention: 30  # days
+  strategies:
+    aggressive_cost_cutting:
+      performance_threshold: 70
+      min_savings: 10
+      scale_down_threshold: 25
+    balanced:
+      performance_threshold: 85
+      min_savings: 5
+      scale_down_threshold: 40
+    performance_priority:
+      performance_threshold: 95
+      min_savings: 2
+      scale_down_threshold: 60
+  cloud_provider_pricing:
+    enabled: true
+    update_interval: 3600
+    aws:
+      enabled: true
+      access_key_id: "${AWS_ACCESS_KEY_ID}"
+      secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
+      region: "us-west-2"
+    azure:
+      enabled: false
+      subscription_id: "${AZURE_SUBSCRIPTION_ID}"
+      resource_group: "dmlogn8n-rg"
+    gcp:
+      enabled: false
+      project_id: "${GCP_PROJECT_ID}"
+      service_account_key: "/path/to/gcp-key.json"
+
+# Scaling policy management
+policies:
+  default_cooldown: 300
+  evaluation_interval: 60
+  policy_validation:
+    strict_mode: true
+    required_fields:
+      - "name"
+      - "service_id"
+      - "service_type"
+      - "min_instances"
+      - "max_instances"
+  policy_backup:
+    enabled: true
+    interval: 3600
+    retention: 30
+
+# Kubernetes configuration
+kubernetes:
+  enabled: true
+  namespace: "dmlogn8n"
+  kubeconfig_path: null  # Use in-cluster config if null
+  qps: 50
+  burst: 100
+  request_timeout: 30
+  hpa:
+    enabled: true
+    api_version: "autoscaling/v2"
+  resources:
+    default_cpu_request: "100m"
+    default_memory_request: "128Mi"
+    default_cpu_limit: "500m"
+    default_memory_limit: "512Mi"
+
+# Docker configuration
+docker:
+  enabled: true
+  socket_path: "/var/run/docker.sock"
+  api_version: "auto"
+  timeout: 60
+  compose:
+    enabled: true
+    files:
+      - "/docker-compose.yml"
+      - "/docker-compose.prod.yml"
+    project_name: "dmlogn8n"
+  networks:
+    - "dmlogn8n-network"
+  volumes:
+    - "dmlogn8n-data"
+    - "dmlogn8n-logs"
+
+# Cloud provider configuration
+cloud:
+  enabled: true
+  provider: "aws"  # aws, azure, gcp
+  aws:
+    access_key_id: "${AWS_ACCESS_KEY_ID}"
+    secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
+    region: "us-west-2"
+    assume_role_arn: null
+    session_duration: 3600
+    services:
+      ec2: true
+      autoscaling: true
+      cloudwatch: true
+      rds: true
+  azure:
+    subscription_id: "${AZURE_SUBSCRIPTION_ID}"
+    tenant_id: "${AZURE_TENANT_ID}"
+    client_id: "${AZURE_CLIENT_ID}"
+    client_secret: "${AZURE_CLIENT_SECRET}"
+    resource_group: "dmlogn8n-rg"
+    location: "eastus"
+  gcp:
+    project_id: "${GCP_PROJECT_ID}"
+    service_account_key: "/path/to/gcp-service-account.json"
+    region: "us-west1"
+    zone: "us-west1-a"
+
+# Monitoring and alerting configuration
+monitoring:
+  enabled: true
+  health_check_interval: 30
+  alert_evaluation_interval: 60
+  metrics_collection_interval: 30
+  prometheus:
+    enabled: true
+    url: "http://prometheus:9090"
+    scrape_interval: 30
+    evaluation_interval: 60
+  alertmanager:
+    enabled: true
+    url: "http://alertmanager:9093"
+  notification_channels:
+    slack:
+      enabled: true
+      webhook_url: "${SLACK_WEBHOOK_URL}"
+      channel: "#autoscaling-alerts"
+      username: "DMLogn8n Auto-Scaling"
+      icon_emoji: ":robot_face:"
+    email:
+      enabled: true
+      smtp_server: "smtp.company.com"
+      smtp_port: 587
+      username: "${SMTP_USERNAME}"
+      password: "${SMTP_PASSWORD}"
+      from_address: "autoscaling@dmlogn8n.com"
+      recipients:
+        - "platform-team@company.com"
+        - "sre-team@company.com"
+    pagerduty:
+      enabled: true
+      service_key: "${PAGERDUTY_SERVICE_KEY}"
+      severity_mapping:
+        critical: "critical"
+        error: "high"
+        warning: "warning"
+        info: "info"
+  alert_rules:
+    high_cpu_usage:
+      enabled: true
+      threshold: 80
+      duration: 300
+      severity: "warning"
+    critical_cpu_usage:
+      enabled: true
+      threshold: 95
+      duration: 60
+      severity: "critical"
+    scaling_failure:
+      enabled: true
+      threshold: 0
+      duration: 1
+      severity: "error"
+    cost_threshold:
+      enabled: true
+      threshold: 100
+      duration: 3600
+      severity: "warning"
+
+# Schedule-based scaling
+schedule_scaling:
+  enabled: true
+  timezone: "UTC"
+  default_timezone: "UTC"
+  evaluation_interval: 60
+  schedule_storage: "redis"  # redis, database, file
+  backup_schedules: true
+
+# Event-driven scaling
+event_scaling:
+  enabled: true
+  event_queue_size: 1000
+  event_timeout: 600
+  max_concurrent_events: 10
+  event_sources:
+    prometheus_alertmanager:
+      enabled: true
+      url: "http://alertmanager:9093"
+    webhook:
+      enabled: true
+      path: "/api/events/webhook"
+      authentication:
+        type: "bearer_token"
+        token: "${WEBHOOK_TOKEN}"
+    message_queue:
+      enabled: true
+      type: "rabbitmq"
+      connection:
+        host: "rabbitmq:5672"
+        username: "events"
+        password: "${RABBITMQ_PASSWORD}"
+
+# API configuration
+api:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8090
+  debug: false
+  cors:
+    enabled: true
+    allow_origins: ["*"]
+    allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    allow_headers: ["Content-Type", "Authorization"]
+  authentication:
+    enabled: true
+    jwt_secret: "${JWT_SECRET}"
+    jwt_expiration: 3600
+    default_username: "admin"
+    default_password: "${ADMIN_PASSWORD}"
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 100
+    burst: 20
+  tls:
+    enabled: false
+    cert_file: "/path/to/cert.pem"
+    key_file: "/path/to/key.pem"
+
+# Service configurations
+services:
+  api-gateway:
+    enabled: true
+    service_type: "api_gateway"
+    controller: "kubernetes"
+    min_instances: 2
+    max_instances: 10
+    target_cpu: 65
+    target_memory: 70
+    custom_metrics:
+      - "requests_per_second"
+      - "response_time"
+      - "error_rate"
+
+  character-portal:
+    enabled: true
+    service_type: "character_portal"
+    controller: "kubernetes"
+    min_instances: 3
+    max_instances: 15
+    target_cpu: 60
+    target_memory: 65
+    custom_metrics:
+      - "active_sessions"
+      - "character_interactions_per_second"
+
+  dialogue-system:
+    enabled: true
+    service_type: "dialogue_system"
+    controller: "kubernetes"
+    min_instances: 2
+    max_instances: 8
+    target_cpu: 70
+    target_memory: 75
+    custom_metrics:
+      - "dialogue_queue_length"
+      - "generation_rate"
+
+  combat-engine:
+    enabled: true
+    service_type: "combat_engine"
+    controller: "docker"
+    min_instances: 1
+    max_instances: 6
+    target_cpu: 75
+    target_memory: 70
+    custom_metrics:
+      - "combat_calculations_per_second"
+      - "active_combats"
+
+  world-simulation:
+    enabled: true
+    service_type: "world_simulation"
+    controller: "kubernetes"
+    min_instances: 1
+    max_instances: 5
+    target_cpu: 70
+    target_memory: 75
+    custom_metrics:
+      - "simulation_tps"
+      - "active_entities"
+
+  ai-model-pool:
+    enabled: true
+    service_type: "ai_model_pool"
+    controller: "cloud"
+    min_instances: 2
+    max_instances: 8
+    target_cpu: 75
+    target_memory: 70
+    custom_metrics:
+      - "gpu_utilization"
+      - "inference_queue_length"
+
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "json"
+  handlers:
+    console:
+      enabled: true
+      level: "INFO"
+      format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    file:
+      enabled: true
+      level: "INFO"
+      filename: "/var/log/autoscaling/autoscaling.log"
+      max_size: "100MB"
+      backup_count: 5
+      format: "json"
+    syslog:
+      enabled: false
+      facility: "local0"
+      address: "/dev/log"
+      level: "INFO"
+  loggers:
+    "autoscaling":
+      level: "INFO"
+      propagate: false
+    "kubernetes":
+      level: "WARNING"
+      propagate: false
+    "docker":
+      level: "WARNING"
+      propagate: false
+
+# Security configuration
+security:
+  authentication:
+    enabled: true
+    session_timeout: 3600
+    password_policy:
+      min_length: 12
+      require_uppercase: true
+      require_lowercase: true
+      require_numbers: true
+      require_symbols: true
+  authorization:
+    enabled: true
+    roles:
+      admin:
+        permissions: ["*"]
+      operator:
+        permissions: ["read", "scale"]
+      viewer:
+        permissions: ["read"]
+  encryption:
+    enabled: true
+    key_rotation_interval: 86400
+    algorithm: "AES-256-GCM"
+
+# Performance configuration
+performance:
+  worker_threads: 10
+  max_concurrent_scaling_operations: 5
+  operation_timeout: 300
+  cache_ttl: 300
+  batch_size: 100
+  connection_pools:
+    redis: 10
+    database: 5
+    prometheus: 3
+
+# Backup and recovery
+backup:
+  enabled: true
+  interval: 3600
+  retention: 7
+  storage:
+    type: "s3"
+    bucket: "dmlogn8n-autoscaling-backups"
+    prefix: "backups/"
+  include:
+    - "policies"
+    - "configurations"
+    - "metrics"
+    - "models"
+
+# Testing and development
+testing:
+  enabled: false
+  dry_run_mode: false
+  mock_external_services: false
+  test_data: "/test/data"
+  scenarios:
+    - "traffic_spike"
+    - "service_failure"
+    - "cost_optimization"
+
+# Feature flags
+feature_flags:
+  predictive_scaling: true
+  cost_optimization: true
+  schedule_based_scaling: true
+  event_driven_scaling: true
+  advanced_metrics: true
+  multi_cloud: false
+  blue_green_deployment: false
+  canary_deployment: false

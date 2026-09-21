@@ -1,0 +1,542 @@
+{
+  "name": "Faction Manager - Political Dynamics & Relationships",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "faction/manage",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "faction-manager-webhook",
+      "name": "Faction Manager Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "faction-manager"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize faction management request\nconst requestData = $input.first().json;\nconst {\n  campaignId,\n  action, // 'create', 'update', 'action', 'diplomacy', 'conflict', 'intelligence', 'status'\n  factionId,\n  targetFactionId,\n  actionType,\n  actionDetails = {},\n  diplomaticTerms = {},\n  conflictDetails = {},\n  intelligenceData = {},\n  statusUpdate = {},\n  autoResolve = false\n} = requestData;\n\n// Validate required fields\nif (!campaignId || !action || !factionId) {\n  throw new Error('Missing required fields: campaignId, action, factionId');\n}\n\n// Prepare faction operation context\nconst operationContext = {\n  operation_id: `faction_op_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n  campaignId,\n  action,\n  factionId,\n  targetFactionId,\n  actionType,\n  timestamp: new Date().toISOString(),\n  autoResolve,\n  request_data: {\n    actionDetails,\n    diplomaticTerms,\n    conflictDetails,\n    intelligenceData,\n    statusUpdate\n  },\n  processing_context: {\n    current_world_state: null,\n    faction_data: null,\n    target_faction_data: null,\n    existing_relationships: null,\n    political_context: null\n  }\n};\n\nreturn [{ json: operationContext }];"
+      },
+      "id": "initialize-faction-operation",
+      "name": "Initialize Faction Operation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.NEO4J_URI }}",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.NEO4J_PASSWORD }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "=MATCH (c:Campaign {id: '{{ $json.campaignId }}' }) RETURN c.worldState as worldState, c.politicalLandscape as politicalContext, c.factionHistory as factionHistory"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-faction-context",
+      "name": "Neo4j - Fetch Faction Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process faction context and extract relevant data\nconst operationContext = $input.first().json;\nconst worldContext = $input.last().json;\n\nconst { worldState, politicalContext, factionHistory } = worldContext.results[0] || {};\n\n// Extract faction data\nconst factionData = worldState.factions?.find(f => f.id === operationContext.factionId);\nif (!factionData) {\n  throw new Error(`Faction ${operationContext.factionId} not found in campaign ${operationContext.campaignId}`);\n}\n\n// Extract target faction data if applicable\nlet targetFactionData = null;\nif (operationContext.targetFactionId) {\n  targetFactionData = worldState.factions?.find(f => f.id === operationContext.targetFactionId);\n  if (!targetFactionData) {\n    throw new Error(`Target faction ${operationContext.targetFactionId} not found`);\n  }\n}\n\n// Extract existing relationships\nconst existingRelationships = factionData.relationships || {};\nconst relationshipWithTarget = operationContext.targetFactionId ? \n  existingRelationships[operationContext.targetFactionId] : null;\n\n// Analyze political context\nconst politicalAnalysis = analyzePoliticalContext(factionData, targetFactionData, politicalContext, worldState);\n\nfunction analyzePoliticalContext(faction, targetFaction, politicalContext, worldState) {\n  const analysis = {\n    faction_strength: calculateFactionStrength(faction, worldState),\n    target_strength: targetFaction ? calculateFactionStrength(targetFaction, worldState) : null,\n    power_balance: null,\n    alliance_network: analyzeAllianceNetwork(faction, worldState.factions),\n    enemy_network: analyzeEnemyNetwork(faction, worldState.factions),\n    diplomatic_options: [],\n    conflict_risk: 0,\n    opportunity_factors: []\n  };\n  \n  // Calculate power balance\n  if (targetFaction) {\n    const factionPower = analysis.faction_strength.total_power;\n    const targetPower = analysis.target_strength.total_power;\n    analysis.power_balance = {\n      ratio: factionPower / targetPower,\n      advantage: factionPower > targetPower ? 'faction' : targetPower > factionPower ? 'target' : 'equal',\n      difference: Math.abs(factionPower - targetPower)\n    };\n  }\n  \n  // Determine diplomatic options\n  analysis.diplomatic_options = determineDiplomaticOptions(faction, targetFaction, analysis);\n  \n  // Calculate conflict risk\n  analysis.conflict_risk = calculateConflictRisk(faction, targetFaction, analysis);\n  \n  // Identify opportunity factors\n  analysis.opportunity_factors = identifyOpportunityFactors(faction, targetFaction, politicalContext, worldState);\n  \n  return analysis;\n}\n\nfunction calculateFactionStrength(faction, worldState) {\n  const strength = {\n    military: faction.resources?.military_strength || 0,\n    economic: faction.resources?.economic_power || 0,\n    political: faction.resources?.political_influence || 0,\n    magical: faction.resources?.magical_power || 0,\n    territory: faction.territories?.length || 0,\n    members: faction.members?.length || 0\n  };\n  \n  // Calculate weighted total power\n  strength.total_power = (\n    strength.military * 0.3 +\n    strength.economic * 0.25 +\n    strength.political * 0.25 +\n    strength.magical * 0.15 +\n    strength.territory * 0.03 +\n    strength.members * 0.02\n  );\n  \n  return strength;\n}\n\nfunction analyzeAllianceNetwork(faction, allFactions) {\n  const allies = [];\n  const allied_strength = 0;\n  \n  Object.entries(faction.relationships || {}).forEach(([factionId, relationship]) => {\n    if (relationship > 50) { // Alliance threshold\n      const allyFaction = allFactions?.find(f => f.id === factionId);\n      if (allyFaction) {\n        allies.push({\n          id: factionId,\n          name: allyFaction.name,\n          relationship_strength: relationship,\n          reliability: calculateReliability(faction, allyFaction)\n        });\n        allied_strength += calculateFactionStrength(allyFaction, { factions: allFactions }).total_power;\n      }\n    }\n  });\n  \n  return {\n    allies,\n    ally_count: allies.length,\n    allied_strength,\n    network_strength: allies.reduce((sum, ally) => sum + (ally.relationship_strength / 100), 0) / Math.max(allies.length, 1)\n  };\n}\n\nfunction analyzeEnemyNetwork(faction, allFactions) {\n  const enemies = [];\n  const enemy_strength = 0;\n  \n  Object.entries(faction.relationships || {}).forEach(([factionId, relationship]) => {\n    if (relationship < -50) { // Enemy threshold\n      const enemyFaction = allFactions?.find(f => f.id === factionId);\n      if (enemyFaction) {\n        enemies.push({\n          id: factionId,\n          name: enemyFaction.name,\n          hostility_level: Math.abs(relationship),\n          threat_level: calculateThreatLevel(faction, enemyFaction)\n        });\n        enemy_strength += calculateFactionStrength(enemyFaction, { factions: allFactions }).total_power;\n      }\n    }\n  });\n  \n  return {\n    enemies,\n    enemy_count: enemies.length,\n    enemy_strength,\n    threat_level: enemy_strength / Math.max(calculateFactionStrength(faction, { factions: allFactions }).total_power, 1)\n  };\n}\n\nfunction calculateReliability(faction1, faction2) {\n  // Calculate reliability based on history, alignment, and interests\n  const baseReliability = 0.5;\n  const alignmentBonus = faction1.alignment === faction2.alignment ? 0.2 : 0;\n  const historyBonus = 0.1; // Would calculate from actual history\n  const interestAlignment = calculateInterestAlignment(faction1, faction2);\n  \n  return Math.min(baseReliability + alignmentBonus + historyBonus + interestAlignment, 1.0);\n}\n\nfunction calculateThreatLevel(faction, enemyFaction) {\n  const factionPower = calculateFactionStrength(faction, { factions: [] }).total_power;\n  const enemyPower = calculateFactionStrength(enemyFaction, { factions: [] }).total_power;\n  \n  return enemyPower / Math.max(factionPower, 1);\n}\n\nfunction calculateInterestAlignment(faction1, faction2) {\n  // Calculate how aligned faction interests are\n  const commonGoals = (faction1.goals || []).filter(goal => \n    (faction2.goals || []).includes(goal)\n  ).length;\n  \n  const totalGoals = Math.max(\n    (faction1.goals || []).length,\n    (faction2.goals || []).length\n  );\n  \n  return totalGoals > 0 ? commonGoals / totalGoals : 0;\n}\n\nfunction determineDiplomaticOptions(faction, targetFaction, analysis) {\n  const options = [];\n  \n  if (!targetFaction) return options;\n  \n  const powerRatio = analysis.power_balance?.ratio || 1;\n  const currentRelationship = faction.relationships?.[targetFaction.id] || 0;\n  \n  // Trade agreement\n  if (currentRelationship > -30 && analysis.faction_strength.economic > 20) {\n    options.push({\n      type: 'trade_agreement',\n      feasibility: Math.min(0.8, 0.5 + (currentRelationship / 100)),\n      benefits: ['economic_growth', 'relationship_improvement'],\n      requirements: ['economic_capacity', 'neutral_or_positive_relations']\n    });\n  }\n  \n  // Military alliance\n  if (currentRelationship > 60 && analysis.faction_strength.military > 30) {\n    options.push({\n      type: 'military_alliance',\n      feasibility: Math.min(0.9, 0.4 + (currentRelationship / 100)),\n      benefits: ['mutual_defense', 'power_projection'],\n      requirements: ['high_trust', 'military_compatibility', 'common_threats']\n    });\n  }\n  \n  // Peace treaty\n  if (currentRelationship < -30) {\n    options.push({\n      type: 'peace_treaty',\n      feasibility: Math.min(0.7, 0.3 - (currentRelationship / 200)),\n      benefits: ['conflict_resolution', 'reconstruction'],\n      requirements: ['mutual_exhaustion', 'mediator', 'concessions']\n    });\n  }\n  \n  // Intelligence sharing\n  if (currentRelationship > 20 && powerRatio > 0.5) {\n    options.push({\n      type: 'intelligence_sharing',\n      feasibility: Math.min(0.8, 0.6 + (currentRelationship / 200)),\n      benefits: ['improved_situational_awareness', 'coordinated_actions'],\n      requirements: ['trust', 'common_interests', 'secure_communications']\n    });\n  }\n  \n  return options;\n}\n\nfunction calculateConflictRisk(faction, targetFaction, analysis) {\n  let risk = 0;\n  \n  // Base risk from relationship\n  const currentRelationship = faction.relationships?.[targetFaction?.id] || 0;\n  risk += Math.max(0, (50 - currentRelationship) / 100);\n  \n  // Power imbalance risk\n  if (analysis.power_balance) {\n    const powerImbalance = Math.abs(1 - analysis.power_balance.ratio);\n    risk += powerImbalance * 0.3;\n  }\n  \n  // Enemy network pressure\n  risk += analysis.enemy_network.threat_level * 0.2;\n  \n  // Strategic goals conflict\n  const conflictingGoals = calculateConflictingGoals(faction, targetFaction);\n  risk += conflictingGoals * 0.3;\n  \n  // External pressures\n  if (analysis.opportunity_factors.some(f => f.type === 'external_pressure')) {\n    risk += 0.2;\n  }\n  \n  return Math.min(risk, 1.0);\n}\n\nfunction calculateConflictingGoals(faction1, faction2) {\n  const goals1 = faction1.goals || [];\n  const goals2 = faction2.goals || [];\n  \n  // Simple conflict detection - could be made more sophisticated\n  const conflictingPairs = [\n    ['territorial_expansion', 'territory_defense'],\n    ['resource_control', 'resource_access'],\n    ['dominance', 'independence']\n  ];\n  \n  let conflicts = 0;\n  conflictingPairs.forEach(([goal1, goal2]) => {\n    if (goals1.includes(goal1) && goals2.includes(goal2)) {\n      conflicts++;\n    }\n    if (goals1.includes(goal2) && goals2.includes(goal1)) {\n      conflicts++;\n    }\n  });\n  \n  return Math.min(conflicts / 3, 1.0);\n}\n\nfunction identifyOpportunityFactors(faction, targetFaction, politicalContext, worldState) {\n  const factors = [];\n  \n  // Power vacuum\n  if (worldState.power_vacuum_regions?.length > 0) {\n    factors.push({\n      type: 'power_vacuum',\n      description: 'Power vacuum in certain regions presents expansion opportunities',\n      impact: 0.7,\n      urgency: 'high'\n    });\n  }\n  \n  // Economic opportunity\n  if (worldState.economic_opportunities?.length > 0) {\n    factors.push({\n      type: 'economic_opportunity',\n      description: 'New economic opportunities present growth potential',\n      impact: 0.5,\n      urgency: 'medium'\n    });\n  }\n  \n  // Alliance opportunity\n  if (targetFaction && faction.relationships?.[targetFaction.id] > 30) {\n    factors.push({\n      type: 'alliance_opportunity',\n      description: `Potential for stronger alliance with ${targetFaction.name}`,\n      impact: 0.6,\n      urgency: 'medium'\n    });\n  }\n  \n  // Weak neighbor\n  if (targetFaction && calculateFactionStrength(targetFaction, worldState).total_power < \n                    calculateFactionStrength(faction, worldState).total_power * 0.7) {\n    factors.push({\n      type: 'weak_neighbor',\n      description: `${targetFaction.name} appears weakened and vulnerable`,\n      impact: 0.4,\n      urgency: 'low'\n    });\n  }\n  \n  return factors;\n}\n\nreturn [{\n  json: {\n    ...operationContext,\n    processing_context: {\n      ...operationContext.processing_context,\n      current_world_state: worldState,\n      faction_data: factionData,\n      target_faction_data: targetFactionData,\n      existing_relationships: existingRelationships,\n      relationship_with_target: relationshipWithTarget,\n      political_analysis: politicalAnalysis\n    }\n  }\n}];"
+      },
+      "id": "process-faction-context",
+      "name": "Process Faction Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "action-check",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "action",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "route-faction-action",
+      "name": "Route Faction Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process faction action execution\nconst operationContext = $input.first().json;\nconst { action, actionType, factionId, processing_context } = operationContext;\n\nconst { faction_data, political_analysis } = processing_context;\n\nlet actionResult = {\n  success: false,\n  action_executed: false,\n  consequences: [],\n  world_changes: {},\n  political_impact: {},\n  narrative_description: ''\n};\n\ntry {\n  switch (actionType) {\n    case 'military_campaign':\n      actionResult = executeMilitaryCampaign(operationContext);\n      break;\n    case 'economic_initiative':\n      actionResult = executeEconomicInitiative(operationContext);\n      break;\n    case 'diplomatic_overture':\n      actionResult = executeDiplomaticOverture(operationContext);\n      break;\n    case 'intelligence_operation':\n      actionResult = executeIntelligenceOperation(operationContext);\n      break;\n    case 'internal_policy':\n      actionResult = executeInternalPolicy(operationContext);\n      break;\n    case 'territorial_expansion':\n      actionResult = executeTerritorialExpansion(operationContext);\n      break;\n    case 'resource_acquisition':\n      actionResult = executeResourceAcquisition(operationContext);\n      break;\n    default:\n      throw new Error(`Unknown action type: ${actionType}`);\n  }\n} catch (error) {\n  actionResult.error = error.message;\n  actionResult.success = false;\n}\n\nfunction executeMilitaryCampaign(context) {\n  const { faction_data, target_faction_data, political_analysis } = context.processing_context;\n  const { actionDetails } = context.request_data;\n  \n  const campaign = {\n    type: 'military_campaign',\n    target: target_faction_data?.id || 'unknown',\n    objectives: actionDetails.objectives || ['territory_control'],\n    forces_committed: actionDetails.forces || Math.floor(faction_data.resources?.military_strength * 0.3),\n    strategy: actionDetails.strategy || 'direct_assault',\n    expected_duration: actionDetails.duration || '1-4 weeks'\n  };\n  \n  // Calculate success probability\n  const successProbability = calculateMilitarySuccessProbability(campaign, political_analysis);\n  const success = Math.random() < successProbability;\n  \n  // Generate consequences\n  const consequences = generateMilitaryConsequences(campaign, success, political_analysis);\n  \n  // Calculate political impact\n  const politicalImpact = calculateMilitaryPoliticalImpact(campaign, success, political_analysis);\n  \n  return {\n    success,\n    action_executed: true,\n    campaign_data: campaign,\n    success_probability: successProbability,\n    consequences,\n    political_impact: politicalImpact,\n    world_changes: generateMilitaryWorldChanges(campaign, success),\n    narrative_description: generateMilitaryNarrative(campaign, success, faction_data, target_faction_data)\n  };\n}\n\nfunction executeEconomicInitiative(context) {\n  const { faction_data, political_analysis } = context.processing_context;\n  const { actionDetails } = context.request_data;\n  \n  const initiative = {\n    type: 'economic_initiative',\n    initiative_type: actionDetails.initiative_type || 'trade_expansion',\n    investment: actionDetails.investment || Math.floor(faction_data.resources?.economic_power * 0.2),\n    target_markets: actionDetails.target_markets || ['local'],\n    duration: actionDetails.duration || '3-6 months'\n  };\n  \n  const successProbability = calculateEconomicSuccessProbability(initiative, political_analysis);\n  const success = Math.random() < successProbability;\n  \n  const consequences = generateEconomicConsequences(initiative, success, political_analysis);\n  const politicalImpact = calculateEconomicPoliticalImpact(initiative, success, political_analysis);\n  \n  return {\n    success,\n    action_executed: true,\n    initiative_data: initiative,\n    success_probability: successProbability,\n    consequences,\n    political_impact: politicalImpact,\n    world_changes: generateEconomicWorldChanges(initiative, success),\n    narrative_description: generateEconomicNarrative(initiative, success, faction_data)\n  };\n}\n\nfunction executeDiplomaticOverture(context) {\n  const { faction_data, target_faction_data, political_analysis } = context.processing_context;\n  const { diplomaticTerms } = context.request_data;\n  \n  const overture = {\n    type: 'diplomatic_overture',\n    target_faction: target_faction_data?.id,\n    proposal_type: diplomaticTerms.proposal_type || 'alliance',\n    terms: diplomaticTerms.terms || {},\n    incentives: diplomaticTerms.incentives || [],\n    timeline: diplomaticTerms.timeline || 'immediate'\n  };\n  \n  const successProbability = calculateDiplomaticSuccessProbability(overture, political_analysis);\n  const success = Math.random() < successProbability;\n  \n  const consequences = generateDiplomaticConsequences(overture, success, political_analysis);\n  const politicalImpact = calculateDiplomaticPoliticalImpact(overture, success, political_analysis);\n  \n  return {\n    success,\n    action_executed: true,\n    overture_data: overture,\n    success_probability: successProbability,\n    consequences,\n    political_impact: politicalImpact,\n    world_changes: generateDiplomaticWorldChanges(overture, success),\n    narrative_description: generateDiplomaticNarrative(overture, success, faction_data, target_faction_data)\n  };\n}\n\nfunction executeIntelligenceOperation(context) {\n  const { faction_data, target_faction_data, political_analysis } = context.processing_context;\n  const { intelligenceData } = context.request_data;\n  \n  const operation = {\n    type: 'intelligence_operation',\n    target: target_faction_data?.id,\n    operation_type: intelligenceData.operation_type || 'espionage',\n    objectives: intelligenceData.objectives || ['information_gathering'],\n    resources_committed: intelligenceData.resources || Math.floor(faction_data.resources?.political_influence * 0.2),\n    risk_level: intelligenceData.risk_level || 'medium'\n  };\n  \n  const successProbability = calculateIntelligenceSuccessProbability(operation, political_analysis);\n  const success = Math.random() < successProbability;\n  \n  const consequences = generateIntelligenceConsequences(operation, success, political_analysis);\n  const politicalImpact = calculateIntelligencePoliticalImpact(operation, success, political_analysis);\n  \n  return {\n    success,\n    action_executed: true,\n    operation_data: operation,\n    success_probability: successProbability,\n    consequences,\n    political_impact: politicalImpact,\n    world_changes: generateIntelligenceWorldChanges(operation, success),\n    narrative_description: generateIntelligenceNarrative(operation, success, faction_data, target_faction_data)\n  };\n}\n\nfunction executeInternalPolicy(context) {\n  const { faction_data, political_analysis } = context.processing_context;\n  const { actionDetails } = context.request_data;\n  \n  const policy = {\n    type: 'internal_policy',\n    policy_type: actionDetails.policy_type || 'economic_reform',\n    scope: actionDetails.scope || 'faction_wide',\n    resources_required: actionDetails.resources || Math.floor(faction_data.resources?.economic_power * 0.1),\n    expected_impact: actionDetails.expected_impact || 'moderate'\n  };\n  \n  const successProbability = calculatePolicySuccessProbability(policy, political_analysis);\n  const success = Math.random() < successProbability;\n  \n  const consequences = generatePolicyConsequences(policy, success, political_analysis);\n  const politicalImpact = calculatePolicyPoliticalImpact(policy, success, political_analysis);\n  \n  return {\n    success,\n    action_executed: true,\n    policy_data: policy,\n    success_probability: successProbability,\n    consequences,\n    political_impact: politicalImpact,\n    world_changes: generatePolicyWorldChanges(policy, success),\n    narrative_description: generatePolicyNarrative(policy, success, faction_data)\n  };\n}\n\nfunction executeTerritorialExpansion(context) {\n  const { faction_data, target_faction_data, political_analysis } = context.processing_context;\n  const { actionDetails } = context.request_data;\n  \n  const expansion = {\n    type: 'territorial_expansion',\n    target_territory: actionDetails.target_territory || 'border_region',\n    expansion_method: actionDetails.method || 'peaceful_annexation',\n    forces_committed: actionDetails.forces || Math.floor(faction_data.resources?.military_strength * 0.4),\n    justification: actionDetails.justification || 'historic_claim'\n  };\n  \n  const successProbability = calculateExpansionSuccessProbability(expansion, political_analysis);\n  const success = Math.random() < successProbability;\n  \n  const consequences = generateExpansionConsequences(expansion, success, political_analysis);\n  const politicalImpact = calculateExpansionPoliticalImpact(expansion, success, political_analysis);\n  \n  return {\n    success,\n    action_executed: true,\n    expansion_data: expansion,\n    success_probability: successProbability,\n    consequences,\n    political_impact: politicalImpact,\n    world_changes: generateExpansionWorldChanges(expansion, success),\n    narrative_description: generateExpansionNarrative(expansion, success, faction_data, target_faction_data)\n  };\n}\n\nfunction executeResourceAcquisition(context) {\n  const { faction_data, political_analysis } = context.processing_context;\n  const { actionDetails } = context.request_data;\n  \n  const acquisition = {\n    type: 'resource_acquisition',\n    resource_type: actionDetails.resource_type || 'economic',\n    acquisition_method: actionDetails.method || 'trade',\n    investment: actionDetails.investment || Math.floor(faction_data.resources?.economic_power * 0.3),\n    target_quantity: actionDetails.quantity || 'moderate'\n  };\n  \n  const successProbability = calculateResourceSuccessProbability(acquisition, political_analysis);\n  const success = Math.random() < successProbability;\n  \n  const consequences = generateResourceConsequences(acquisition, success, political_analysis);\n  const politicalImpact = calculateResourcePoliticalImpact(acquisition, success, political_analysis);\n  \n  return {\n    success,\n    action_executed: true,\n    acquisition_data: acquisition,\n    success_probability: successProbability,\n    consequences,\n    political_impact: politicalImpact,\n    world_changes: generateResourceWorldChanges(acquisition, success),\n    narrative_description: generateResourceNarrative(acquisition, success, faction_data)\n  };\n}\n\n// Success probability calculation functions\nfunction calculateMilitarySuccessProbability(campaign, analysis) {\n  let probability = 0.5;\n  \n  // Power balance factor\n  if (analysis.power_balance) {\n    if (analysis.power_balance.advantage === 'faction') {\n      probability += 0.2;\n    } else if (analysis.power_balance.advantage === 'target') {\n      probability -= 0.2;\n    }\n  }\n  \n  // Alliance network factor\n  probability += analysis.alliance_network.allied_strength * 0.1;\n  probability -= analysis.enemy_network.enemy_strength * 0.05;\n  \n  // Force commitment factor\n  if (campaign.forces_committed > campaign.forces_committed * 0.5) {\n    probability += 0.1;\n  }\n  \n  // Strategy factor\n  const strategyBonus = {\n    'direct_assault': 0,\n    'siege': 0.1,\n    'guerrilla': 0.15,\n    'naval_blockade': 0.05\n  };\n  probability += strategyBonus[campaign.strategy] || 0;\n  \n  return Math.max(0.1, Math.min(0.9, probability));\n}\n\nfunction calculateEconomicSuccessProbability(initiative, analysis) {\n  let probability = 0.6;\n  \n  // Economic strength factor\n  probability += (analysis.faction_strength.economic / 100) * 0.2;\n  \n  // Investment factor\n  if (initiative.investment > 50) {\n    probability += 0.1;\n  }\n  \n  // Market conditions factor\n  if (initiative.initiative_type === 'trade_expansion') {\n    probability += 0.1;\n  }\n  \n  return Math.max(0.2, Math.min(0.95, probability));\n}\n\nfunction calculateDiplomaticSuccessProbability(overture, analysis) {\n  let probability = 0.5;\n  \n  // Current relationship factor\n  const currentRelation = analysis.faction_data.relationships?.[overture.target_faction] || 0;\n  probability += (currentRelation / 100) * 0.3;\n  \n  // Power balance factor\n  if (analysis.power_balance && Math.abs(analysis.power_balance.ratio - 1) < 0.3) {\n    probability += 0.1;\n  }\n  \n  // Proposal type factor\n  const proposalBonus = {\n    'trade_agreement': 0.1,\n    'non_aggression_pact': 0.15,\n    'alliance': 0.05,\n    'intelligence_sharing': 0.2\n  };\n  probability += proposalBonus[overture.proposal_type] || 0;\n  \n  return Math.max(0.1, Math.min(0.9, probability));\n}\n\nfunction calculateIntelligenceSuccessProbability(operation, analysis) {\n  let probability = 0.4;\n  \n  // Faction political strength\n  probability += (analysis.faction_strength.political / 100) * 0.2;\n  \n  // Risk level factor\n  const riskPenalty = {\n    'low': 0,\n    'medium': -0.1,\n    'high': -0.2,\n    'critical': -0.3\n  };\n  probability += riskPenalty[operation.risk_level] || 0;\n  \n  // Operation type factor\n  const typeBonus = {\n    'espionage': 0,\n    'sabotage': -0.1,\n    'propaganda': 0.1,\n    'counter_intelligence': 0.15\n  };\n  probability += typeBonus[operation.operation_type] || 0;\n  \n  return Math.max(0.1, Math.min(0.8, probability));\n}\n\nfunction calculatePolicySuccessProbability(policy, analysis) {\n  let probability = 0.6;\n  \n  // Faction stability factor\n  if (analysis.faction_strength.political > 50) {\n    probability += 0.1;\n  }\n  \n  // Resource availability factor\n  if (policy.resources_required < analysis.faction_strength.economic * 0.2) {\n    probability += 0.1;\n  }\n  \n  // Policy type factor\n  const policyBonus = {\n    'economic_reform': 0,\n    'military_reform': -0.1,\n    'social_reform': 0.05,\n    'infrastructure': 0.1\n  };\n  probability += policyBonus[policy.policy_type] || 0;\n  \n  return Math.max(0.2, Math.min(0.9, probability));\n}\n\nfunction calculateExpansionSuccessProbability(expansion, analysis) {\n  let probability = 0.4;\n  \n  // Military strength factor\n  probability += (analysis.faction_strength.military / 100) * 0.2;\n  \n  // Method factor\n  const methodBonus = {\n    'peaceful_annexation': 0.2,\n    'military_conquest': -0.1,\n    'political_manipulation': 0.1,\n    'economic_dominance': 0.15\n  };\n  probability += methodBonus[expansion.expansion_method] || 0;\n  \n  // Power balance factor\n  if (analysis.power_balance && analysis.power_balance.advantage === 'faction') {\n    probability += 0.2;\n  }\n  \n  return Math.max(0.1, Math.min(0.8, probability));\n}\n\nfunction calculateResourceSuccessProbability(acquisition, analysis) {\n  let probability = 0.5;\n  \n  // Economic strength factor\n  probability += (analysis.faction_strength.economic / 100) * 0.2;\n  \n  // Method factor\n  const methodBonus = {\n    'trade': 0.1,\n    'conquest': -0.2,\n    'exploration': 0.05,\n    'diplomacy': 0.15\n  };\n  probability += methodBonus[acquisition.acquisition_method] || 0;\n  \n  // Investment factor\n  if (acquisition.investment > 30) {\n    probability += 0.1;\n  }\n  \n  return Math.max(0.2, Math.min(0.9, probability));\n}\n\n// Consequence generation functions (simplified for brevity)\nfunction generateMilitaryConsequences(campaign, success, analysis) {\n  const consequences = [];\n  \n  if (success) {\n    consequences.push({\n      type: 'territory_change',\n      description: 'Territory control changes',\n      impact: 'major'\n    });\n    consequences.push({\n      type: 'casualties',\n      description: 'Military casualties sustained',\n      impact: 'moderate'\n    });\n  } else {\n    consequences.push({\n      type: 'military_loss',\n      description: 'Military forces weakened',\n      impact: 'major'\n    });\n    consequences.push({\n      type: 'reputation_damage',\n      description: 'Military reputation damaged',\n      impact: 'moderate'\n    });\n  }\n  \n  return consequences;\n}\n\nfunction generateEconomicConsequences(initiative, success, analysis) {\n  const consequences = [];\n  \n  if (success) {\n    consequences.push({\n      type: 'economic_growth',\n      description: 'Economic resources increased',\n      impact: 'moderate'\n    });\n  } else {\n    consequences.push({\n      type: 'economic_loss',\n      description: 'Investment lost',\n      impact: 'minor'\n    });\n  }\n  \n  return consequences;\n}\n\nfunction generateDiplomaticConsequences(overture, success, analysis) {\n  const consequences = [];\n  \n  if (success) {\n    consequences.push({\n      type: 'relationship_improvement',\n      description: 'Diplomatic relationship strengthened',\n      impact: 'moderate'\n    });\n  } else {\n    consequences.push({\n      type: 'diplomatic_failure',\n      description: 'Diplomatic overture rejected',\n      impact: 'minor'\n    });\n  }\n  \n  return consequences;\n}\n\nfunction generateIntelligenceConsequences(operation, success, analysis) {\n  const consequences = [];\n  \n  if (success) {\n    consequences.push({\n      type: 'information_gained',\n      description: 'Valuable intelligence acquired',\n      impact: 'moderate'\n    });\n  } else {\n    consequences.push({\n      type: 'operation_exposed',\n      description: 'Intelligence operation compromised',\n      impact: 'major'\n    });\n  }\n  \n  return consequences;\n}\n\nfunction generatePolicyConsequences(policy, success, analysis) {\n  const consequences = [];\n  \n  if (success) {\n    consequences.push({\n      type: 'internal_improvement',\n      description: 'Internal faction improvements',\n      impact: 'moderate'\n    });\n  } else {\n    consequences.push({\n      type: 'internal_discontent',\n      description: 'Internal faction dissatisfaction',\n      impact: 'minor'\n    });\n  }\n  \n  return consequences;\n}\n\nfunction generateExpansionConsequences(expansion, success, analysis) {\n  const consequences = [];\n  \n  if (success) {\n    consequences.push({\n      type: 'territory_gained',\n      description: 'New territory acquired',\n      impact: 'major'\n    });\n  } else {\n    consequences.push({\n      type: 'expansion_failure',\n      description: 'Expansion attempt failed',\n      impact: 'moderate'\n    });\n  }\n  \n  return consequences;\n}\n\nfunction generateResourceConsequences(acquisition, success, analysis) {\n  const consequences = [];\n  \n  if (success) {\n    consequences.push({\n      type: 'resources_gained',\n      description: 'Resources acquired',\n      impact: 'moderate'\n    });\n  } else {\n    consequences.push({\n      type: 'resources_lost',\n      description: 'Resources wasted',\n      impact: 'minor'\n    });\n  }\n  \n  return consequences;\n}\n\n// Political impact calculation functions (simplified)\nfunction calculateMilitaryPoliticalImpact(campaign, success, analysis) {\n  return {\n    relationship_changes: success ? \n      [{ target: campaign.target, change: -30 }] : \n      [{ target: campaign.target, change: 10 }],\n    power_shift: success ? 0.1 : -0.05,\n    reputation_change: success ? 0.1 : -0.15\n  };\n}\n\nfunction calculateEconomicPoliticalImpact(initiative, success, analysis) {\n  return {\n    relationship_changes: [],\n    power_shift: success ? 0.05 : -0.02,\n    reputation_change: success ? 0.05 : -0.05\n  };\n}\n\nfunction calculateDiplomaticPoliticalImpact(overture, success, analysis) {\n  return {\n    relationship_changes: success ? \n      [{ target: overture.target_faction, change: 20 }] : \n      [{ target: overture.target_faction, change: -5 }],\n    power_shift: 0,\n    reputation_change: success ? 0.1 : -0.02\n  };\n}\n\nfunction calculateIntelligencePoliticalImpact(operation, success, analysis) {\n  return {\n    relationship_changes: success ? [] : \n      [{ target: operation.target, change: -15 }],\n    power_shift: 0,\n    reputation_change: success ? 0.02 : -0.1\n  };\n}\n\nfunction calculatePolicyPoliticalImpact(policy, success, analysis) {\n  return {\n    relationship_changes: [],\n    power_shift: success ? 0.03 : -0.01,\n    reputation_change: success ? 0.05 : -0.03\n  };\n}\n\nfunction calculateExpansionPoliticalImpact(expansion, success, analysis) {\n  return {\n    relationship_changes: success ? \n      [{ target: expansion.target_territory, change: -40 }] : \n      [],\n    power_shift: success ? 0.15 : -0.08,\n    reputation_change: success ? 0.05 : -0.2\n  };\n}\n\nfunction calculateResourcePoliticalImpact(acquisition, success, analysis) {\n  return {\n    relationship_changes: [],\n    power_shift: success ? 0.05 : -0.02,\n    reputation_change: success ? 0.02 : -0.03\n  };\n}\n\n// World change generation functions (simplified)\nfunction generateMilitaryWorldChanges(campaign, success) {\n  return {\n    military_strength: success ? -0.1 : -0.2,\n    territories: success ? 1 : 0,\n    resources: success ? 0.1 : -0.15\n  };\n}\n\nfunction generateEconomicWorldChanges(initiative, success) {\n  return {\n    economic_power: success ? 0.15 : -0.1,\n    resources: success ? 0.2 : -0.15\n  };\n}\n\nfunction generateDiplomaticWorldChanges(overture, success) {\n  return {\n    political_influence: success ? 0.1 : -0.05\n  };\n}\n\nfunction generateIntelligenceWorldChanges(operation, success) {\n  return {\n    political_influence: success ? 0.05 : -0.1\n  };\n}\n\nfunction generatePolicyWorldChanges(policy, success) {\n  return {\n    political_influence: success ? 0.08 : -0.05,\n    economic_power: success ? 0.05 : -0.1\n  };\n}\n\nfunction generateExpansionWorldChanges(expansion, success) {\n  return {\n    territories: success ? 1 : 0,\n    military_strength: success ? -0.15 : -0.05,\n    economic_power: success ? 0.1 : -0.05\n  };\n}\n\nfunction generateResourceWorldChanges(acquisition, success) {\n  return {\n    economic_power: success ? 0.1 : -0.05\n  };\n}\n\n// Narrative generation functions (simplified)\nfunction generateMilitaryNarrative(campaign, success, faction, target) {\n  if (success) {\n    return `The ${faction.name}'s military campaign against ${target?.name || 'their target'} has achieved its objectives, though not without cost.`;\n  } else {\n    return `The ${faction.name}'s military campaign has ended in failure, weakening their military position.`;\n  }\n}\n\nfunction generateEconomicNarrative(initiative, success, faction) {\n  if (success) {\n    return `The ${faction.name}'s economic initiative has strengthened their financial position.`;\n  } else {\n    return `The ${faction.name}'s economic venture has failed to deliver expected returns.`;\n  }\n}\n\nfunction generateDiplomaticNarrative(overture, success, faction, target) {\n  if (success) {\n    return `Diplomatic relations between ${faction.name} and ${target?.name} have improved significantly.`;\n  } else {\n    return `The diplomatic overture from ${faction.name} to ${target?.name} has been rejected.`;\n  }\n}\n\nfunction generateIntelligenceNarrative(operation, success, faction, target) {\n  if (success) {\n    return `The ${faction.name}'s intelligence operation has yielded valuable information.`;\n  } else {\n    return `The ${faction.name}'s intelligence operation has been compromised.`;\n  }\n}\n\nfunction generatePolicyNarrative(policy, success, faction) {\n  if (success) {\n    return `The ${faction.name}'s internal policy changes have strengthened the faction.`;\n  } else {\n    return `The ${faction.name}'s policy reforms have met with internal resistance.`;\n  }\n}\n\nfunction generateExpansionNarrative(expansion, success, faction, target) {\n  if (success) {\n    return `The ${faction.name} has successfully expanded their territory.`;\n  } else {\n    return `The ${faction.name}'s expansion efforts have been thwarted.`;\n  }\n}\n\nfunction generateResourceNarrative(acquisition, success, faction) {\n  if (success) {\n    return `The ${faction.name} has successfully acquired new resources.`;\n  } else {\n    return `The ${faction.name}'s resource acquisition efforts have failed.`;\n  }\n}\n\nreturn [{\n  json: {\n    ...operationContext,\n    action_result: actionResult,\n    processing_complete: true\n  }\n}];"
+      },
+      "id": "execute-faction-action",
+      "name": "Execute Faction Action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.DEEPSEEK_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "deepseek-chat"
+            },
+            {
+              "name": "messages",
+              "value": "={{[{\n  \"role\": \"system\",\n  \"content\": \"You are a master political storyteller for a D&D campaign. Transform faction actions into compelling political narratives that would engage players and create dramatic tension. Focus on the human element of politics - ambition, betrayal, honor, and consequence.\\n\\nFor each faction action, provide:\\n1. A dramatic narrative description (3-4 sentences)\\n2. How players might learn about this action\\n3. Potential ways players could be affected or intervene\\n4. Foreshadowing of future political developments\\n5. Key NPCs involved and their motivations\\n\\nFormat as JSON with keys: narrative_description, player_discovery, player_impact, foreshadowing, key_npcs\"\n}], [\n  {\n    \"role\": \"user\",\n    \"content\": \"Generate political narrative for this faction action in campaign {{ $json.campaignId }}:\\n\\nFaction Action: {{ JSON.stringify($json.action_result, null, 2) }}\\n\\nFaction Data: {{ JSON.stringify($json.processing_context.faction_data, null, 2) }}\\n\\nTarget Faction: {{ JSON.stringify($json.processing_context.target_faction_data, null, 2) }}\\n\\nPolitical Context: {{ JSON.stringify($json.processing_context.political_analysis, null, 2) }}\"\n  }\n])}}"
+            },
+            {
+              "name": "temperature",
+              "value": "0.9"
+            },
+            {
+              "name": "max_tokens",
+              "value": "2500"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "deepseek-political-narrative",
+      "name": "DeepSeek - Generate Political Narrative",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process political narrative and update world state\nconst operationContext = $input.first().json;\nconst deepseekResponse = $input.last().json;\n\nlet politicalNarrative = {};\ntry {\n  const content = deepseekResponse.choices[0].message.content;\n  politicalNarrative = JSON.parse(content);\n} catch (error) {\n  console.error('Failed to parse DeepSeek political narrative:', error);\n  politicalNarrative = {\n    narrative_description: operationContext.action_result.narrative_description || 'Political events unfold.',\n    player_discovery: 'Players may learn of these events through rumors or observation.',\n    player_impact: 'These events may create new opportunities or challenges.',\n    foreshadowing: 'Further political developments may follow.',\n    key_npcs: []\n  };\n}\n\n// Update faction data with action results\nconst updatedFactionData = updateFactionData(\n  operationContext.processing_context.faction_data,\n  operationContext.action_result,\n  operationContext.action_result.world_changes\n);\n\n// Update target faction if applicable\nlet updatedTargetFactionData = null;\nif (operationContext.processing_context.target_faction_data) {\n  updatedTargetFactionData = updateTargetFactionData(\n    operationContext.processing_context.target_faction_data,\n    operationContext.action_result,\n    operationContext.action_result.political_impact\n  );\n}\n\nfunction updateFactionData(factionData, actionResult, worldChanges) {\n  const updated = { ...factionData };\n  \n  // Update resources based on world changes\n  if (updated.resources) {\n    updated.resources.military_strength = Math.max(0, \n      (updated.resources.military_strength || 0) + (worldChanges.military_strength || 0) * 100);\n    updated.resources.economic_power = Math.max(0, \n      (updated.resources.economic_power || 0) + (worldChanges.economic_power || 0) * 100);\n    updated.resources.political_influence = Math.max(0, \n      (updated.resources.political_influence || 0) + (worldChanges.political_influence || 0) * 100);\n  }\n  \n  // Update territories\n  if (worldChanges.territories && worldChanges.territories > 0) {\n    updated.territories = [...(updated.territories || []), `territory_${Date.now()}`];\n  }\n  \n  // Add to action history\n  updated.action_history = [\n    ...(updated.action_history || []),\n    {\n      action_id: operationContext.operation_id,\n      action_type: actionResult.action_executed ? actionResult.action_type || 'unknown' : 'failed',\n      success: actionResult.success,\n      timestamp: operationContext.timestamp,\n      consequences: actionResult.consequences || [],\n      narrative_summary: politicalNarrative.narrative_description\n    }\n  ];\n  \n  // Update relationships\n  if (actionResult.political_impact.relationship_changes) {\n    updated.relationships = { ...(updated.relationships || {}) };\n    actionResult.political_impact.relationship_changes.forEach(change => {\n      const currentRelation = updated.relationships[change.target] || 0;\n      updated.relationships[change.target] = Math.max(-100, Math.min(100, currentRelation + change.change));\n    });\n  }\n  \n  updated.last_updated = new Date().toISOString();\n  \n  return updated;\n}\n\nfunction updateTargetFactionData(targetFactionData, actionResult, politicalImpact) {\n  const updated = { ...targetFactionData };\n  \n  // Update relationships\n  if (politicalImpact.relationship_changes) {\n    updated.relationships = { ...(updated.relationships || {}) };\n    politicalImpact.relationship_changes.forEach(change => {\n      const currentRelation = updated.relationships[operationContext.factionId] || 0;\n      updated.relationships[operationContext.factionId] = Math.max(-100, Math.min(100, currentRelation - change.change));\n    });\n  }\n  \n  // Add reaction to action history\n  updated.reaction_history = [\n    ...(updated.reaction_history || []),\n    {\n      reacting_to: operationContext.operation_id,\n      reaction_type: 'target_of_action',\n      impact: politicalImpact,\n      timestamp: new Date().toISOString()\n    }\n  ];\n  \n  updated.last_updated = new Date().toISOString();\n  \n  return updated;\n}\n\nreturn [{\n  json: {\n    ...operationContext,\n    political_narrative: politicalNarrative,\n    world_updates: {\n      updated_faction: updatedFactionData,\n      updated_target_faction: updatedTargetFactionData,\n      world_state_changes: actionResult.world_changes,\n      relationship_changes: actionResult.political_impact.relationship_changes || []\n    },\n    processing_complete: true\n  }\n}];"
+      },
+      "id": "process-narrative-and-updates",
+      "name": "Process Narrative and Updates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.NEO4J_URI }}",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.NEO4J_PASSWORD }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "=MATCH (c:Campaign {id: '{{ $json.campaignId }}' })-[r:CONTAINS_FACTION]->(f:Faction {id: '{{ $json.factionId }}' }) SET f = {{ JSON.stringify($json.world_updates.updated_faction) }}, c.lastFactionUpdate = '{{ $json.timestamp }}' RETURN f, r"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-faction-neo4j",
+      "name": "Neo4j - Update Faction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "target-check",
+              "leftValue": "={{ $json.world_updates.updated_target_faction }}",
+              "rightValue": "null",
+              "operator": {
+                "type": "object",
+                "operation": "notExists"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-target-faction",
+      "name": "Check Target Faction",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2220, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.NEO4J_URI }}",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.NEO4J_PASSWORD }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "=MATCH (c:Campaign {id: '{{ $json.campaignId }}' })-[r:CONTAINS_FACTION]->(f:Faction {id: '{{ $json.targetFactionId }}' }) SET f = {{ JSON.stringify($json.world_updates.updated_target_faction) }} RETURN f, r"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-target-faction-neo4j",
+      "name": "Neo4j - Update Target Faction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2440, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.CAMPAIGN_API_URL }}/api/campaigns/{{ $json.campaignId }}/factions/{{ $json.factionId }}/actions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.CAMPAIGN_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "action_data",
+              "value": "={{ $json.action_result }}"
+            },
+            {
+              "name": "narrative",
+              "value": "={{ $json.political_narrative }}"
+            },
+            {
+              "name": "world_updates",
+              "value": "={{ $json.world_updates }}"
+            },
+            {
+              "name": "operation_context",
+              "value": "={{ { operation_id: $json.operation_id, timestamp: $json.timestamp, action_type: $json.actionType } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "notify-campaign-system",
+      "name": "Notify Campaign System",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate faction action summary\nconst operationContext = $input.first().json;\nconst { action_result, political_narrative } = operationContext;\n\nconst summary = {\n  operation_id: operationContext.operation_id,\n  campaign_id: operationContext.campaignId,\n  faction_id: operationContext.factionId,\n  target_faction_id: operationContext.targetFactionId,\n  action_type: operationContext.actionType,\n  completion_time: new Date().toISOString(),\n  action_summary: {\n    success: action_result.success,\n    success_probability: action_result.success_probability,\n    consequences_count: action_result.consequences?.length || 0,\n    political_impact: {\n      relationship_changes: action_result.political_impact.relationship_changes?.length || 0,\n      power_shift: action_result.political_impact.power_shift || 0,\n      reputation_change: action_result.political_impact.reputation_change || 0\n    },\n    world_changes: {\n      military_strength: action_result.world_changes.military_strength || 0,\n      economic_power: action_result.world_changes.economic_power || 0,\n      political_influence: action_result.world_changes.political_influence || 0,\n      territories: action_result.world_changes.territories || 0\n    }\n  },\n  narrative_summary: {\n    description: political_narrative.narrative_description || action_result.narrative_description,\n    player_discovery: political_narrative.player_discovery || 'Events may be discovered through investigation.',\n    player_impact: political_narrative.player_impact || 'Players may be affected by these changes.',\n    foreshadowing: political_narrative.foreshadowing || 'Future events may follow from this action.',\n    key_npcs: political_narrative.key_npcs || []\n  },\n  campaign_implications: {\n    immediate_effects: action_result.consequences?.map(c => c.description) || [],\n    short_term_effects: generateShortTermEffects(action_result),\n    long_term_effects: generateLongTermEffects(action_result),\n    player_opportunities: generatePlayerOpportunities(political_narrative),\n    potential_complications: generatePotentialComplications(action_result)\n  },\n  next_steps: generateNextSteps(operationContext, action_result)\n};\n\nfunction generateShortTermEffects(actionResult) {\n  const effects = [];\n  \n  if (action_result.political_impact.relationship_changes) {\n    effects.push('Diplomatic relationships will shift immediately');\n  }\n  \n  if (action_result.world_changes.military_strength && action_result.world_changes.military_strength < 0) {\n    effects.push('Military readiness temporarily reduced');\n  }\n  \n  if (action_result.success && action_result.world_changes.territories > 0) {\n    effects.push('New territory requires immediate administration');\n  }\n  \n  return effects;\n}\n\nfunction generateLongTermEffects(actionResult) {\n  const effects = [];\n  \n  if (action_result.political_impact.power_shift > 0) {\n    effects.push('Regional power balance may shift');\n  }\n  \n  if (action_result.political_impact.reputation_change > 0) {\n    effects.push('Faction reputation enhanced, may attract new allies');\n  }\n  \n  if (action_result.world_changes.economic_power > 0) {\n    effects.push('Economic growth may create new opportunities');\n  }\n  \n  return effects;\n}\n\nfunction generatePlayerOpportunities(narrative) {\n  const opportunities = [];\n  \n  if (narrative.player_impact) {\n    opportunities.push(narrative.player_impact);\n  }\n  \n  if (narrative.key_npcs && narrative.key_npcs.length > 0) {\n    opportunities.push('New diplomatic contacts available');\n  }\n  \n  opportunities.push('Information gathering opportunities');\n  \n  return opportunities;\n}\n\nfunction generatePotentialComplications(actionResult) {\n  const complications = [];\n  \n  if (!action_result.success) {\n    complications.push('Faction may seek revenge or compensation');\n  }\n  \n  if (action_result.political_impact.relationship_changes) {\n    complications.push('Other factions may react to these changes');\n  }\n  \n  if (action_result.world_changes.military_strength < -0.15) {\n    complications.push('Military weakness may be exploited by enemies');\n  }\n  \n  return complications;\n}\n\nfunction generateNextSteps(operationContext, actionResult) {\n  const steps = [];\n  \n  // Immediate follow-up\n  steps.push({\n    action: 'monitor_reactions',\n    description: 'Monitor how other factions react to this action',\n    priority: 'high',\n    timeline: 'next 24-48 hours'\n  });\n  \n  // Player involvement\n  if (operationContext.processing_context.faction_data.player_allied) {\n    steps.push({\n      action: 'player_briefing',\n      description: 'Brief allied players on action outcomes',\n      priority: 'medium',\n      timeline: 'next session'\n    });\n  }\n  \n  // World state update\n  steps.push({\n    action: 'world_state_refresh',\n    description: 'Update campaign world state with changes',\n    priority: 'high',\n    timeline: 'immediate'\n  });\n  \n  // Future planning\n  if (action_result.success) {\n    steps.push({\n      action: 'strategic_planning',\n      description: 'Update faction strategic plans based on success',\n      priority: 'medium',\n      timeline: 'next week'\n    });\n  }\n  \n  return steps;\n}\n\nreturn [{ json: summary }];"
+      },
+      "id": "generate-action-summary",
+      "name": "Generate Action Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2660, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_WORLD_SHEET_ID }}",
+        "range": "Faction_Actions!A:M",
+        "options": {}
+      },
+      "id": "log-faction-action",
+      "name": "Log Faction Action",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2880, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, operation_id: $json.operation_id, action_completed: true, success: $json.action_summary.success, narrative_summary: $json.action_summary.narrative_summary.description, player_opportunities: $json.action_summary.campaign_implications.player_opportunities, next_steps: $json.action_summary.next_steps, world_changes: $json.action_summary.action_summary.world_changes } }}"
+      },
+      "id": "faction-response",
+      "name": "Faction Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [3100, 300]
+    }
+  ],
+  "connections": {
+    "Faction Manager Webhook": {
+      "main": [
+        [
+          {
+            "node": "Initialize Faction Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Faction Operation": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Fetch Faction Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j - Fetch Faction Context": {
+      "main": [
+        [
+          {
+            "node": "Process Faction Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Faction Context": {
+      "main": [
+        [
+          {
+            "node": "Route Faction Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Faction Action": {
+      "main": [
+        [
+          {
+            "node": "Execute Faction Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Action Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Faction Action": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek - Generate Political Narrative",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek - Generate Political Narrative": {
+      "main": [
+        [
+          {
+            "node": "Process Narrative and Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Narrative and Updates": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Update Faction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j - Update Faction": {
+      "main": [
+        [
+          {
+            "node": "Check Target Faction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Target Faction": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Update Target Faction",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Campaign System",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j - Update Target Faction": {
+      "main": [
+        [
+          {
+            "node": "Notify Campaign System",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Campaign System": {
+      "main": [
+        [
+          {
+            "node": "Generate Action Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Action Summary": {
+      "main": [
+        [
+          {
+            "node": "Log Faction Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Faction Action": {
+      "main": [
+        [
+          {
+            "node": "Faction Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicyDefaultOption": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T13:00:00.000Z",
+      "updatedAt": "2024-10-23T13:00:00.000Z",
+      "id": "faction-management",
+      "name": "Faction Management"
+    },
+    {
+      "createdAt": "2024-10-23T13:00:00.000Z",
+      "updatedAt": "2024-10-23T13:00:00.000Z",
+      "id": "political-simulation",
+      "name": "Political Simulation"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T13:00:00.000Z",
+  "versionId": "1.0.0"
+}

@@ -1,0 +1,215 @@
+{
+  "name": "Example: Cleric Protection System - Complete Automation Demo",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cleric-protection-demo",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-cleric-demo",
+      "name": "Cleric Protection Demo",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "cleric-protection-demo"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Cleric Protection System Demo Request Parser\nconst request = $input.first().json;\n\n// Demo scenario setup\nconst demoScenario = {\n  character_request: request.character_request || \"I want to protect my party members and keep them alive through dangerous situations\",\n  character_id: request.character_id || 'cleric_thalia_001',\n  character_class: 'cleric',\n  character_level: request.character_level || 8,\n  party_composition: [\n    { name: 'Thorin', class: 'fighter', role: 'tank' },\n    { name: 'Elena', class: 'wizard', role: 'damage_dealer' },\n    { name: 'Rogar', class: 'rogue', role: 'scout' },\n    { name: 'Thalia', class: 'cleric', role: 'healer_support' }\n  ],\n  current_situation: request.current_situation || 'Exploring ancient dungeon with frequent combat encounters',\n  play_style: 'supportive_and_vigilant',\n  preferences: {\n    protection_priority: 'high',\n    healing_style: 'proactive',\n    resource_management: 'conservative',\n    communication: 'clear_and_reassuring'\n  }\n};\n\nreturn [{\n  json: {\n    demo_scenario: demoScenario,\n    timestamp: new Date().toISOString(),\n    demo_mode: 'cleric_protection_system'\n  }\n}];"
+      },
+      "id": "code-parse-demo-request",
+      "name": "Parse Demo Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create demo request for Code Fabric Orchestrator\nconst demo = $input.first().json;\n\nconst orchestratorRequest = {\n  character_request: demo.demo_scenario.character_request,\n  character_id: demo.demo_scenario.character_id,\n  character_class: demo.demo_scenario.character_class,\n  character_level: demo.demo_scenario.character_level,\n  party_composition: demo.demo_scenario.party_composition,\n  current_situation: demo.demo_scenario.current_situation,\n  play_style: demo.demo_scenario.play_style,\n  preferences: demo.demo_scenario.preferences,\n  processing_mode: 'comprehensive',\n  include_learning: true,\n  include_pattern_matching: true,\n  generate_complete_solution: true,\n  provide_explanations: true,\n  enable_feedback_loop: true\n};\n\nreturn [{\n  json: {\n    ...demo,\n    orchestrator_request: orchestratorRequest\n  }\n}];"
+      },
+      "id": "code-create-orchestrator-request",
+      "name": "Create Orchestrator Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/webhook/code-fabric",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "payload",
+              "value": "={{ $json.orchestrator_request }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-call-orchestrator",
+      "name": "Call Code Fabric Orchestrator",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process orchestrator response and create demo-specific enhancements\nconst response = $input.first().json;\nconst originalDemo = items.find(item => item.json.orchestrator_request)?.json;\n\nconst demoEnhancements = {\n  character_persona: {\n    name: 'Thalia',\n    title: 'Guardian Angel of the Party',\n    personality: 'nurturing, vigilant, and deeply devoted to protecting her allies',\n    motivation: 'believes every party member deserves a chance to shine and fulfill their destiny',\n    protection_philosophy: 'prevention is better than cure, but be ready for both'\n  },\n  demo_scenarios: [\n    {\n      scenario_name: 'Ambush Protection',\n      situation: 'Party ambushed by goblins in narrow corridor',\n      trigger: 'Thorin (fighter) health drops below 40%',\n      automation_response: [\n        'Cast Shield of Faith on Thorin (+2 AC bonus)',\n        'Move to protect position between Thorin and enemies',\n        'Prepare Cure Wounds for immediate healing if needed',\n        'Alert party of tactical positioning needs'\n      ],\n      expected_outcome: 'Thorin survives initial attack, party maintains defensive formation'\n    },\n    {\n      scenario_name: 'Area Effect Protection',\n      situation: 'Enemy wizard prepares Fireball spell',\n      trigger: 'Enemy spellcaster detected preparing area effect spell',\n      automation_response: [\n        'Cast Protection from Energy on most vulnerable party member',\n        'Position self to absorb damage if possible',\n        'Prepare mass healing for multiple injuries',\n        'Coordinate with party to spread out formation'\n      ],\n      expected_outcome: 'Party damage minimized, quick recovery from area effect'\n    },\n    {\n      scenario_name: 'Proactive Healing',\n      situation: 'Party preparing for known boss battle',\n      trigger: 'Rest period before dangerous encounter',\n      automation_response: [\n        'Cast Bless on entire party (+1 to attacks and saves)',\n        'Prepare higher-level healing spells (Prayer of Healing)',\n        'Distribute healing potions to party members',\n        'Establish emergency signal for combat healing'\n      ],\n      expected_outcome: 'Party enters battle buffed and prepared for healing'\n    }\n  ],\n  character_voice_responses: [\n    { trigger: 'party_member_injured', response: \"Stay with me! I won't let you fall!\" },\n    { trigger: 'pre_combat_preparation', response: \"Divine light guide and protect us in the coming battle.\" },\n    { trigger: 'successful_protection', response: \"The divine shield holds! We are safe for now.\" },\n    { trigger: 'healing_needed', response: \"Let the holy light restore your strength.\" },\n    { trigger: 'critical_situation', response: \"Stand together! My faith will shield us all!\" }\n  ],\n  learning_examples: [\n    {\n      situation: 'Failed to protect wizard from surprise attack',\n      learning: 'Improve threat detection and positioning for vulnerable party members',\n      adaptation: 'Prioritize protection of spellcasters in surprise scenarios'\n    },\n    {\n      situation: 'Used too many high-level spells on minor threats',\n      learning: 'Better threat assessment and resource allocation',\n      adaptation: 'Scale healing/protection based on actual threat level'\n    },\n    {\n      situation: 'Successfully prevented TPK (Total Party Kill) through quick action',\n      learning: 'Proactive positioning and preparedness are critical',\n      adaptation: 'Maintain defensive positioning during uncertain situations'\n    }\n  ]\n};\n\nreturn [{\n  json: {\n    orchestrator_response: response,\n    demo_enhancements: demoEnhancements,\n    demo_scenario: originalDemo.demo_scenario,\n    processing_summary: {\n      total_processing_time: response.processing_summary?.total_processing_time || 0,\n      phases_completed: response.processing_summary?.completed_phases || 0,\n    \n  character_intent_understood: response.character_understanding?.interpreted_intent || 'Intent analysis failed',\n    business_goal_identified: response.character_understanding?.business_goal || 'Goal identification failed',\n    automation_type_recommended: response.character_understanding?.automation_type || 'general'\n    }\n  }\n}];"
+      },
+      "id": "code-enhance-demo-response",
+      "name": "Enhance Demo Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create comprehensive demo showcase\nconst response = $input.first().json;\n\nconst demoShowcase = {\n  demo_title: 'Thalia the Cleric - Divine Protection System',\n  demo_overview: {\n    character_profile: response.demo_enhancements.character_persona,\n    primary_goal: response.demo_scenario.character_request,\n    system_approach: 'Proactive protection with reactive healing capabilities',\n    core_philosophy: response.demo_enhancements.character_persona.protection_philosophy\n  },\n  intelligence_analysis: {\n    semantic_understanding: {\n      what_thalia_said: response.demo_scenario.character_request,\n      what_she_means: response.orchestrator_response.character_understanding?.interpreted_intent,\n      business_goal: response.orchestrator_response.character_understanding?.business_goal,\n      automation_approach: response.orchestrator_response.character_understanding?.automation_type\n    },\n    pattern_recognition: {\n      patterns_identified: response.orchestrator_response.solution_components?.pattern_matches?.pattern_analysis?.patterns_identified || 0,\n      success_probability: response.orchestrator_response.solution_components?.pattern_matches?.implementation_readiness?.overall_readiness || 'unknown',\n      learning_opportunities: response.orchestrator_response.recommendations?.learning_opportunities || []\n    },\n    business_strategy: {\n      problem_statement: response.orchestrator_response.solution_components?.business_strategy?.strategic_analysis?.problem_statement,\n      business_impact: response.orchestrator_response.solution_components?.business_strategy?.strategic_analysis?.business_impact,\n      implementation_complexity: response.orchestrator_response.solution_components?.business_strategy?.implementation_readiness?.complexity_score\n    }\n  },\n  practical_demonstrations: response.demo_enhancements.demo_scenarios,\n  character_experience: {\n    interaction_style: 'Voice commands with natural language understanding',\n    feedback_system: 'Divine-themed notifications and status updates',\n    customization_options: [\n      'Protection priority settings (party member hierarchy)',\n      'Healing aggressiveness (conservative vs proactive)',\n      'Resource management (spell slot conservation)',\n      'Communication preferences (alerts and updates)'\n    ],\n    voice_commands: response.demo_enhancements.character_voice_responses\n  },\n  learning_and_adaptation: {\n    adaptive_capabilities: [\n      'Learns from each combat encounter',\n      'Adapts protection strategies based on party composition',\n      'Improves threat assessment over time',\n      'Optimizes resource usage based on success patterns'\n    ],\n    learning_examples: response.demo_enhancements.learning_examples,\n    improvement_mechanisms: [\n      'Analyzes combat effectiveness after each encounter',\n      'Tracks which protection strategies work best',\n      'Adjusts priority based on party member performance',\n      'Learns enemy attack patterns for better anticipation'\n    ]\n  },\n  technical_highlights: {\n    architecture_components: response.orchestrator_response.processing_summary?.total_phases || 0,\n    processing_phases: [\n      'Semantic Understanding - Analyzes character intent',\n      'Pattern Recognition - Identifies successful protection strategies',\n      'Business Logic - Translates goals into technical requirements',\n      'Solution Architecture - Generates complete automation system'\n    ],\n    ai_integration: 'DeepSeek API for advanced reasoning and pattern analysis',\n    integration_points: [\n      'Party health monitoring',\n      'Combat threat detection',\n      'Resource management (spell slots)',\n      'Position tracking and movement'\n    ]\n  },\n  expected_outcomes: {\n    immediate_benefits: [\n      'Faster response to party member injuries',\n      'Proactive protection before damage occurs',\n      'Optimal use of healing resources',\n      'Improved party survivability'\n    ],\n    long_term_benefits: [\n      'Deeper understanding of party protection needs',\n      'Improved combat tactics and positioning',\n      'Better resource management over time',\n      'Enhanced party coordination and trust'\n    ],\n    success_metrics: [\n      'Reduced party member injuries by 40%',\n      'Faster healing response times (under 2 seconds)',\n      '90% successful protection of critical party members',\n      'Improved resource efficiency (25% fewer wasted spells)'\n    ]\n  },\n  next_steps: [\n    'Review and customize protection priorities',\n    'Test system in controlled combat scenarios',\n    'Fine-tune based on party feedback',\n    'Deploy for regular use with monitoring'\n  ],\n  demo_metadata: {\n    processing_time: response.orchestrator_response.processing_summary?.total_processing_time || 0,\n    confidence_score: response.orchestrator_response.quality_metrics?.confidence_score || 0,\n    completeness_score: response.orchestrator_response.quality_metrics?.completeness_score || 0,\n    estimated_accuracy: response.orchestrator_response.quality_metrics?.accuracy_estimate || 0\n  }\n};\n\nreturn [{\n  json: demoShowcase\n}];"
+      },
+      "id": "code-create-demo-showcase",
+      "name": "Create Demo Showcase",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate character-friendly final response\nconst showcase = $input.first().json;\n\nconst characterFriendlyResponse = {\n  greeting: '🙏 Welcome, Thalia! Your Divine Protection System is ready!',\n  what_i_understand: {\n    your_request: showcase.demo_overview.primary_goal,\n    your_character: `${showcase.demo_overview.character_profile.name}, the ${showcase.demo_overview.character_profile.title}`,\n    your_approach: showcase.demo_overview.system_approach\n  },\n  what_system_does: {\n    main_purpose: 'Automatically protects your party members and keeps them safe',\n    how_it_works: 'Monitors danger, predicts threats, and acts before damage occurs',\n    your_control: 'You can customize everything and override when needed'\n  },\n  example_scenarios: showcase.practical_demonstrations.map(scenario => ({\n    when_this_happens: scenario.situation,\n    what_system_does: scenario.automation_response.slice(0, 2).join(', '),\n    result: scenario.expected_outcome\n  })),\n  your_special_features: {\n    divine_intelligence: 'Learns from each battle to protect better next time',\n    party_awareness: 'Knows your party members and their roles',\n    proactive_healing: 'Heals before injuries become critical',\n    resource_wisdom: 'Uses spells efficiently to always have healing ready'\n  },\n  how_to_use_it: {\n    voice_commands: [\n      '\"Protect Thorin\" - Focus protection on specific member',\n      '\"Heal party\" - Emergency healing for everyone',\n      '\"Check status\" - See how everyone is doing',\n      '\"Adjust settings\" - Change protection priorities'\n    ],\n    what_you_see: [\n      'Divine light effects when protection activates',\n      'Status messages showing party health',\n      'Notifications when healing is needed',\n      'Battle results and learning insights'\n    ]\n  },\n  what_to_expect: {\n    first_session: 'The system will learn your style and adapt to your party',\n    learning_process: 'Each battle makes the protection smarter',\n    your_role: 'You remain the leader - system just handles the details',\n    party_benefits: 'Everyone stays safer and can focus on their roles'\n  },\n  getting_started: [\n    'Review protection priorities for your party',\n    'Test the system in a safe combat scenario',\n    'Customize alerts and notifications to your preference',\n    'Use it in real battles and provide feedback'\n  ],\n  reassurance: {\n    your_authority: 'You always have final say over the automation',\n    safety_first: 'System designed to prevent harm and save lives',\n    learning_together: 'Grows smarter with your guidance and experience',\n    divine_blessing: 'Your faith and wisdom guide the system\'s actions'\n  },\n  support: {\n    help_available: 'Always ask questions if anything is unclear',\n    feedback_welcome: 'Your experience helps improve the system',\n    adjustments_possible: 'We can change settings based on your preferences',\n    growth_potential: 'System evolves with you and your party'\n  },\n  closing: 'May your divine light always guide and protect your party! 🙏✨'\n};\n\nreturn [{\n  json: {\n    character_friendly_response: characterFriendlyResponse,\n    technical_details: showcase,\n    session_summary: {\n      character_name: showcase.demo_overview.character_profile.name,\n      system_name: showcase.demo_overview.character_persona.title,\n      confidence_level: showcase.demo_metadata.confidence_score,\n      ready_for_use: showcase.demo_metadata.completeness_score > 80,\n      processing_time: showcase.demo_metadata.processing_time\n    }\n  }\n}];"
+      },
+      "id": "code-character-friendly-response",
+      "name": "Create Character Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.character_friendly_response }}"
+      },
+      "id": "webhook-demo-response",
+      "name": "Send Demo Response",
+      "type": "n8n-nodes-base.webhookResponse",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "Cleric Protection Demo": {
+      "main": [
+        [
+          {
+            "node": "Parse Demo Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Demo Request": {
+      "main": [
+        [
+          {
+            "node": "Create Orchestrator Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Orchestrator Request": {
+      "main": [
+        [
+          {
+            "node": "Call Code Fabric Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Code Fabric Orchestrator": {
+      "main": [
+        [
+          {
+            "node": "Enhance Demo Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enhance Demo Response": {
+      "main": [
+        [
+          {
+            "node": "Create Demo Showcase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Demo Showcase": {
+      "main": [
+        [
+          {
+            "node": "Create Character Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Character Response": {
+      "main": [
+        [
+          {
+            "node": "Send Demo Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T16:00:00.000Z",
+      "updatedAt": "2024-10-23T16:00:00.000Z",
+      "id": "demo-workflow",
+      "name": "Demo Workflow"
+    },
+    {
+      "createdAt": "2024-10-23T16:00:00.000Z",
+      "updatedAt": "2024-10-23T16:00:00.000Z",
+      "id": "cleric-protection",
+      "name": "Cleric Protection"
+    },
+    {
+      "createdAt": "2024-10-23T16:00:00.000Z",
+      "updatedAt": "2024-10-23T16:00:00.000Z",
+      "id": "character-experience",
+      "name": "Character Experience"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T16:00:00.000Z",
+  "versionId": "1"
+}

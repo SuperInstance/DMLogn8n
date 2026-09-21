@@ -1,0 +1,144 @@
+{
+  "name": "dmlog-vr-ar-system",
+  "version": "1.0.0",
+  "description": "Revolutionary VR/AR Support System for D&D - Immersive Mixed Reality Tabletop Gaming",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:unity\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:unity": "echo 'Open Unity project and press Play'",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "cd backend && npm test",
+    "test:frontend": "cd frontend && npm test",
+    "deploy:development": "docker-compose -f docker-compose.dev.yml up -d",
+    "deploy:production": "docker-compose -f docker-compose.prod.yml up -d",
+    "deploy:staging": "docker-compose -f docker-compose.staging.yml up -d",
+    "vr-arena": "cd unity-project && /Applications/Unity/Hub/Editor/2022.3.15f1/Unity.app/Contents/MacOS/Unity -batchmode -quit -projectPath . -executeMethod VRBattleArena.BuildVRApplication",
+    "ar-overlay": "cd ar-mobile && npm run android",
+    "content-tools": "cd content-creator-tools && npm start",
+    "docs": "typedoc --out docs src",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts",
+    "clean": "rimraf dist build node_modules/*/node_modules",
+    "docker:build": "docker build -t dmlog-vr-ar:latest .",
+    "docker:run": "docker run -p 3000:3000 -p 8000:8000 -p 9090:9090 dmlog-vr-ar:latest",
+    "health-check": "curl -f http://localhost:8000/health || exit 1",
+    "integration-test": "jest --config jest.integration.config.js",
+    "e2e-test": "playwright test",
+    "performance-test": "node scripts/performance-test.js",
+    "setup:dev": "npm install && cd backend && npm install && cd ../frontend && npm install && cd ../content-creator-tools && npm install",
+    "setup:ci": "npm ci --production",
+    "analyze-bundle": "webpack-bundle-analyzer dist/static/js/*.js",
+    "migrate": "cd backend && npm run migrate",
+    "seed": "cd backend && npm run seed",
+    "backup": "cd scripts && ./backup.sh",
+    "restore": "cd scripts && ./restore.sh"
+  },
+  "keywords": [
+    "VR",
+    "AR",
+    "Mixed Reality",
+    "D&D",
+    "Dungeons & Dragons",
+    "Tabletop Gaming",
+    "Virtual Reality",
+    "Augmented Reality",
+    "Immersive Gaming",
+    "Unity",
+    "WebXR",
+    "Meta Quest",
+    "Oculus",
+    "SteamVR",
+    "OpenXR",
+    "Spatial Audio",
+    "Hand Tracking",
+    "Multiplayer",
+    "Character Creator"
+  ],
+  "author": {
+    "name": "DMLog Team",
+    "email": "team@dmlog.com",
+    "url": "https://dmlog.com"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dmlog/dmlog-vr-ar-system.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dmlog/dmlog-vr-ar-system/issues"
+  },
+  "homepage": "https://dmlog.com/vr-ar",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.0",
+    "@types/jest": "^29.5.0",
+    "@types/playwright": "^1.40.0",
+    "@typescript-eslint/eslint-plugin": "^6.7.0",
+    "@typescript-eslint/parser": "^6.7.0",
+    "concurrently": "^8.2.0",
+    "eslint": "^8.49.0",
+    "jest": "^29.7.0",
+    "playwright": "^1.40.0",
+    "prettier": "^3.0.0",
+    "rimraf": "^5.0.0",
+    "typedoc": "^0.25.0",
+    "typescript": "^5.2.0",
+    "webpack": "^5.89.0",
+    "webpack-bundle-analyzer": "^4.9.0",
+    "webpack-cli": "^5.1.0"
+  },
+  "dependencies": {
+    "express": "^4.18.0",
+    "socket.io": "^4.7.0",
+    "socket.io-client": "^4.7.0",
+    "three": "^0.158.0",
+    "@react-three/fiber": "^8.15.0",
+    "@react-three/xr": "^5.5.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.16.0",
+    "react-query": "^3.39.0",
+    "axios": "^1.5.0",
+    "lodash": "^4.17.21",
+    "moment": "^2.29.4",
+    "uuid": "^9.0.0"
+  },
+  "peerDependencies": {
+    "unity": "2022.3.15f1",
+    "oculus-sdk": "66.0.0",
+    "photon-pun": "2.50.0",
+    "xr-interaction-toolkit": "2.5.4",
+    "arcore": "^1.40.0",
+    "arkit": "^6.0.0"
+  },
+  "optionalDependencies": {
+    "sharp": "^0.32.0",
+    "canvas": "^2.11.0",
+    "node-canvas": "^2.11.0"
+  },
+  "workspaces": [
+    "backend",
+    "frontend",
+    "ar-mobile",
+    "content-creator-tools",
+    "shared"
+  ],
+  "config": {
+    "port": 3000,
+    "api_port": 8000,
+    "vr_port": 7777,
+    "ar_port": 8080
+  },
+  "funding": {
+    "type": "patreon",
+    "url": "https://www.patreon.com/dmlog"
+  }
+}

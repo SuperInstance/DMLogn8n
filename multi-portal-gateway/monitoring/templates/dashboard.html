@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DMLogn8n Monitoring Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.28.0/index.min.js"></script>
+    <style>
+        .card {
+            @apply bg-white rounded-lg shadow-lg p-6;
+        }
+        .metric-card {
+            @apply bg-white rounded-lg shadow-lg p-4 hover:shadow-xl transition-shadow;
+        }
+        .alert-critical { @apply bg-red-100 border-red-400 text-red-700; }
+        .alert-warning { @apply bg-yellow-100 border-yellow-400 text-yellow-700; }
+        .alert-info { @apply bg-blue-100 border-blue-400 text-blue-700; }
+        .status-online { @apply text-green-500; }
+        .status-offline { @apply text-red-500; }
+        .status-warning { @apply text-yellow-500; }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+
+        .sidebar {
+            @apply bg-gray-800 text-white h-screen fixed left-0 top-0 w-64 overflow-y-auto;
+        }
+
+        .main-content {
+            @apply ml-64 p-6;
+        }
+
+        .nav-item {
+            @apply block px-4 py-2 hover:bg-gray-700 transition-colors;
+        }
+
+        .nav-item.active {
+            @apply bg-gray-900 border-l-4 border-blue-500;
+        }
+
+        .metric-value {
+            @apply text-3xl font-bold;
+        }
+
+        .metric-label {
+            @apply text-sm text-gray-600 uppercase tracking-wide;
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: .5; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+        <div class="p-6">
+            <h1 class="text-2xl font-bold text-blue-400">
+                <i class="fas fa-chart-line mr-2"></i>DMLogn8n
+            </h1>
+            <p class="text-gray-400 text-sm mt-1">Monitoring Dashboard</p>
+        </div>
+
+        <nav class="mt-6">
+            <a href="#overview" class="nav-item active" onclick="showSection('overview')">
+                <i class="fas fa-tachometer-alt w-5 mr-3"></i>Overview
+            </a>
+            <a href="#agents" class="nav-item" onclick="showSection('agents')">
+                <i class="fas fa-robot w-5 mr-3"></i>Agents
+            </a>
+            <a href="#system" class="nav-item" onclick="showSection('system')">
+                <i class="fas fa-server w-5 mr-3"></i>System
+            </a>
+            <a href="#business" class="nav-item" onclick="showSection('business')">
+                <i class="fas fa-chart-bar w-5 mr-3"></i>Business
+            </a>
+            <a href="#ai" class="nav-item" onclick="showSection('ai')">
+                <i class="fas fa-brain w-5 mr-3"></i>AI Models
+            </a>
+            <a href="#alerts" class="nav-item" onclick="showSection('alerts')">
+                <i class="fas fa-exclamation-triangle w-5 mr-3"></i>Alerts
+            </a>
+            <a href="#database" class="nav-item" onclick="showSection('database')">
+                <i class="fas fa-database w-5 mr-3"></i>Database
+            </a>
+        </nav>
+
+        <div class="absolute bottom-0 left-0 right-0 p-6 border-t border-gray-700">
+            <div class="flex items-center">
+                <span class="w-2 h-2 bg-green-400 rounded-full pulse mr-2"></span>
+                <span class="text-sm">Live</span>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">Last updated: <span id="lastUpdated">--</span></p>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <header class="mb-8">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h2 class="text-3xl font-bold text-gray-800">System Overview</h2>
+                    <p class="text-gray-600 mt-1">Real-time monitoring and analytics</p>
+                </div>
+                <div class="flex space-x-4">
+                    <select id="timeRange" class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="1h">Last Hour</option>
+                        <option value="6h">Last 6 Hours</option>
+                        <option value="24h" selected>Last 24 Hours</option>
+                        <option value="7d">Last 7 Days</option>
+                    </select>
+                    <button onclick="refreshData()" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+                        <i class="fas fa-sync-alt mr-2"></i>Refresh
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Overview Section -->
+        <section id="overview-section" class="dashboard-section">
+            <!-- Key Metrics Row -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="metric-card">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="metric-label">Active Users</p>
+                            <p class="metric-value text-blue-600" id="activeUsers">--</p>
+                            <p class="text-sm text-gray-500 mt-1">
+                                <span class="text-green-500">↑</span> 12% from yesterday
+                            </p>
+                        </div>
+                        <div class="text-3xl text-blue-200">
+                            <i class="fas fa-users"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="metric-label">CPU Usage</p>
+                            <p class="metric-value text-green-600" id="cpuUsage">--</p>
+                            <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
+                                <div class="bg-green-600 h-2 rounded-full" id="cpuBar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="text-3xl text-green-200">
+                            <i class="fas fa-microchip"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="metric-label">Memory Usage</p>
+                            <p class="metric-value text-yellow-600" id="memoryUsage">--</p>
+                            <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
+                                <div class="bg-yellow-600 h-2 rounded-full" id="memoryBar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="text-3xl text-yellow-200">
+                            <i class="fas fa-memory"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="metric-label">Active Alerts</p>
+                            <p class="metric-value text-red-600" id="activeAlerts">--</p>
+                            <p class="text-sm text-gray-500 mt-1">
+                                <span class="text-red-500">↑</span> 3 critical
+                            </p>
+                        </div>
+                        <div class="text-3xl text-red-200">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">System Performance</h3>
+                    <div class="chart-container">
+                        <canvas id="systemPerformanceChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">User Activity</h3>
+                    <div class="chart-container">
+                        <canvas id="userActivityChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Alerts -->
+            <div class="card">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold">Recent Alerts</h3>
+                    <a href="#alerts" class="text-blue-500 hover:text-blue-700">View All →</a>
+                </div>
+                <div id="recentAlerts" class="space-y-2">
+                    <!-- Alerts will be populated here -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Agents Section -->
+        <section id="agents-section" class="dashboard-section hidden">
+            <div class="card mb-6">
+                <h3 class="text-lg font-semibold mb-4">Agent Performance</h3>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="chart-container">
+                        <canvas id="agentThroughputChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="agentResponseTimeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="text-lg font-semibold mb-4">Agent Status</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Throughput</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Response Time</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Error Rate</th>
+                            </tr>
+                        </thead>
+                        <tbody id="agentsTableBody" class="bg-white divide-y divide-gray-200">
+                            <!-- Agent data will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- System Section -->
+        <section id="system-section" class="dashboard-section hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">Resource Usage</h3>
+                    <div class="chart-container">
+                        <canvas id="resourceUsageChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">Network I/O</h3>
+                    <div class="chart-container">
+                        <canvas id="networkIOChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">CPU Info</h3>
+                    <div id="cpuInfo" class="space-y-2">
+                        <!-- CPU info will be populated here -->
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">Memory Info</h3>
+                    <div id="memoryInfo" class="space-y-2">
+                        <!-- Memory info will be populated here -->
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">Disk Info</h3>
+                    <div id="diskInfo" class="space-y-2">
+                        <!-- Disk info will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Business Section -->
+        <section id="business-section" class="dashboard-section hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">Revenue Trends</h3>
+                    <div class="chart-container">
+                        <canvas id="revenueChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">User Engagement</h3>
+                    <div class="chart-container">
+                        <canvas id="engagementChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="metric-card">
+                    <p class="metric-label">Daily Revenue</p>
+                    <p class="metric-value text-green-600" id="dailyRevenue">$1,234</p>
+                    <p class="text-sm text-green-500 mt-1">↑ 8% from yesterday</p>
+                </div>
+
+                <div class="metric-card">
+                    <p class="metric-label">Conversion Rate</p>
+                    <p class="metric-value text-blue-600" id="conversionRate">12.3%</p>
+                    <p class="text-sm text-gray-500 mt-1">Industry avg: 8.5%</p>
+                </div>
+
+                <div class="metric-card">
+                    <p class="metric-label">User Satisfaction</p>
+                    <p class="metric-value text-yellow-600" id="userSatisfaction">4.6/5</p>
+                    <div class="flex mt-1">
+                        <i class="fas fa-star text-yellow-400"></i>
+                        <i class="fas fa-star text-yellow-400"></i>
+                        <i class="fas fa-star text-yellow-400"></i>
+                        <i class="fas fa-star text-yellow-400"></i>
+                        <i class="fas fa-star-half-alt text-yellow-400"></i>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <p class="metric-label">Active Sessions</p>
+                    <p class="metric-value text-purple-600" id="activeSessions">45</p>
+                    <p class="text-sm text-gray-500 mt-1">Avg duration: 45min</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- AI Models Section -->
+        <section id="ai-section" class="dashboard-section hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">Model Performance</h3>
+                    <div class="chart-container">
+                        <canvas id="modelPerformanceChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">AI Costs</h3>
+                    <div class="chart-container">
+                        <canvas id="aiCostsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="text-lg font-semibold mb-4">Model Details</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Latency</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Accuracy</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost/min</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="aiModelsTableBody" class="bg-white divide-y divide-gray-200">
+                            <!-- AI model data will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Alerts Section -->
+        <section id="alerts-section" class="dashboard-section hidden">
+            <div class="card mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold">Alert Management</h3>
+                    <div class="flex space-x-2">
+                        <button class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600">
+                            <i class="fas fa-exclamation-circle mr-1"></i> Critical (3)
+                        </button>
+                        <button class="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600">
+                            <i class="fas fa-exclamation-triangle mr-1"></i> Warning (7)
+                        </button>
+                        <button class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
+                            <i class="fas fa-info-circle mr-1"></i> Info (12)
+                        </button>
+                    </div>
+                </div>
+
+                <div id="alertsList" class="space-y-2">
+                    <!-- Alerts will be populated here -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Database Section -->
+        <section id="database-section" class="dashboard-section hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">Database Performance</h3>
+                    <div class="chart-container">
+                        <canvas id="dbPerformanceChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 class="text-lg font-semibold mb-4">Query Statistics</h3>
+                    <div class="chart-container">
+                        <canvas id="queryStatsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="metric-card">
+                    <p class="metric-label">Connections</p>
+                    <p class="metric-value text-blue-600" id="dbConnections">45/100</p>
+                    <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
+                        <div class="bg-blue-600 h-2 rounded-full" style="width: 45%"></div>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <p class="metric-label">Query Rate</p>
+                    <p class="metric-value text-green-600" id="queryRate">1,234/s</p>
+                    <p class="text-sm text-green-500 mt-1">↑ 12% from last hour</p>
+                </div>
+
+                <div class="metric-card">
+                    <p class="metric-label">Cache Hit Rate</p>
+                    <p class="metric-value text-purple-600" id="cacheHitRate">94.2%</p>
+                    <p class="text-sm text-gray-500 mt-1">Excellent performance</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- JavaScript -->
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

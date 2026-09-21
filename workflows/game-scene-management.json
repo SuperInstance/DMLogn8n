@@ -1,0 +1,431 @@
+{
+  "name": "Game Scene Management - Scene Data and Description System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "scene/update",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "scene-update-webhook",
+      "name": "Scene Update Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "scene-update"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process scene update request\nconst sceneData = $input.first().json;\nconst { \n  sceneId,\n  action, // 'update', 'create', 'get', 'delete', 'transition'\n  lightingChanges = {},\n  weatherChanges = {},\n  objectStateChanges = [],\n  environmentalEffects = [],\n  descriptionChanges = {},\n  transitionTo = null\n} = sceneData;\n\n// Validate required fields\nif (!sceneId || !action) {\n  throw new Error('Missing required fields: sceneId, action');\n}\n\n// Prepare operation data\nconst operationData = {\n  sceneId,\n  action,\n  timestamp: new Date().toISOString(),\n  lightingChanges,\n  weatherChanges,\n  objectStateChanges,\n  environmentalEffects,\n  descriptionChanges,\n  transitionTo,\n  metadata: {\n    processedBy: 'scene-management-workflow',\n    version: '1.0'\n  }\n};\n\nreturn { json: operationData };"
+      },
+      "id": "process-scene-update",
+      "name": "Process Scene Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "action-check",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "get",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "route-scene-action",
+      "name": "Route Scene Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "lookup",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_SCENE_SHEET_ID }}",
+        "range": "Scene_State!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-get-scene",
+      "name": "Google Sheets - Get Scene",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [920, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_SCENE_SHEET_ID }}",
+        "range": "Scene_State!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-update-scene",
+      "name": "Google Sheets - Update Scene",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [920, 400],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate dynamic scene description based on current state\nconst sceneData = $input.first().json;\nconst {\n  sceneId,\n  lightingChanges,\n  weatherChanges,\n  objectStateChanges,\n  environmentalEffects,\n  descriptionChanges\n} = sceneData;\n\n// Get current scene state\nlet currentScene = {\n  sceneId,\n  name: 'Unknown Location',\n  baseDescription: 'A mysterious place.',\n  lighting: 'normal',\n  weather: 'clear',\n  objects: [],\n  environmentalEffects: [],\n  timeOfDay: 'day',\n  visibility: 'good',\n  mood: 'neutral'\n};\n\n// Load existing scene data if available\nif ($input.length > 1 && $input[1].json && $input[1].json.values) {\n  const headerRow = $input[1].json.values[0];\n  const dataRow = $input[1].json.values.find(row => row[0] === sceneId);\n  \n  if (dataRow) {\n    currentScene = {\n      sceneId: dataRow[0],\n      name: dataRow[1] || 'Unknown Location',\n      baseDescription: dataRow[2] || 'A mysterious place.',\n      lighting: dataRow[3] || 'normal',\n      weather: dataRow[4] || 'clear',\n      objects: JSON.parse(dataRow[5] || '[]'),\n      environmentalEffects: JSON.parse(dataRow[6] || '[]'),\n      timeOfDay: dataRow[7] || 'day',\n      visibility: dataRow[8] || 'good',\n      mood: dataRow[9] || 'neutral',\n      lastUpdated: dataRow[10] || new Date().toISOString()\n    };\n  }\n}\n\n// Apply changes\nconst newLighting = lightingChanges.type || currentScene.lighting;\nconst newWeather = weatherChanges.type || currentScene.weather;\nlet newObjects = [...currentScene.objects];\nlet newEnvironmentalEffects = [...currentScene.environmentalEffects];\n\n// Update object states\nobjectStateChanges.forEach(change => {\n  const { objectId, state, description } = change;\n  const existingIndex = newObjects.findIndex(obj => obj.id === objectId);\n  \n  if (existingIndex >= 0) {\n    newObjects[existingIndex] = {\n      ...newObjects[existingIndex],\n      state,\n      description: description || newObjects[existingIndex].description\n    };\n  } else {\n    newObjects.push({\n      id: objectId,\n      name: change.name || objectId,\n      state,\n      description: description || `An object in ${change.state} state.`,\n      interactive: change.interactive !== false\n    });\n  }\n});\n\n// Update environmental effects\nenvironmentalEffects.forEach(effect => {\n  const { type, intensity, description } = effect;\n  const existingIndex = newEnvironmentalEffects.findIndex(e => e.type === type);\n  \n  if (existingIndex >= 0) {\n    newEnvironmentalEffects[existingIndex] = {\n      ...newEnvironmentalEffects[existingIndex],\n      intensity,\n      description: description || newEnvironmentalEffects[existingIndex].description\n    };\n  } else {\n    newEnvironmentalEffects.push({\n      type,\n      intensity,\n      description: description || `${type} effect with ${intensity} intensity.`\n    });\n  }\n});\n\n// Generate dynamic description\nfunction generateDynamicDescription(baseDesc, lighting, weather, objects, effects, timeOfDay) {\n  let description = baseDesc;\n  \n  // Add lighting descriptions\n  const lightingDesc = {\n    'bright': 'The area is brightly illuminated, casting sharp shadows.',\n    'normal': 'The lighting is moderate and clear.',\n    'dim': 'The area is dimly lit, making details hard to discern.',\n    'dark': 'Darkness pervades the area, requiring additional light to see clearly.',\n    'magical': 'An otherworldly light illuminates the surroundings with an eerie glow.',\n    'flickering': 'The light source flickers intermittently, creating an unsettling atmosphere.'\n  };\n  \n  if (lightingDesc[lighting]) {\n    description += ' ' + lightingDesc[lighting];\n  }\n  \n  // Add weather descriptions\n  const weatherDesc = {\n    'clear': 'The weather is clear and calm.',\n    'rain': 'Rain falls steadily, creating puddles and wet surfaces.',\n    'storm': 'Thunder rumbles in the distance as lightning illuminates the sky.',\n    'fog': 'A thick fog blankets the area, reducing visibility significantly.',\n    'snow': 'Snow falls gently, covering everything in a white blanket.',\n    'wind': 'Strong winds whip through the area, howling and whistling.',\n    'mist': 'A light mist hangs in the air, creating a mysterious ambiance.'\n  };\n  \n  if (weatherDesc[weather]) {\n    description += ' ' + weatherDesc[weather];\n  }\n  \n  // Add object descriptions for interactive/changed objects\n  const interactiveObjects = objects.filter(obj => obj.interactive || obj.state !== 'normal');\n  if (interactiveObjects.length > 0) {\n    description += ' You notice:';\n    interactiveObjects.forEach(obj => {\n      description += ` ${obj.description}`;\n    });\n  }\n  \n  // Add environmental effect descriptions\n  if (effects.length > 0) {\n    description += ' ';\n    effects.forEach(effect => {\n      description += effect.description + ' ';\n    });\n  }\n  \n  // Add time of day context\n  const timeDesc = {\n    'dawn': 'As dawn breaks, the first rays of sunlight appear.',\n    'morning': 'The morning sun casts long shadows.',\n    'noon': 'The sun reaches its zenith, bathing everything in bright light.',\n    'afternoon': 'Afternoon light creates a warm, golden glow.',\n    'dusk': 'As dusk falls, colors deepen and shadows lengthen.',\n    'evening': 'Evening descends, bringing a peaceful quiet.',\n    'night': 'Night has fallen, and darkness envelops the landscape.'\n  };\n  \n  if (timeDesc[timeOfDay]) {\n    description += ' ' + timeDesc[timeOfDay];\n  }\n  \n  return description.trim();\n}\n\n// Calculate visibility and mood based on conditions\nlet visibility = currentScene.visibility;\nlet mood = currentScene.mood;\n\nif (newLighting === 'dark' || newWeather === 'fog') {\n  visibility = 'poor';\n} else if (newLighting === 'bright' && newWeather === 'clear') {\n  visibility = 'excellent';\n} else if (newLighting === 'dim' || newWeather === 'rain') {\n  visibility = 'moderate';\n}\n\nif (newWeather === 'storm' || newLighting === 'flickering') {\n  mood = 'tense';\n} else if (newWeather === 'clear' && newLighting === 'bright') {\n  mood = 'peaceful';\n} else if (newLighting === 'magical') {\n  mood = 'mysterious';\n}\n\n// Generate final description\nconst dynamicDescription = generateDynamicDescription(\n  currentScene.baseDescription,\n  newLighting,\n  newWeather,\n  newObjects,\n  newEnvironmentalEffects,\n  currentScene.timeOfDay\n);\n\n// Prepare updated scene data\nconst updatedScene = {\n  sceneId,\n  name: currentScene.name,\n  baseDescription: currentScene.baseDescription,\n  dynamicDescription,\n  lighting: newLighting,\n  weather: newWeather,\n  objects: newObjects,\n  environmentalEffects: newEnvironmentalEffects,\n  timeOfDay: currentScene.timeOfDay,\n  visibility,\n  mood,\n  lastUpdated: new Date().toISOString(),\n  metadata: {\n    lightingChanges,\n    weatherChanges,\n    objectStateChanges,\n    environmentalEffects,\n    processedBy: 'scene-dynamic-generator'\n  }\n};\n\nreturn { json: updatedScene };"
+      },
+      "id": "generate-dynamic-description",
+      "name": "Generate Dynamic Description",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_SCENE_SHEET_ID }}",
+        "range": "Scene_State!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-create-scene",
+      "name": "Google Sheets - Create Scene",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [920, 600],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format scene data for Google Sheets\nconst sceneData = $input.first().json;\n\n// Prepare row data in the correct order for Google Sheets\nconst rowData = [\n  sceneData.sceneId,\n  sceneData.name,\n  sceneData.baseDescription,\n  sceneData.lighting,\n  sceneData.weather,\n  JSON.stringify(sceneData.objects),\n  JSON.stringify(sceneData.environmentalEffects),\n  sceneData.timeOfDay,\n  sceneData.visibility,\n  sceneData.mood,\n  sceneData.lastUpdated\n];\n\nreturn {\n  json: {\n    range: 'Scene_State!A:K',\n    values: [rowData]\n  }\n};"
+      },
+      "id": "format-scene-for-sheets",
+      "name": "Format Scene for Sheets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Send real-time scene update to WebSocket system\nconst sceneData = $input.first().json;\nconst { sceneId, metadata } = sceneData;\n\n// Prepare WebSocket broadcast payload\nconst broadcastPayload = {\n  type: 'scene_update',\n  data: {\n    sceneId,\n    name: sceneData.name,\n    description: sceneData.dynamicDescription,\n    lighting: sceneData.lighting,\n    weather: sceneData.weather,\n    visibility: sceneData.visibility,\n    mood: sceneData.mood,\n    objects: sceneData.objects,\n    environmentalEffects: sceneData.environmentalEffects,\n    changes: {\n      lighting: metadata.lightingChanges || {},\n      weather: metadata.weatherChanges || {},\n      objects: metadata.objectStateChanges || [],\n      effects: metadata.environmentalEffects || []\n    }\n  },\n  channels: [`scene_${sceneId}`, 'game_updates', 'dm_updates'],\n  timestamp: new Date().toISOString()\n};\n\n// Send to WebSocket system\nfetch('http://localhost:5678/webhook/websocket/broadcast', {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json'\n  },\n  body: JSON.stringify(broadcastPayload)\n}).catch(error => {\n  console.error('Failed to broadcast scene update:', error);\n});\n\nreturn { json: { broadcast: 'sent', sceneId } };"
+      },
+      "id": "broadcast-scene-update",
+      "name": "Broadcast Scene Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: true,\n  sceneId: $json.sceneId,\n  name: $json.name,\n  description: $json.dynamicDescription,\n  lighting: $json.lighting,\n  weather: $json.weather,\n  visibility: $json.visibility,\n  mood: $json.mood,\n  objects: $json.objects,\n  environmentalEffects: $json.environmentalEffects,\n  timestamp: $json.lastUpdated\n} }}"
+      },
+      "id": "scene-success-response",
+      "name": "Scene Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1580, 400]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "scene/transition",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "scene-transition-webhook",
+      "name": "Scene Transition Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 800],
+      "webhookId": "scene-transition"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process scene transition request\nconst transitionData = $input.first().json;\nconst { \n  fromSceneId,\n  toSceneId,\n  transitionType = 'normal', // 'normal', 'combat', 'dramatic', 'subtle'\n  duration = 5, // seconds\n  transitionDescription = '',\n  partyMembers = [],\n  preserveState = true\n} = transitionData;\n\n// Validate required fields\nif (!fromSceneId || !toSceneId) {\n  throw new Error('Missing required fields: fromSceneId, toSceneId');\n}\n\n// Prepare transition data\nconst transitionOperation = {\n  fromSceneId,\n  toSceneId,\n  transitionType,\n  duration,\n  transitionDescription,\n  partyMembers,\n  preserveState,\n  timestamp: new Date().toISOString(),\n  action: 'transition',\n  metadata: {\n    processedBy: 'scene-transition-workflow',\n    version: '1.0'\n  }\n};\n\nreturn { json: transitionOperation };"
+      },
+      "id": "process-scene-transition",
+      "name": "Process Scene Transition",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 800]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_SCENE_SHEET_ID }}",
+        "range": "Scene_History!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-log-transition",
+      "name": "Google Sheets - Log Transition",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [680, 800],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get destination scene data and prepare transition\nconst transitionData = $input.first().json;\nconst { fromSceneId, toSceneId, transitionType, duration } = transitionData;\n\n// Get both scenes for transition\nconst scenes = {\n  from: { sceneId: fromSceneId, name: 'Previous Scene' },\n  to: { sceneId: toSceneId, name: 'Next Scene' }\n};\n\n// Generate transition narrative based on type\nconst transitionNarratives = {\n  'normal': `The party moves from ${scenes.from.name} to ${scenes.to.name}.`,\n  'combat': `As the battle concludes in ${scenes.from.name}, the party advances toward ${scenes.to.name}.`,\n  'dramatic': `A dramatic transition unfolds as the party leaves ${scenes.from.name} and enters ${scenes.to.name}.`,\n  'subtle': `Almost unnoticed, the party finds themselves moving from ${scenes.from.name} to ${scenes.to.name}.`,\n  'magical': `With a flash of magical energy, the party is transported from ${scenes.from.name} to ${scenes.to.name}.`,\n  'sudden': `Suddenly and without warning, the party finds themselves in ${scenes.to.name}, leaving ${scenes.from.name} behind.`\n};\n\nconst transitionNarrative = transitionNarratives[transitionType] || transitionNarratives['normal'];\n\n// Prepare transition data for broadcasting\nconst transitionBroadcast = {\n  type: 'scene_transition',\n  data: {\n    fromScene: scenes.from,\n    toScene: scenes.to,\n    transitionType,\n    duration,\n    narrative: transitionNarrative,\n    description: transitionData.transitionDescription || transitionNarrative,\n    partyMembers: transitionData.partyMembers,\n    preserveState: transitionData.preserveState\n  },\n  channels: ['game_updates', 'dm_updates', 'transitions'],\n  timestamp: new Date().toISOString()\n};\n\nreturn { json: transitionBroadcast };"
+      },
+      "id": "prepare-transition-broadcast",
+      "name": "Prepare Transition Broadcast",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 800]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Broadcast scene transition to all connected clients\nconst transitionData = $input.first().json;\n\n// Send to WebSocket system\nfetch('http://localhost:5678/webhook/websocket/broadcast', {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json'\n  },\n  body: JSON.stringify(transitionData)\n}).catch(error => {\n  console.error('Failed to broadcast scene transition:', error);\n});\n\nreturn { json: { \n  broadcast: 'sent', \n  transitionType: transitionData.data.transitionType,\n  fromScene: transitionData.data.fromScene.sceneId,\n  toScene: transitionData.data.toScene.sceneId\n} };"
+      },
+      "id": "broadcast-scene-transition",
+      "name": "Broadcast Scene Transition",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 800]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: true,\n  transition: {\n    fromScene: $json.data.fromScene,\n    toScene: $json.data.toScene,\n    type: $json.data.transitionType,\n    duration: $json.data.duration,\n    narrative: $json.data.narrative,\n    description: $json.data.description\n  },\n  timestamp: new Date().toISOString()\n} }}"
+      },
+      "id": "transition-success-response",
+      "name": "Transition Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1360, 800]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Data validation for scene operations\nconst sceneData = $input.first().json;\nconst validationErrors = [];\n\n// Validate scene ID format\nif (!sceneData.sceneId || typeof sceneData.sceneId !== 'string') {\n  validationErrors.push('Invalid scene ID format');\n}\n\n// Validate scene name\nif (sceneData.name && typeof sceneData.name !== 'string') {\n  validationErrors.push('Scene name must be a string');\n}\n\n// Validate lighting\nif (sceneData.lighting) {\n  const validLighting = ['bright', 'normal', 'dim', 'dark', 'magical', 'flickering'];\n  if (!validLighting.includes(sceneData.lighting)) {\n    validationErrors.push('Invalid lighting type');\n  }\n}\n\n// Validate weather\nif (sceneData.weather) {\n  const validWeather = ['clear', 'rain', 'storm', 'fog', 'snow', 'wind', 'mist'];\n  if (!validWeather.includes(sceneData.weather)) {\n    validationErrors.push('Invalid weather type');\n  }\n}\n\n// Validate visibility\nif (sceneData.visibility) {\n  const validVisibility = ['excellent', 'good', 'moderate', 'poor'];\n  if (!validVisibility.includes(sceneData.visibility)) {\n    validationErrors.push('Invalid visibility level');\n  }\n}\n\n// Validate mood\nif (sceneData.mood) {\n  const validMoods = ['peaceful', 'neutral', 'tense', 'mysterious', 'dramatic', 'ominous'];\n  if (!validMoods.includes(sceneData.mood)) {\n    validationErrors.push('Invalid mood type');\n  }\n}\n\n// Validate objects array\nif (sceneData.objects && !Array.isArray(sceneData.objects)) {\n  validationErrors.push('Objects must be an array');\n}\n\n// Validate environmental effects array\nif (sceneData.environmentalEffects && !Array.isArray(sceneData.environmentalEffects)) {\n  validationErrors.push('Environmental effects must be an array');\n}\n\n// Validate time of day\nif (sceneData.timeOfDay) {\n  const validTimes = ['dawn', 'morning', 'noon', 'afternoon', 'dusk', 'evening', 'night'];\n  if (!validTimes.includes(sceneData.timeOfDay)) {\n    validationErrors.push('Invalid time of day');\n  }\n}\n\n// Return validation result\nif (validationErrors.length > 0) {\n  return {\n    json: {\n      valid: false,\n      errors: validationErrors,\n      sceneId: sceneData.sceneId\n    }\n  };\n}\n\nreturn {\n  json: {\n    valid: true,\n    sceneData,\n    sceneId: sceneData.sceneId\n  }\n};"
+      },
+      "id": "validate-scene-data",
+      "name": "Validate Scene Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 600]
+    }
+  ],
+  "connections": {
+    "Scene Update Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Scene Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Scene Update": {
+      "main": [
+        [
+          {
+            "node": "Route Scene Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Scene Action": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Get Scene",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Dynamic Description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Get Scene": {
+      "main": [
+        [
+          {
+            "node": "Generate Dynamic Description",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Generate Dynamic Description": {
+      "main": [
+        [
+          {
+            "node": "Format Scene for Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Scene for Sheets": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Update Scene",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Update Scene": {
+      "main": [
+        [
+          {
+            "node": "Broadcast Scene Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Broadcast Scene Update": {
+      "main": [
+        [
+          {
+            "node": "Scene Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scene Transition Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Scene Transition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Scene Transition": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Log Transition",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Transition Broadcast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Transition Broadcast": {
+      "main": [
+        [
+          {
+            "node": "Broadcast Scene Transition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Broadcast Scene Transition": {
+      "main": [
+        [
+          {
+            "node": "Transition Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Scene Data": {
+      "main": [
+        [
+          {
+            "node": "Process Scene Update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Scene Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "scene-management",
+      "name": "Scene Management"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "game-state",
+      "name": "Game State"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "google-sheets",
+      "name": "Google Sheets"
+    }
+  ],
+  "triggerCount": 2,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

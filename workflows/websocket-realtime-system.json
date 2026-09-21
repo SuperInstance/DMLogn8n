@@ -1,0 +1,643 @@
+{
+  "name": "WebSocket Real-Time System - Live Game Communication",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "websocket/connect",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "websocket-connect",
+      "name": "WebSocket Connection",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "websocket-connect"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle WebSocket connection and session management\nconst connectionData = $input.first().json;\nconst { sessionId, userId, characterId, clientType = 'player' } = connectionData;\n\n// Validate required fields\nif (!sessionId || !userId || !characterId) {\n  throw new Error('Missing required fields: sessionId, userId, characterId');\n}\n\n// Generate unique connection ID\nconst connectionId = `conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;\n\n// Connection metadata\nconst connectionMetadata = {\n  connectionId,\n  sessionId,\n  userId,\n  characterId,\n  clientType, // 'player', 'dm', 'observer', 'ai-agent'\n  connectedAt: new Date().toISOString(),\n  lastActivity: new Date().toISOString(),\n  status: 'connected',\n  clientInfo: {\n    userAgent: connectionData.userAgent || 'unknown',\n    ipAddress: connectionData.ipAddress || 'unknown',\n    platform: connectionData.platform || 'web'\n  },\n  capabilities: {\n    audio: connectionData.capabilities?.audio || false,\n    video: connectionData.capabilities?.video || false,\n    screenShare: connectionData.capabilities?.screenShare || false\n  }\n};\n\nreturn { json: connectionMetadata };"
+      },
+      "id": "process-connection",
+      "name": "Process Connection",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "documentId": "={{ $json.connectionId }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "connectionId",
+              "fieldValue": "={{ $json.connectionId }}"
+            },
+            {
+              "fieldName": "sessionId",
+              "fieldValue": "={{ $json.sessionId }}"
+            },
+            {
+              "fieldName": "userId",
+              "fieldValue": "={{ $json.userId }}"
+            },
+            {
+              "fieldName": "characterId",
+              "fieldValue": "={{ $json.characterId }}"
+            },
+            {
+              "fieldName": "clientType",
+              "fieldValue": "={{ $json.clientType }}"
+            },
+            {
+              "fieldName": "connectedAt",
+              "fieldValue": "={{ $json.connectedAt }}"
+            },
+            {
+              "fieldName": "lastActivity",
+              "fieldValue": "={{ $json.lastActivity }}"
+            },
+            {
+              "fieldName": "status",
+              "fieldValue": "={{ $json.status }}"
+            },
+            {
+              "fieldName": "clientInfo",
+              "fieldValue": "={{ $json.clientInfo }}"
+            },
+            {
+              "fieldName": "capabilities",
+              "fieldValue": "={{ $json.capabilities }}"
+            }
+          ]
+        }
+      },
+      "id": "store-connection",
+      "name": "Store Connection",
+      "type": "n8n-nodes-base.googleFirestore",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Update session participant list and notify others\nconst connectionData = $input.first().json;\nconst { sessionId, userId, characterId, connectionId } = connectionData;\n\n// Get current session participants\nconst sessionData = await $getGoogleFirestoreItem('game_sessions', sessionId);\nconst currentParticipants = sessionData?.participants || [];\n\n// Add new participant if not already present\nif (!currentParticipants.find(p => p.connectionId === connectionId)) {\n  currentParticipants.push({\n    connectionId,\n    userId,\n    characterId,\n    joinedAt: new Date().toISOString(),\n    status: 'active'\n  });\n}\n\n// Update session with new participant list\nawait $setGoogleFirestoreItem('game_sessions', sessionId, {\n  participants: currentParticipants,\n  lastActivity: new Date().toISOString(),\n  participantCount: currentParticipants.length\n});\n\n// Prepare notification for other participants\nconst joinNotification = {\n  type: 'participant_joined',\n  sessionId,\n  timestamp: new Date().toISOString(),\n  data: {\n    connectionId,\n    userId,\n    characterId,\n    totalParticipants: currentParticipants.length\n  }\n};\n\nreturn {\n  json: {\n    ...connectionData,\n    sessionParticipants: currentParticipants,\n    notification: joinNotification\n  }\n};"
+      },
+      "id": "update-session-participants",
+      "name": "Update Session Participants",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Broadcast join notification to other participants\nconst data = $input.first().json;\nconst { sessionId, connectionId, notification, sessionParticipants } = data;\n\n// Get other participants (exclude the new connection)\nconst otherParticipants = sessionParticipants.filter(p => p.connectionId !== connectionId);\n\n// Prepare broadcast messages\nconst broadcasts = otherParticipants.map(participant => ({\n  endpoint: `/websocket/session/${sessionId}/connection/${participant.connectionId}`,\n  message: {\n    ...notification,\n    recipientConnectionId: participant.connectionId\n  }\n}));\n\nreturn broadcasts.map(broadcast => ({ json: broadcast }));"
+      },
+      "id": "broadcast-join-notification",
+      "name": "Broadcast Join Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.endpoint }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Event-Type",
+              "value": "participant_joined"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event",
+              "value": "={{ $json.message }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 3000
+        }
+      },
+      "id": "send-notifications",
+      "name": "Send Notifications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, connectionId: $json.connectionId, sessionId: $json.sessionId, participantCount: $json.sessionParticipants.length, message: 'Connected successfully' } }}"
+      },
+      "id": "respond-to-connection",
+      "name": "Respond to Connection",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "websocket/message",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "message-webhook",
+      "name": "Message Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 600],
+      "webhookId": "websocket-message"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process incoming WebSocket message\nconst messageData = $input.first().json;\nconst { sessionId, connectionId, messageType, payload, targetConnectionId } = messageData;\n\n// Validate required fields\nif (!sessionId || !connectionId || !messageType) {\n  throw new Error('Missing required fields: sessionId, connectionId, messageType');\n}\n\n// Validate connection exists\nconst connection = await $getGoogleFirestoreItem('websocket_connections', connectionId);\nif (!connection || connection.status !== 'connected') {\n  throw new Error('Invalid or disconnected connection');\n}\n\n// Process message based on type\nconst processedMessage = {\n  messageId: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,\n  sessionId,\n  connectionId,\n  messageType,\n  targetConnectionId, // null = broadcast to all in session\n  payload,\n  timestamp: new Date().toISOString(),\n  senderInfo: {\n    userId: connection.userId,\n    characterId: connection.characterId,\n    clientType: connection.clientType\n  }\n};\n\nreturn { json: processedMessage };"
+      },
+      "id": "process-message",
+      "name": "Process Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [\            {
+              "id": "direct-message",
+              "leftValue": "={{ $json.targetConnectionId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-message-type",
+      "name": "Check Message Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Route direct message to specific connection\nconst messageData = $input.first().json;\nconst { sessionId, targetConnectionId } = messageData;\n\n// Validate target connection exists\nconst targetConnection = await $getGoogleFirestoreItem('websocket_connections', targetConnectionId);\nif (!targetConnection || targetConnection.status !== 'connected') {\n  throw new Error('Target connection not found or disconnected');\n}\n\n// Validate target is in same session\nif (targetConnection.sessionId !== sessionId) {\n  throw new Error('Target connection not in same session');\n}\n\nreturn [{\n  json: {\n    endpoint: `/websocket/session/${sessionId}/connection/${targetConnectionId}`,\n    message: messageData\n  }\n}];"
+      },
+      "id": "route-direct-message",
+      "name": "Route Direct Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Broadcast message to all participants in session\nconst messageData = $input.first().json;\nconst { sessionId, connectionId } = messageData;\n\n// Get all session participants\nconst sessionData = await $getGoogleFirestoreItem('game_sessions', sessionId);\nconst participants = sessionData?.participants || [];\n\n// Create broadcast targets (exclude sender)\nconst broadcastTargets = participants\n  .filter(p => p.connectionId !== connectionId)\n  .map(participant => ({\n    endpoint: `/websocket/session/${sessionId}/connection/${participant.connectionId}`,\n    message: messageData\n  }));\n\nreturn broadcastTargets.map(target => ({ json: target }));"
+      },
+      "id": "broadcast-to-session",
+      "name": "Broadcast to Session",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 720]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.endpoint }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Message-Type",
+              "value": "={{ $json.message.messageType }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "={{ $json.message }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 3000
+        }
+      },
+      "id": "deliver-message",
+      "name": "Deliver Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1120, 600]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "documentId": "={{ $json.messageId }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "messageId",
+              "fieldValue": "={{ $json.messageId }}"
+            },
+            {
+              "fieldName": "sessionId",
+              "fieldValue": "={{ $json.sessionId }}"
+            },
+            {
+              "fieldName": "connectionId",
+              "fieldValue": "={{ $json.connectionId }}"
+            },
+            {
+              "fieldName": "messageType",
+              "fieldValue": "={{ $json.messageType }}"
+            },
+            {
+              "fieldName": "targetConnectionId",
+              "fieldValue": "={{ $json.targetConnectionId }}"
+            },
+            {
+              "fieldName": "payload",
+              "fieldValue": "={{ $json.payload }}"
+            },
+            {
+              "fieldName": "timestamp",
+              "fieldValue": "={{ $json.timestamp }}"
+            },
+            {
+              "fieldName": "senderInfo",
+              "fieldValue": "={{ $json.senderInfo }}"
+            }
+          ]
+        }
+      },
+      "id": "log-message",
+      "name": "Log Message",
+      "type": "n8n-nodes-base.googleFirestore",
+      "typeVersion": 1,
+      "position": [1340, 600]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": "={{ $json.connectionId }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "lastActivity",
+              "fieldValue": "={{ $json.timestamp }}"
+            }
+          ]
+        }
+      },
+      "id": "update-activity",
+      "name": "Update Connection Activity",
+      "type": "n8n-nodes-base.googleFirestore",
+      "typeVersion": 1,
+      "position": [1560, 600]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, messageId: $json.messageId, delivered: true, timestamp: $json.timestamp } }}"
+      },
+      "id": "respond-to-message",
+      "name": "Respond to Message",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 600]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "websocket/disconnect",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "disconnect-webhook",
+      "name": "Disconnect Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 900],
+      "webhookId": "websocket-disconnect"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle WebSocket disconnection\nconst disconnectData = $input.first().json;\nconst { sessionId, connectionId, reason = 'client_disconnect' } = disconnectData;\n\n// Validate connection exists\nconst connection = await $getGoogleFirestoreItem('websocket_connections', connectionId);\nif (!connection) {\n  throw new Error('Connection not found');\n}\n\n// Update connection status\nawait $setGoogleFirestoreItem('websocket_connections', connectionId, {\n  status: 'disconnected',\n  disconnectedAt: new Date().toISOString(),\n  disconnectReason: reason\n});\n\n// Update session participants\nconst sessionData = await $getGoogleFirestoreItem('game_sessions', sessionId);\nconst participants = sessionData?.participants || [];\nconst updatedParticipants = participants.filter(p => p.connectionId !== connectionId);\n\nawait $setGoogleFirestoreItem('game_sessions', sessionId, {\n  participants: updatedParticipants,\n  lastActivity: new Date().toISOString(),\n  participantCount: updatedParticipants.length\n});\n\n// Prepare leave notification\nconst leaveNotification = {\n  type: 'participant_left',\n  sessionId,\n  timestamp: new Date().toISOString(),\n  data: {\n    connectionId,\n    userId: connection.userId,\n    characterId: connection.characterId,\n    reason,\n    remainingParticipants: updatedParticipants.length\n  }\n};\n\nreturn {\n  json: {\n    connectionId,\n    sessionId,\n    userId: connection.userId,\n    characterId: connection.characterId,\n    disconnectReason: reason,\n    notification: leaveNotification,\n    remainingParticipants: updatedParticipants\n  }\n};"
+      },
+      "id": "process-disconnect",
+      "name": "Process Disconnect",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 900]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Broadcast disconnect notification to remaining participants\nconst data = $input.first().json;\nconst { sessionId, notification, remainingParticipants } = data;\n\n// Broadcast to all remaining participants\nconst broadcasts = remainingParticipants.map(participant => ({\n  endpoint: `/websocket/session/${sessionId}/connection/${participant.connectionId}`,\n  message: notification\n}));\n\nreturn broadcasts.map(broadcast => ({ json: broadcast }));"
+      },
+      "id": "broadcast-disconnect",
+      "name": "Broadcast Disconnect",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 900]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.endpoint }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Event-Type",
+              "value": "participant_left"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event",
+              "value": "={{ $json.message }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 3000
+        }
+      },
+      "id": "send-disconnect-notifications",
+      "name": "Send Disconnect Notifications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 900]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, connectionId: $json.connectionId, disconnected: true, remainingParticipants: $json.remainingParticipants.length } }}"
+      },
+      "id": "respond-to-disconnect",
+      "name": "Respond to Disconnect",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 900]
+    }
+  ],
+  "connections": {
+    "WebSocket Connection": {
+      "main": [
+        [
+          {
+            "node": "Process Connection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Connection": {
+      "main": [
+        [
+          {
+            "node": "Store Connection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Connection": {
+      "main": [
+        [
+          {
+            "node": "Update Session Participants",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Session Participants": {
+      "main": [
+        [
+          {
+            "node": "Broadcast Join Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Broadcast Join Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Notifications": {
+      "main": [
+        [
+          {
+            "node": "Respond to Connection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Message": {
+      "main": [
+        [
+          {
+            "node": "Check Message Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Message Type": {
+      "main": [
+        [
+          {
+            "node": "Route Direct Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Broadcast to Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Direct Message": {
+      "main": [
+        [
+          {
+            "node": "Deliver Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Broadcast to Session": {
+      "main": [
+        [
+          {
+            "node": "Deliver Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deliver Message": {
+      "main": [
+        [
+          {
+            "node": "Log Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Message": {
+      "main": [
+        [
+          {
+            "node": "Update Connection Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Connection Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond to Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Disconnect Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Disconnect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Disconnect": {
+      "main": [
+        [
+          {
+            "node": "Broadcast Disconnect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Broadcast Disconnect": {
+      "main": [
+        [
+          {
+            "node": "Send Disconnect Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Disconnect Notifications": {
+      "main": [
+        [
+          {
+            "node": "Respond to Disconnect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "America/New_York",
+    "saveManualExecutions": true,
+    "callerPolicyDefaultOption": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "id": "websocket",
+      "name": "WebSocket"
+    },
+    {
+      "id": "real-time",
+      "name": "Real-Time"
+    },
+    {
+      "id": "communication",
+      "name": "Communication"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-23T10:00:00.000Z",
+  "versionId": "1"
+}

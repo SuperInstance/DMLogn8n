@@ -1,0 +1,459 @@
+{
+  "name": "Economic Simulator - Supply/Demand & Trade Routes",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "economic-simulation-trigger",
+      "name": "Economic Simulation Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "economy/simulate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "economic-manual-trigger",
+      "name": "Economic Manual Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 450],
+      "webhookId": "economic-simulate"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize economic simulation cycle\nconst triggerData = $input.first().json;\nconst simulationType = $node['Economic Simulation Trigger'].isRunning ? 'scheduled' : 'manual';\n\nconst simulationConfig = {\n  simulation_id: `econ_sim_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n  simulation_type: simulationType,\n  timestamp: new Date().toISOString(),\n  trigger_data: triggerData || {},\n  simulation_parameters: {\n    market_volatility: triggerData.market_volatility || 'normal', // low, normal, high, extreme\n    trade_activity: triggerData.trade_activity || 'normal', // low, normal, high\n    external_shocks: triggerData.external_shocks || [],\n    player_actions: triggerData.player_actions || [],\n    seasonal_factors: triggerData.seasonal_factors || 'auto',\n    regional_focus: triggerData.regional_focus || 'all' // all, specific regions\n  },\n  simulation_scope: {\n    markets: ['all'], // commodities, services, magical, labor\n    regions: ['all'], // all campaigns regions\n    trade_routes: ['active'], // active, all, specific\n    price_bands: ['all'], // budget, standard, premium, luxury\n    time_horizon: 'current_cycle' // current_cycle, short_term, long_term\n  }\n};\n\nreturn [{ json: simulationConfig }];"
+      },
+      "id": "initialize-economic-simulation",
+      "name": "Initialize Economic Simulation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.NEO4J_URI }}",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.NEO4J_PASSWORD }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "=MATCH (c:Campaign) WHERE c.status = 'active' RETURN c.id as campaignId, c.worldState as worldState, c.economicData as economicData, c.lastEconomicUpdate as lastUpdate"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-economic-data",
+      "name": "Neo4j - Fetch Economic Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process economic data and prepare for simulation\nconst simulationConfig = $input.first().json;\nconst campaigns = $input.last().json.results || [];\n\nconst processedCampaigns = campaigns.map(campaign => {\n  const { campaignId, worldState, economicData, lastUpdate } = campaign;\n  \n  // Extract and validate economic components\n  const currentEconomy = {\n    markets: economicData?.markets || initializeDefaultMarkets(),\n    trade_routes: economicData?.trade_routes || [],\n    regional_prices: economicData?.regional_prices || {},\n    supply_levels: economicData?.supply_levels || {},\n    demand_levels: economicData?.demand_levels || {},\n    price_history: economicData?.price_history || [],\n    trade_activity: economicData?.trade_activity || {},\n    market_conditions: economicData?.market_conditions || 'stable'\n  };\n  \n  // Calculate time-based factors\n  const now = new Date();\n  const lastUpdateDate = lastUpdate ? new Date(lastUpdate) : new Date(now.getTime() - 6 * 60 * 60 * 1000);\n  const hoursSinceUpdate = (now - lastUpdateDate) / (1000 * 60 * 60);\n  \n  const timeFactors = {\n    time_multiplier: Math.min(hoursSinceUpdate / 6, 2),\n    seasonal_adjustment: calculateSeasonalAdjustment(worldState),\n    day_cycle_adjustment: calculateDayCycleAdjustment(now),\n    market_fatigue: calculateMarketFatigue(currentEconomy.price_history, hoursSinceUpdate)\n  };\n  \n  // Analyze current market conditions\n  const marketAnalysis = analyzeMarketConditions(currentEconomy, worldState, timeFactors);\n  \n  return {\n    campaignId,\n    currentEconomy,\n    timeFactors,\n    marketAnalysis,\n    lastUpdate,\n    simulationPriority: calculateSimulationPriority(marketAnalysis, timeFactors)\n  };\n});\n\n// Sort by simulation priority\nprocessedCampaigns.sort((a, b) => b.simulationPriority - a.simulationPriority);\n\nfunction initializeDefaultMarkets() {\n  return {\n    commodities: {\n      food: { base_price: 10, current_price: 10, supply: 100, demand: 100 },\n      water: { base_price: 5, current_price: 5, supply: 100, demand: 100 },\n      materials: { base_price: 25, current_price: 25, supply: 100, demand: 100 },\n      weapons: { base_price: 50, current_price: 50, supply: 100, demand: 100 },\n      armor: { base_price: 75, current_price: 75, supply: 100, demand: 100 },\n      tools: { base_price: 15, current_price: 15, supply: 100, demand: 100 }\n    },\n    services: {\n      lodging: { base_price: 20, current_price: 20, supply: 100, demand: 100 },\n      transportation: { base_price: 30, current_price: 30, supply: 100, demand: 100 },\n      crafting: { base_price: 40, current_price: 40, supply: 100, demand: 100 },\n      healing: { base_price: 60, current_price: 60, supply: 100, demand: 100 },\n      information: { base_price: 25, current_price: 25, supply: 100, demand: 100 }\n    },\n    magical: {\n      potions: { base_price: 100, current_price: 100, supply: 100, demand: 100 },\n      scrolls: { base_price: 150, current_price: 150, supply: 100, demand: 100 },\n      components: { base_price: 80, current_price: 80, supply: 100, demand: 100 },\n      enchantments: { base_price: 500, current_price: 500, supply: 100, demand: 100 },\n      artifacts: { base_price: 1000, current_price: 1000, supply: 100, demand: 100 }\n    },\n    labor: {\n      unskilled: { base_price: 5, current_price: 5, supply: 100, demand: 100 },\n      skilled: { base_price: 15, current_price: 15, supply: 100, demand: 100 },\n    expert: { base_price: 35, current_price: 35, supply: 100, demand: 100 },\n      master: { base_price: 75, current_price: 75, supply: 100, demand: 100 },\n      specialist: { base_price: 150, current_price: 150, supply: 100, demand: 100 }\n    }\n  };\n}\n\nfunction calculateSeasonalAdjustment(worldState) {\n  const currentSeason = worldState.currentSeason || 'spring';\n  const seasonalFactors = {\n    spring: { food: 1.2, materials: 1.0, services: 1.1, magical: 0.9 },\n    summer: { food: 0.8, materials: 1.2, services: 1.3, magical: 1.0 },\n    autumn: { food: 0.9, materials: 1.1, services: 1.0, magical: 1.1 },\n    winter: { food: 1.3, materials: 0.9, services: 0.8, magical: 1.2 }\n  };\n  \n  return seasonalFactors[currentSeason] || seasonalFactors.spring;\n}\n\nfunction calculateDayCycleAdjustment(now) {\n  const hour = now.getHours();\n  \n  if (hour >= 6 && hour < 10) { // Early morning\n    return { services: 1.2, labor: 1.3, food: 1.1 };\n  } else if (hour >= 10 && hour < 14) { // Midday\n    return { services: 1.0, labor: 1.0, food: 0.9 };\n  } else if (hour >= 14 && hour < 18) { // Afternoon\n    return { services: 1.1, labor: 0.9, food: 1.0 };\n  } else if (hour >= 18 && hour < 22) { // Evening\n    return { services: 1.3, labor: 0.7, food: 1.2 };\n  } else { // Night\n    return { services: 0.6, labor: 0.3, food: 0.8 };\n  }\n}\n\nfunction calculateMarketFatigue(priceHistory, hoursSinceUpdate) {\n  if (!priceHistory || priceHistory.length < 5) return 1.0;\n  \n  const recentPrices = priceHistory.slice(-5);\n  const volatility = calculateVolatility(recentPrices);\n  \n  // High volatility leads to market fatigue\n  if (volatility > 0.3) return 0.8;\n  if (volatility > 0.2) return 0.9;\n  if (volatility < 0.05) return 1.1;\n  \n  return 1.0;\n}\n\nfunction calculateVolatility(prices) {\n  if (prices.length < 2) return 0;\n  \n  const returns = [];\n  for (let i = 1; i < prices.length; i++) {\n    returns.push((prices[i] - prices[i-1]) / prices[i-1]);\n  }\n  \n  const mean = returns.reduce((a, b) => a + b, 0) / returns.length;\n  const variance = returns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / returns.length;\n  \n  return Math.sqrt(variance);\n}\n\nfunction analyzeMarketConditions(economy, worldState, timeFactors) {\n  const analysis = {\n    overall_condition: 'stable',\n    market_pressure: {},\n    price_trends: {},\n    supply_demand_imbalance: {},\n    trade_route_efficiency: {},\n    external_factors: [],\n    volatility_indicators: {},\n    opportunity_factors: []\n  };\n  \n  // Analyze each market category\n  Object.entries(economy.markets).forEach(([category, goods]) => {\n    const categoryAnalysis = analyzeMarketCategory(category, goods, timeFactors);\n    analysis.market_pressure[category] = categoryAnalysis.pressure;\n    analysis.price_trends[category] = categoryAnalysis.trend;\n    analysis.supply_demand_imbalance[category] = categoryAnalysis.imbalance;\n    analysis.volatility_indicators[category] = categoryAnalysis.volatility;\n  });\n  \n  // Analyze trade routes\n  analysis.trade_route_efficiency = analyzeTradeRoutes(economy.trade_routes, worldState);\n  \n  // Identify external factors\n  analysis.external_factors = identifyExternalFactors(worldState, economy);\n  \n  // Identify opportunities\n  analysis.opportunity_factors = identifyOpportunities(analysis, worldState);\n  \n  // Determine overall condition\n  analysis.overall_condition = determineOverallCondition(analysis);\n  \n  return analysis;\n}\n\nfunction analyzeMarketCategory(category, goods, timeFactors) {\n  const goodsData = Object.values(goods);\n  \n  const avgSupply = goodsData.reduce((sum, good) => sum + good.supply, 0) / goodsData.length;\n  const avgDemand = goodsData.reduce((sum, good) => sum + good.demand, 0) / goodsData.length;\n  const avgPrice = goodsData.reduce((sum, good) => sum + good.current_price, 0) / goodsData.length;\n  const avgBasePrice = goodsData.reduce((sum, good) => sum + good.base_price, 0) / goodsData.length;\n  \n  const pressure = (avgDemand - avgSupply) / 100; // -1 to 1\n  const trend = (avgPrice - avgBasePrice) / avgBasePrice; // percentage change\n  const imbalance = Math.abs(pressure);\n  const volatility = calculateGoodsVolatility(goodsData);\n  \n  // Apply time factors\n  const seasonalAdjustment = timeFactors.seasonal_adjustment[category] || 1.0;\n  const dayCycleAdjustment = timeFactors.day_cycle_adjustment[category] || 1.0;\n  const fatigueAdjustment = timeFactors.market_fatigue;\n  \n  return {\n    pressure: pressure * seasonalAdjustment * dayCycleAdjustment,\n    trend: trend,\n    imbalance: imbalance,\n    volatility: volatility,\n    adjusted_pressure: pressure * seasonalAdjustment * dayCycleAdjustment * fatigueAdjustment,\n    seasonal_factor: seasonalAdjustment,\n    day_cycle_factor: dayCycleAdjustment,\n    fatigue_factor: fatigueAdjustment\n  };\n}\n\nfunction calculateGoodsVolatility(goodsData) {\n  if (goodsData.length < 2) return 0;\n  \n  const priceChanges = goodsData.map(good => \n    (good.current_price - good.base_price) / good.base_price\n  );\n  \n  const mean = priceChanges.reduce((a, b) => a + b, 0) / priceChanges.length;\n  const variance = priceChanges.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / priceChanges.length;\n  \n  return Math.sqrt(variance);\n}\n\nfunction analyzeTradeRoutes(tradeRoutes, worldState) {\n  const efficiency = {\n    overall: 0.8,\n    by_region: {},\n    bottlenecks: [],\n    opportunities: []\n  };\n  \n  if (!tradeRoutes || tradeRoutes.length === 0) {\n    return efficiency;\n  }\n  \n  tradeRoutes.forEach(route => {\n    const routeEfficiency = calculateRouteEfficiency(route, worldState);\n    efficiency.by_region[route.id] = routeEfficiency;\n    \n    if (routeEfficiency < 0.6) {\n      efficiency.bottlenecks.push({\n        route_id: route.id,\n        efficiency: routeEfficiency,\n        issues: identifyRouteIssues(route, worldState)\n      });\n    }\n    \n    if (routeEfficiency > 0.9) {\n      efficiency.opportunities.push({\n        route_id: route.id,\n        efficiency: routeEfficiency,\n        potential: 'expansion_possible'\n      });\n    }\n  });\n  \n  efficiency.overall = Object.values(efficiency.by_region)\n    .reduce((sum, eff) => sum + eff, 0) / Object.keys(efficiency.by_region).length;\n  \n  return efficiency;\n}\n\nfunction calculateRouteEfficiency(route, worldState) {\n  let efficiency = 1.0;\n  \n  // Factor in route conditions\n  if (route.conditions) {\n    if (route.conditions.weather === 'poor') efficiency -= 0.2;\n    if (route.conditions.weather === 'dangerous') efficiency -= 0.4;\n    if (route.conditions.security === 'low') efficiency -= 0.3;\n    if (route.conditions.security === 'dangerous') efficiency -= 0.5;\n  }\n  \n  // Factor in regional stability\n  if (worldState.factions) {\n    const routeRegions = route.regions || [];\n    routeRegions.forEach(region => {\n      const regionFactions = worldState.factions.filter(f => \n        f.territories && f.territories.includes(region)\n      );\n      \n      regionFactions.forEach(faction => {\n        if (faction.stability === 'low') efficiency -= 0.1;\n        if (faction.stability === 'unstable') efficiency -= 0.2;\n      });\n    });\n  }\n  \n  return Math.max(0.1, Math.min(1.0, efficiency));\n}\n\nfunction identifyRouteIssues(route, worldState) {\n  const issues = [];\n  \n  if (route.conditions?.weather === 'dangerous') {\n    issues.push('dangerous_weather');\n  }\n  \n  if (route.conditions?.security === 'dangerous') {\n    issues.push('security_concerns');\n  }\n  \n  if (route.distance > 1000) {\n    issues.push('excessive_distance');\n  }\n  \n  return issues;\n}\n\nfunction identifyExternalFactors(worldState, economy) {\n  const factors = [];\n  \n  // Recent events affecting economy\n  if (worldState.recentEvents) {\n    worldState.recentEvents.forEach(event => {\n      if (event.type === 'conflict' || event.type === 'natural_disaster') {\n        factors.push({\n          type: 'disruption',\n          source: event.type,\n          impact: 'negative',\n          duration: 'short_term'\n        });\n      }\n      \n      if (event.type === 'festival' || event.type === 'celebration') {\n        factors.push({\n          type: 'stimulus',\n          source: event.type,\n          impact: 'positive',\n          duration: 'short_term'\n        });\n      }\n    });\n  }\n  \n  // Faction activities\n  if (worldState.factions) {\n    worldState.factions.forEach(faction => {\n      if (faction.recent_actions) {\n        faction.recent_actions.forEach(action => {\n          if (action.type === 'military_campaign') {\n            factors.push({\n              type: 'war_economy',\n              source: faction.name,\n              impact: 'mixed',\n              duration: 'medium_term'\n            });\n          }\n          \n          if (action.type === 'trade_agreement') {\n            factors.push({\n              type: 'trade_stimulus',\n              source: faction.name,\n              impact: 'positive',\n              duration: 'long_term'\n            });\n          }\n        });\n      }\n    });\n  }\n  \n  return factors;\n}\n\nfunction identifyOpportunities(analysis, worldState) {\n  const opportunities = [];\n  \n  // Supply-demand imbalances create opportunities\n  Object.entries(analysis.supply_demand_imbalance).forEach(([category, imbalance]) => {\n    if (imbalance > 0.3) {\n      if (analysis.market_pressure[category] > 0.2) {\n        opportunities.push({\n          type: 'supply_shortage',\n          category,\n          severity: imbalance,\n          recommendation: 'increase_supply',\n          potential_profit: imbalance * 100\n        });\n      } else {\n        opportunities.push({\n          type: 'excess_supply',\n          category,\n          severity: imbalance,\n          recommendation: 'create_demand',\n          potential_discount: imbalance * 50\n        });\n      }\n    }\n  });\n  \n  // Trade route inefficiencies create opportunities\n  if (analysis.trade_route_efficiency.overall < 0.7) {\n    opportunities.push({\n      type: 'trade_route_improvement',\n      severity: 1 - analysis.trade_route_efficiency.overall,\n      recommendation: 'invest_infrastructure',\n      potential_return: (1 - analysis.trade_route_efficiency.overall) * 80\n    });\n  }\n  \n  return opportunities;\n}\n\nfunction determineOverallCondition(analysis) {\n  const pressures = Object.values(analysis.market_pressure);\n  const avgPressure = pressures.reduce((a, b) => a + b, 0) / pressures.length;\n  \n  const volatilities = Object.values(analysis.volatility_indicators);\n  const avgVolatility = volatilities.reduce((a, b) => a + b, 0) / volatilities.length;\n  \n  if (avgVolatility > 0.4) return 'highly_volatile';\n  if (avgVolatility > 0.2) return 'volatile';\n  \n  if (Math.abs(avgPressure) > 0.3) {\n    return avgPressure > 0 ? 'inflationary' : 'deflationary';\n  }\n  \n  if (avgPressure > 0.1) return 'expanding';\n  if (avgPressure < -0.1) return 'contracting';\n  \n  return 'stable';\n}\n\nfunction calculateSimulationPriority(marketAnalysis, timeFactors) {\n  let priority = 5;\n  \n  // High volatility increases priority\n  const avgVolatility = Object.values(marketAnalysis.volatility_indicators)\n    .reduce((a, b) => a + b, 0) / Object.keys(marketAnalysis.volatility_indicators).length;\n  priority += avgVolatility * 3;\n  \n  // Market pressure increases priority\n  const avgPressure = Object.values(marketAnalysis.market_pressure)\n    .reduce((a, b) => a + Math.abs(b), 0) / Object.keys(marketAnalysis.market_pressure).length;\n  priority += avgPressure * 2;\n  \n  // External factors increase priority\n  priority += marketAnalysis.external_factors.length * 0.5;\n  \n  // Opportunities increase priority\n  priority += marketAnalysis.opportunity_factors.length * 0.3;\n  \n  // Time factors\n  priority += (timeFactors.time_multiplier - 1) * 2;\n  \n  return Math.min(priority, 10);\n}\n\nreturn [{\n  json: {\n    ...simulationConfig,\n    campaigns: processedCampaigns,\n    total_campaigns: processedCampaigns.length,\n    simulation_timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "process-economic-data",
+      "name": "Process Economic Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "process-campaigns-individually",
+      "name": "Process Campaigns Individually",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate economic simulation events for current campaign\nconst simulationConfig = $input.first().json;\nconst campaign = $input.first().json.campaigns[$input.first().json.currentCampaignIndex || 0];\n\nconst { campaignId, currentEconomy, timeFactors, marketAnalysis } = campaign;\n\nconst simulationEvents = [];\nconst marketUpdates = {};\n\n// Generate price adjustments based on market analysis\nObject.entries(currentEconomy.markets).forEach(([category, goods]) => {\n  const categoryAnalysis = marketAnalysis.market_pressure[category];\n  \n  Object.entries(goods).forEach(([goodName, goodData]) => {\n    const priceEvent = generatePriceAdjustment(\n      category,\n      goodName,\n      goodData,\n      categoryAnalysis,\n      timeFactors,\n      marketAnalysis\n    );\n    \n    if (priceEvent) {\n      simulationEvents.push(priceEvent);\n      \n      // Update market data\n      if (!marketUpdates[category]) {\n        marketUpdates[category] = {};\n      }\n      marketUpdates[category][goodName] = priceEvent.new_price_data;\n    }\n  });\n});\n\n// Generate trade route events\nif (currentEconomy.trade_routes && currentEconomy.trade_routes.length > 0) {\n  currentEconomy.trade_routes.forEach(route => {\n    const routeEvent = generateTradeRouteEvent(route, marketAnalysis, timeFactors);\n    if (routeEvent) {\n      simulationEvents.push(routeEvent);\n    }\n  });\n}\n\n// Generate market opportunity events\nmarketAnalysis.opportunity_factors.forEach(opportunity => {\n  const opportunityEvent = generateOpportunityEvent(opportunity, campaignId);\n  simulationEvents.push(opportunityEvent);\n});\n\n// Generate external factor events\nmarketAnalysis.external_factors.forEach(factor => {\n  const factorEvent = generateExternalFactorEvent(factor, campaignId, currentEconomy);\n  simulationEvents.push(factorEvent);\n});\n\n// Generate random economic events\nconst randomEventCount = Math.floor(Math.random() * 3) + 1;\nfor (let i = 0; i < randomEventCount; i++) {\n  const randomEvent = generateRandomEconomicEvent(campaignId, currentEconomy, marketAnalysis);\n  simulationEvents.push(randomEvent);\n}\n\nfunction generatePriceAdjustment(category, goodName, goodData, categoryAnalysis, timeFactors, marketAnalysis) {\n  const currentPrice = goodData.current_price;\n  const basePrice = goodData.base_price;\n  const supply = goodData.supply;\n  const demand = goodData.demand;\n  \n  // Calculate price pressure\n  let pricePressure = (demand - supply) / 100; // -1 to 1\n  \n  // Apply market analysis factors\n  pricePressure += categoryAnalysis.pressure || 0;\n  \n  // Apply time factors\n  const seasonalFactor = timeFactors.seasonal_adjustment[category] || 1.0;\n  const dayCycleFactor = timeFactors.day_cycle_adjustment[category] || 1.0;\n  const fatigueFactor = timeFactors.market_fatigue;\n  \n  pricePressure *= seasonalFactor * dayCycleFactor * fatigueFactor;\n  \n  // Apply volatility\n  const volatility = categoryAnalysis.volatility || 0.1;\n  pricePressure += (Math.random() - 0.5) * volatility;\n  \n  // Calculate price change\n  const maxChange = basePrice * 0.3; // Max 30% change per cycle\n  const priceChange = Math.max(-maxChange, Math.min(maxChange, pricePressure * basePrice * 0.2));\n  const newPrice = Math.max(basePrice * 0.3, Math.min(basePrice * 2.0, currentPrice + priceChange));\n  \n  // Only create event if price change is significant\n  if (Math.abs(priceChange) > basePrice * 0.02) {\n    return {\n      id: `price_${category}_${goodName}_${Date.now()}`,\n      type: 'price_adjustment',\n      category,\n      good_name: goodName,\n      old_price: currentPrice,\n      new_price: newPrice,\n      price_change: priceChange,\n      price_change_percent: (priceChange / currentPrice) * 100,\n      base_price: basePrice,\n      factors: {\n        supply_demand_pressure: pricePressure,\n        seasonal_factor: seasonalFactor,\n        day_cycle_factor: dayCycleFactor,\n        volatility_factor: volatility,\n        fatigue_factor: fatigueFactor\n      },\n      market_condition: marketAnalysis.overall_condition,\n      impact_level: calculatePriceImpactLevel(Math.abs(priceChange / basePrice)),\n      timestamp: new Date().toISOString()\n    };\n  }\n  \n  return null;\n}\n\nfunction generateTradeRouteEvent(route, marketAnalysis, timeFactors) {\n  const efficiency = marketAnalysis.trade_route_efficiency.by_region[route.id] || 0.8;\n  \n  // Generate route condition changes\n  let conditionChange = 0;\n  \n  // Random deterioration\n  if (Math.random() < 0.2) {\n    conditionChange -= Math.random() * 0.2;\n  }\n  \n  // Random improvement\n  if (Math.random() < 0.1) {\n    conditionChange += Math.random() * 0.15;\n  }\n  \n  // Apply time factors\n  conditionChange *= timeFactors.time_multiplier * 0.5;\n  \n  const newEfficiency = Math.max(0.1, Math.min(1.0, efficiency + conditionChange));\n  \n  if (Math.abs(conditionChange) > 0.05) {\n    return {\n      id: `route_${route.id}_${Date.now()}`,\n      type: 'trade_route_change',\n      route_id: route.id,\n      route_name: route.name || `Route ${route.id}`,\n      old_efficiency: efficiency,\n      new_efficiency: newEfficiency,\n      efficiency_change: conditionChange,\n      affected_regions: route.regions || [],\n      affected_goods: route.goods || [],\n      cause: determineRouteCause(conditionChange),\n      impact_level: calculateRouteImpactLevel(Math.abs(conditionChange)),\n      timestamp: new Date().toISOString()\n    };\n  }\n  \n  return null;\n}\n\nfunction generateOpportunityEvent(opportunity, campaignId) {\n  return {\n    id: `opportunity_${opportunity.type}_${Date.now()}`,\n    type: 'economic_opportunity',\n    opportunity_type: opportunity.type,\n    category: opportunity.category,\n    severity: opportunity.severity,\n    recommendation: opportunity.recommendation,\n    potential_value: opportunity.potential_profit || opportunity.potential_discount || 0,\n    campaign_id: campaignId,\n    description: generateOpportunityDescription(opportunity),\n    requirements: generateOpportunityRequirements(opportunity),\n    time_sensitivity: calculateOpportunityTimeSensitivity(opportunity),\n    player_actionable: true,\n    timestamp: new Date().toISOString()\n  };\n}\n\nfunction generateExternalFactorEvent(factor, campaignId, currentEconomy) {\n  return {\n    id: `external_${factor.type}_${Date.now()}`,\n    type: 'external_economic_factor',\n    factor_type: factor.type,\n    source: factor.source,\n    impact: factor.impact,\n    duration: factor.duration,\n    campaign_id: campaignId,\n    affected_markets: determineAffectedMarkets(factor, currentEconomy),\n    magnitude: calculateFactorMagnitude(factor),\n    description: generateFactorDescription(factor),\n    player_visible: factor.duration === 'short_term' || Math.random() < 0.3,\n    timestamp: new Date().toISOString()\n  };\n}\n\nfunction generateRandomEconomicEvent(campaignId, currentEconomy, marketAnalysis) {\n  const eventTypes = [\n    'merchant_arrival',\n    'resource_discovery',\n    'guild_activity',\n    'market_rumor',\n    'trade_embargo',\n    'economic_boom',\n    'recession',\n    'innovation'\n  ];\n  \n  const eventType = eventTypes[Math.floor(Math.random() * eventTypes.length)];\n  const severity = Math.random();\n  \n  return {\n    id: `random_${eventType}_${Date.now()}`,\n    type: 'random_economic_event',\n    event_type: eventType,\n    severity,\n    campaign_id: campaignId,\n    affected_regions: ['all'],\n    affected_markets: determineRandomEventMarkets(eventType, currentEconomy),\n    description: generateRandomEventDescription(eventType, severity),\n    immediate_effects: generateRandomEventEffects(eventType, severity),\n    player_hooks: generateRandomEventHooks(eventType, severity),\n    timestamp: new Date().toISOString()\n  };\n}\n\n// Helper functions for event generation\nfunction calculatePriceImpactLevel(changePercent) {\n  if (changePercent < 0.05) return 'minor';\n  if (changePercent < 0.15) return 'moderate';\n  if (changePercent < 0.25) return 'significant';\n  return 'major';\n}\n\nfunction determineRouteCause(change) {\n  if (change > 0) {\n    const causes = ['improved_security', 'better_weather', 'infrastructure_investment', 'reduced_banditry'];\n    return causes[Math.floor(Math.random() * causes.length)];\n  } else {\n    const causes = ['increased_banditry', 'poor_weather', 'road_damage', 'military_activity', 'monster_attacks'];\n    return causes[Math.floor(Math.random() * causes.length)];\n  }\n}\n\nfunction calculateRouteImpactLevel(change) {\n  if (Math.abs(change) < 0.05) return 'minor';\n  if (Math.abs(change) < 0.15) return 'moderate';\n  if (Math.abs(change) < 0.25) return 'significant';\n  return 'major';\n}\n\nfunction generateOpportunityDescription(opportunity) {\n  const descriptions = {\n    'supply_shortage': `High demand for ${opportunity.category} goods creates profitable opportunities`,\n    'excess_supply': `Surplus of ${opportunity.category} goods available at discounted prices`,\n    'trade_route_improvement': `Investment in trade infrastructure could yield significant returns`\n  };\n  return descriptions[opportunity.type] || 'Economic opportunity detected';\n}\n\nfunction generateOpportunityRequirements(opportunity) {\n  const requirements = {\n    'supply_shortage': ['capital_investment', 'supply_chain_access', 'distribution_network'],\n    'excess_supply': ['storage_facilities', 'marketing', 'transportation'],\n    'trade_route_improvement': ['infrastructure_investment', 'security_arrangements', 'political_support']\n  };\n  return requirements[opportunity.type] || ['resources', 'planning'];\n}\n\nfunction calculateOpportunityTimeSensitivity(opportunity) {\n  if (opportunity.type === 'supply_shortage') return 'high';\n  if (opportunity.type === 'excess_supply') return 'medium';\n  return 'low';\n}\n\nfunction determineAffectedMarkets(factor, currentEconomy) {\n  const marketMappings = {\n    'disruption': ['commodities', 'services'],\n    'stimulus': ['services', 'magical'],\n    'war_economy': ['weapons', 'armor', 'services'],\n    'trade_stimulus': ['commodities', 'services', 'magical']\n  };\n  \n  return marketMappings[factor.type] || Object.keys(currentEconomy.markets);\n}\n\nfunction calculateFactorMagnitude(factor) {\n  const magnitudes = {\n    'short_term': 0.3,\n    'medium_term': 0.5,\n    'long_term': 0.7\n  };\n  \n  return magnitudes[factor.duration] || 0.5;\n}\n\nfunction generateFactorDescription(factor) {\n  const descriptions = {\n    'disruption': `${factor.source} is disrupting normal economic activity`,\n    'stimulus': `${factor.source} is stimulating economic growth`,\n    'war_economy': `${factor.source} is creating war economy conditions`,\n    'trade_stimulus': `${factor.source} is boosting trade activity`\n  };\n  \n  return descriptions[factor.type] || 'External economic factor affecting markets';\n}\n\nfunction determineRandomEventMarkets(eventType, currentEconomy) {\n  const marketMappings = {\n    'merchant_arrival': ['commodities', 'magical'],\n    'resource_discovery': ['commodities', 'materials'],\n    'guild_activity': ['services', 'magical'],\n    'market_rumor': ['all'],\n    'trade_embargo': ['commodities', 'services'],\n    'economic_boom': ['all'],\n    'recession': ['all'],\n    'innovation': ['magical', 'services']\n  };\n  \n  const markets = marketMappings[eventType] || ['commodities'];\n  return markets === 'all' ? Object.keys(currentEconomy.markets) : markets;\n}\n\nfunction generateRandomEventDescription(eventType, severity) {\n  const descriptions = {\n    'merchant_arrival': `A wealthy merchant caravan has arrived in the region`,\n    'resource_discovery': `New resources have been discovered in the area`,\n    'guild_activity': `Local guilds are increasing their economic activity`,\n    'market_rumor': `Interesting rumors are circulating in the markets`,\n    'trade_embargo': `Trade restrictions have been imposed`,\n    'economic_boom': `The local economy is experiencing rapid growth`,\n    'recession': `Economic conditions are deteriorating`,\n    'innovation': `New economic innovations are emerging`\n  };\n  \n  return descriptions[eventType] || 'Economic events are unfolding';\n}\n\nfunction generateRandomEventEffects(eventType, severity) {\n  const effects = {\n    'merchant_arrival': ['increased_supply', 'price_competition', 'new_goods'],\n    'resource_discovery': ['resource_abundance', 'price_decrease', 'economic_opportunities'],\n    'guild_activity': ['service_improvement', 'price_increases', 'quality_improvements'],\n    'market_rumor': ['speculation', 'price_volatility', 'information_value'],\n    'trade_embargo': ['supply_shortage', 'price_increases', 'black_market_growth'],\n    'economic_boom': ['increased_demand', 'price_increases', 'investment_opportunities'],\n    'recession': ['decreased_demand', 'price_decreases', 'unemployment'],\n    'innovation': ['efficiency_improvements', 'new_markets', 'disruptive_changes']\n  };\n  \n  return effects[eventType] || ['market_effects'];\n}\n\nfunction generateRandomEventHooks(eventType, severity) {\n  const hooks = {\n    'merchant_arrival': ['trade_opportunities', 'information_gathering', 'employment'],\n    'resource_discovery': ['exploration', 'mining_opportunities', 'land_claims'],\n    'guild_activity': ['guild_membership', 'apprenticeships', 'specialist_services'],\n    'market_rumor': ['investigation', 'information_brokering', 'speculation'],\n    'trade_embargo': ['smuggling', 'alternative_sources', 'political_influence'],\n    'economic_boom': ['investment', 'business_opportunities', 'employment'],\n    'recession': ['bargain_hunting', 'aid_opportunities', 'community_support'],\n    'innovation': ['early_adoption', 'investment_opportunities', 'skill_development']\n  };\n  \n  return hooks[eventType] || ['economic_involvement'];\n}\n\nreturn [{\n  json: {\n    campaignId,\n    simulationEvents,\n    marketUpdates,\n    eventCount: simulationEvents.length,\n    marketAnalysis,\n    timeFactors,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "generate-economic-events",
+      "name": "Generate Economic Events",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.DEEPSEEK_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "deepseek-chat"
+            },
+            {
+              "name": "messages",
+              "value": "={{[{\n  \"role\": \"system\",\n  \"content\": \"You are a master economic storyteller for a D&D campaign. Transform economic events into compelling narratives that would engage players and create immersive world-building. Focus on how economic changes affect everyday people, merchants, adventurers, and the broader society.\\n\\nFor each economic event, provide:\\n1. A vivid narrative description (2-3 sentences)\\n2. How players might perceive or discover these changes\\n3. Potential adventure hooks or opportunities\\n4. How different social classes might be affected\\n5. Potential future economic consequences\\n\\nFormat as JSON with keys: narrative_description, player_perception, adventure_hooks, social_impact, future_consequences\"\n}], [\n  {\n    \"role\": \"user\",\n    \"content\": \"Generate economic narratives for these events in campaign {{ $json.campaignId }}:\\n\\nEconomic Events: {{ JSON.stringify($json.simulationEvents, null, 2) }}\\n\\nMarket Analysis: {{ JSON.stringify($json.marketAnalysis, null, 2) }}\\n\\nTime Factors: {{ JSON.stringify($json.timeFactors, null, 2) }}\"\n  }\n])}}"
+            },
+            {
+              "name": "temperature",
+              "value": "0.8"
+            },
+            {
+              "name": "max_tokens",
+              "value": "2000"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "deepseek-economic-narratives",
+      "name": "DeepSeek - Generate Economic Narratives",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process economic narratives and prepare world state updates\nconst eventData = $input.first().json;\nconst deepseekResponse = $input.last().json;\n\nlet narrativeData = {};\ntry {\n  const content = deepseekResponse.choices[0].message.content;\n  narrativeData = JSON.parse(content);\n} catch (error) {\n  console.error('Failed to parse DeepSeek economic narrative:', error);\n  narrativeData = {\n    narrative_description: 'Economic conditions continue to evolve.',\n    player_perception: 'Players may notice changes in prices and availability.',\n    adventure_hooks: 'New opportunities may arise from economic changes.',\n    social_impact: 'Various social classes may be affected differently.',\n    future_consequences: 'Further economic developments may follow.'\n  };\n}\n\n// Enrich economic events with narratives\nconst enrichedEvents = eventData.simulationEvents.map((event, index) => {\n  const eventNarrative = narrativeData.events?.[index] || narrativeData;\n  \n  return {\n    ...event,\n    narrative_description: eventNarrative.narrative_description || `Economic ${event.type} affects the world`,\n    player_perception: eventNarrative.player_perception || 'This change may be noticed through market observation.',\n    adventure_hooks: eventNarrative.adventure_hooks || 'Economic opportunities may exist.',\n    social_impact: eventNarrative.social_impact || 'Various groups may be affected.',\n    future_consequences: eventNarrative.future_consequences || 'Further effects may develop.',\n    processed: true\n  };\n});\n\n// Apply market updates to economy\nconst updatedEconomy = applyMarketUpdates(eventData.currentEconomy, eventData.marketUpdates);\n\n// Calculate economic summary statistics\nconst economicSummary = calculateEconomicSummary(enrichedEvents, updatedEconomy, eventData.marketAnalysis);\n\nfunction applyMarketUpdates(currentEconomy, marketUpdates) {\n  const updated = JSON.parse(JSON.stringify(currentEconomy)); // Deep clone\n  \n  // Apply price updates\n  Object.entries(marketUpdates).forEach(([category, goods]) => {\n    if (updated.markets[category]) {\n      Object.entries(goods).forEach(([goodName, newData]) => {\n        if (updated.markets[category][goodName]) {\n          updated.markets[category][goodName] = {\n            ...updated.markets[category][goodName],\n            ...newData\n          };\n        }\n      });\n    }\n  });\n  \n  // Update price history\n  const priceSnapshot = generatePriceSnapshot(updated.markets);\n  updated.price_history = [...(updated.price_history || []), priceSnapshot].slice(-20); // Keep last 20 snapshots\n  \n  // Update market conditions\n  updated.market_conditions = calculateMarketConditions(updated);\n  \n  updated.last_updated = new Date().toISOString();\n  \n  return updated;\n}\n\nfunction generatePriceSnapshot(markets) {\n  const snapshot = {};\n  \n  Object.entries(markets).forEach(([category, goods]) => {\n    snapshot[category] = {};\n    Object.entries(goods).forEach(([goodName, goodData]) => {\n      snapshot[category][goodName] = goodData.current_price;\n    });\n  });\n  \n  return {\n    prices: snapshot,\n    timestamp: new Date().toISOString()\n  };\n}\n\nfunction calculateMarketConditions(economy) {\n  const allPrices = [];\n  const allPriceChanges = [];\n  \n  Object.values(economy.markets).forEach(goods => {\n    Object.values(goods).forEach(goodData => {\n      allPrices.push(goodData.current_price);\n      const priceChange = (goodData.current_price - goodData.base_price) / goodData.base_price;\n      allPriceChanges.push(priceChange);\n    });\n  });\n  \n  const avgPriceChange = allPriceChanges.reduce((a, b) => a + b, 0) / allPriceChanges.length;\n  const volatility = Math.sqrt(\n    allPriceChanges.reduce((sum, change) => sum + Math.pow(change - avgPriceChange, 2), 0) / allPriceChanges.length\n  );\n  \n  if (avgPriceChange > 0.1) return 'inflationary';\n  if (avgPriceChange < -0.1) return 'deflationary';\n  if (volatility > 0.2) return 'volatile';\n  if (volatility < 0.05) return 'stable';\n  \n  return 'normal';\n}\n\nfunction calculateEconomicSummary(events, updatedEconomy, marketAnalysis) {\n  const priceEvents = events.filter(e => e.type === 'price_adjustment');\n  const opportunityEvents = events.filter(e => e.type === 'economic_opportunity');\n  const externalEvents = events.filter(e => e.type === 'external_economic_factor');\n  \n  return {\n    total_events: events.length,\n    price_changes: {\n      increases: priceEvents.filter(e => e.price_change > 0).length,\n      decreases: priceEvents.filter(e => e.price_change < 0).length,\n      significant_changes: priceEvents.filter(e => Math.abs(e.price_change_percent) > 10).length\n    },\n    opportunities: {\n      total: opportunityEvents.length,\n      high_value: opportunityEvents.filter(e => e.potential_value > 100).length,\n      time_sensitive: opportunityEvents.filter(e => e.time_sensitivity === 'high').length\n    },\n    external_factors: {\n      total: externalEvents.length,\n      positive_impact: externalEvents.filter(e => e.impact === 'positive').length,\n      negative_impact: externalEvents.filter(e => e.impact === 'negative').length\n    },\n    market_conditions: updatedEconomy.market_conditions,\n    overall_volatility: marketAnalysis.overall_condition === 'volatile' || marketAnalysis.overall_condition === 'highly_volatile',\n    player_actionable_events: events.filter(e => e.player_actionable || e.adventure_hooks).length\n  };\n}\n\nreturn [{\n  json: {\n    campaignId: eventData.campaignId,\n    original_events: eventData.simulationEvents,\n    enriched_events: enrichedEvents,\n    updated_economy: updatedEconomy,\n    economic_summary: economicSummary,\n    market_updates: eventData.marketUpdates,\n    market_analysis: eventData.marketAnalysis,\n    time_factors: eventData.timeFactors,\n    narrative_summary: narrativeData.narrative_description || 'Economic simulation cycle completed',\n    timestamp: new Date().toISOString(),\n    processed_by: 'economic-simulator'\n  }\n}];"
+      },
+      "id": "process-economic-narratives",
+      "name": "Process Economic Narratives",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.NEO4J_URI }}",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.NEO4J_PASSWORD }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "=MATCH (c:Campaign {id: '{{ $json.campaignId }}' }) SET c.economicData = {{ JSON.stringify($json.updated_economy) }}, c.lastEconomicUpdate = '{{ $json.timestamp }}', c.economicHistory = COALESCE(c.economicHistory, []) + [{{ JSON.stringify({ simulation_id: $json.campaignId + '_' + $json.timestamp, events: $json.enriched_events, summary: $json.economic_summary }) }}] RETURN c"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-economic-state-neo4j",
+      "name": "Neo4j - Update Economic State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.CAMPAIGN_API_URL }}/api/campaigns/{{ $json.campaignId }}/economics/update",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.CAMPAIGN_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "economic_events",
+              "value": "={{ $json.enriched_events }}"
+            },
+            {
+              "name": "economic_summary",
+              "value": "={{ $json.economic_summary }}"
+            },
+            {
+              "name": "market_updates",
+              "value": "={{ $json.market_updates }}"
+            },
+            {
+              "name": "narrative_summary",
+              "value": "={{ $json.narrative_summary }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $json.timestamp }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "notify-campaign-economics",
+      "name": "Notify Campaign Economics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate economic simulation summary\nconst economicData = $input.first().json;\n\nconst summary = {\n  simulation_id: `econ_${economicData.campaignId}_${Date.now()}`,\n  campaign_id: economicData.campaignId,\n  processing_time: new Date().toISOString(),\n  economic_overview: {\n    market_condition: economicData.updated_economy.market_conditions,\n    total_events: economicData.economic_summary.total_events,\n    price_volatility: economicData.market_analysis.overall_condition,\n    player_opportunities: economicData.economic_summary.player_actionable_events\n  },\n  price_analysis: {\n    price_increases: economicData.economic_summary.price_changes.increases,\n    price_decreases: economicData.economic_summary.price_changes.decreases,\n    significant_movements: economicData.economic_summary.price_changes.significant_changes,\n    most_affected_categories: analyzeMostAffectedCategories(economicData.enriched_events),\n    price_trends: calculatePriceTrends(economicData.updated_economy)\n  },\n  opportunity_analysis: {\n    total_opportunities: economicData.economic_summary.opportunities.total,\n    high_value_opportunities: economicData.economic_summary.opportunities.high_value,\n    urgent_opportunities: economicData.economic_summary.opportunities.time_sensitive,\n    opportunity_types: categorizeOpportunities(economicData.enriched_events),\n    market_gaps: identifyMarketGaps(economicData.updated_economy)\n  },\n  external_factors: {\n    total_factors: economicData.economic_summary.external_factors.total,\n    positive_factors: economicData.economic_summary.external_factors.positive_impact,\n    negative_factors: economicData.economic_summary.external_factors.negative_impact,\n    factor_impact_duration: analyzeFactorDurations(economicData.enriched_events)\n  },\n  narrative_summary: economicData.narrative_summary,\n  player_relevance: {\n    immediate_hooks: extractPlayerHooks(economicData.enriched_events),\n    medium_term_opportunities: identifyMediumTermOpportunities(economicData.enriched_events),\n    long_term_implications: analyzeLongTermImplications(economicData.updated_economy),\n    investment_opportunities: identifyInvestmentOpportunities(economicData.enriched_events)\n  },\n  next_simulation_factors: {\n    volatility_carryover: calculateVolatilityCarryover(economicData.market_analysis),\n    momentum_factors: calculateMomentumFactors(economicData.economic_summary),\n    recommended_focus: determineRecommendedFocus(economicData.economic_summary, economicData.market_analysis)\n  }\n};\n\nfunction analyzeMostAffectedCategories(events) {\n  const categoryCounts = {};\n  \n  events.forEach(event => {\n    if (event.category) {\n      categoryCounts[event.category] = (categoryCounts[event.category] || 0) + 1;\n    }\n  });\n  \n  return Object.entries(categoryCounts)\n    .sort(([,a], [,b]) => b - a)\n    .slice(0, 3)\n    .map(([category, count]) => ({ category, impact_count: count }));\n}\n\nfunction calculatePriceTrends(economy) {\n  const trends = {};\n  \n  Object.entries(economy.markets).forEach(([category, goods]) => {\n    let increases = 0;\n    let decreases = 0;\n    \n    Object.values(goods).forEach(good => {\n      if (good.current_price > good.base_price) increases++;\n      if (good.current_price < good.base_price) decreases++;\n    });\n    \n    const total = increases + decreases;\n    if (total > 0) {\n      trends[category] = {\n        trend: increases > decreases ? 'rising' : decreases > increases ? 'falling' : 'stable',\n        momentum: Math.abs(increases - decreases) / total,\n        price_level: calculateAveragePriceLevel(goods)\n      };\n    }\n  });\n  \n  return trends;\n}\n\nfunction calculateAveragePriceLevel(goods) {\n  const prices = Object.values(goods).map(g => g.current_price / g.base_price);\n  const avgPriceLevel = prices.reduce((a, b) => a + b, 0) / prices.length;\n  \n  if (avgPriceLevel > 1.2) return 'high';\n  if (avgPriceLevel < 0.8) return 'low';\n  return 'normal';\n}\n\nfunction categorizeOpportunities(events) {\n  const types = {};\n  \n  events.filter(e => e.type === 'economic_opportunity').forEach(event => {\n    types[event.opportunity_type] = (types[event.opportunity_type] || 0) + 1;\n  });\n  \n  return types;\n}\n\nfunction identifyMarketGaps(economy) {\n  const gaps = [];\n  \n  Object.entries(economy.markets).forEach(([category, goods]) => {\n    Object.entries(goods).forEach(([goodName, goodData]) => {\n      const priceRatio = goodData.current_price / goodData.base_price;\n      const supplyDemandRatio = goodData.supply / goodData.demand;\n      \n      if (supplyDemandRatio > 1.5 && priceRatio > 1.2) {\n        gaps.push({\n          category,\n          good: goodName,\n          gap_type: 'overpriced_oversupply',\n          severity: priceRatio * supplyDemandRatio\n        });\n      } else if (supplyDemandRatio < 0.7 && priceRatio < 0.8) {\n        gaps.push({\n          category,\n          good: goodName,\n          gap_type: 'undersupplied_undervalued',\n          severity: (2 - priceRatio) * (2 - supplyDemandRatio)\n        });\n      }\n    });\n  });\n  \n  return gaps.sort((a, b) => b.severity - a.severity).slice(0, 5);\n}\n\nfunction analyzeFactorDurations(events) {\n  const durations = {};\n  \n  events.filter(e => e.type === 'external_economic_factor').forEach(event => {\n    durations[event.duration] = (durations[event.duration] || 0) + 1;\n  });\n  \n  return durations;\n}\n\nfunction extractPlayerHooks(events) {\n  return events\n    .filter(event => event.adventure_hooks && event.adventure_hooks.length > 0)\n    .map(event => ({\n      event_id: event.id,\n      event_type: event.type,\n      hooks: event.adventure_hooks,\n      urgency: event.time_sensitivity || 'medium',\n      potential_reward: event.potential_value || 0\n    }));\n}\n\nfunction identifyMediumTermOpportunities(events) {\n  return events\n    .filter(event => event.type === 'economic_opportunity' && event.time_sensitivity === 'medium')\n    .map(event => ({\n      opportunity_type: event.opportunity_type,\n      category: event.category,\n      potential_value: event.potential_value,\n      requirements: event.requirements\n    }));\n}\n\nfunction analyzeLongTermImplications(economy) {\n  const implications = [];\n  \n  // Price level analysis\n  const avgPriceLevel = calculateOverallPriceLevel(economy);\n  if (avgPriceLevel > 1.2) {\n    implications.push({\n      type: 'inflationary_pressure',\n      description: 'Sustained high prices may lead to economic slowdown',\n      timeline: '3-6 months',\n      severity: 'moderate'\n    });\n  }\n  \n  // Supply chain analysis\n  const supplyIssues = identifySupplyChainIssues(economy);\n  if (supplyIssues.length > 0) {\n    implications.push({\n      type: 'supply_chain_vulnerability',\n      description: 'Supply chain disruptions may create long-term shortages',\n      timeline: '2-4 months',\n      severity: 'high'\n    });\n  }\n  \n  return implications;\n}\n\nfunction calculateOverallPriceLevel(economy) {\n  const allPriceRatios = [];\n  \n  Object.values(economy.markets).forEach(goods => {\n    Object.values(goods).forEach(good => {\n      allPriceRatios.push(good.current_price / good.base_price);\n    });\n  });\n  \n  return allPriceRatios.reduce((a, b) => a + b, 0) / allPriceRatios.length;\n}\n\nfunction identifySupplyChainIssues(economy) {\n  const issues = [];\n  \n  Object.entries(economy.markets).forEach(([category, goods]) => {\n    Object.entries(goods).forEach(([goodName, goodData]) => {\n      if (goodData.supply < goodData.demand * 0.7) {\n        issues.push({ category, good: goodName, severity: (goodData.demand - goodData.supply) / goodData.demand });\n      }\n    });\n  });\n  \n  return issues;\n}\n\nfunction identifyInvestmentOpportunities(events) {\n  return events\n    .filter(event => event.type === 'economic_opportunity' && event.potential_value > 50)\n    .map(event => ({\n      opportunity_type: event.opportunity_type,\n      category: event.category,\n      investment_required: estimateInvestmentRequired(event),\n      expected_return: event.potential_value,\n      time_horizon: event.time_sensitivity === 'high' ? 'short' : 'medium',\n      risk_level: calculateRiskLevel(event)\n    }));\n}\n\nfunction estimateInvestmentRequired(event) {\n  const baseRequirements = {\n    'supply_shortage': 100,\n    'excess_supply': 50,\n    'trade_route_improvement': 200\n  };\n  \n  return baseRequirements[event.opportunity_type] || 75;\n}\n\nfunction calculateRiskLevel(event) {\n  if (event.severity > 0.7) return 'high';\n  if (event.severity > 0.4) return 'medium';\n  return 'low';\n}\n\nfunction calculateVolatilityCarryover(marketAnalysis) {\n  const volatilityMap = {\n    'stable': 0.8,\n    'normal': 1.0,\n    'volatile': 1.3,\n    'highly_volatile': 1.6,\n    'inflationary': 1.2,\n    'deflationary': 1.1\n  };\n  \n  return volatilityMap[marketAnalysis.overall_condition] || 1.0;\n}\n\nfunction calculateMomentumFactors(economicSummary) {\n  const priceChangeBalance = economicSummary.price_changes.increases - economicSummary.price_changes.decreases;\n  const opportunityRatio = economicSummary.opportunities.total / Math.max(economicSummary.total_events, 1);\n  \n  return {\n    price_momentum: Math.max(-1, Math.min(1, priceChangeBalance / 10)),\n    opportunity_momentum: Math.min(1, opportunityRatio * 2),\n    economic_health: economicSummary.external_factors.positive_impact > economicSummary.external_factors.negative_impact ? 'positive' : 'negative'\n  };\n}\n\nfunction determineRecommendedFocus(economicSummary, marketAnalysis) {\n  if (economicSummary.player_actionable_events > 3) {\n    return 'player_opportunities';\n  }\n  \n  if (marketAnalysis.overall_condition === 'volatile' || marketAnalysis.overall_condition === 'highly_volatile') {\n    return 'market_stabilization';\n  }\n  \n  if (economicSummary.opportunities.total > 2) {\n    return 'opportunity_exploitation';\n  }\n  \n  return 'routine_monitoring';\n}\n\nreturn [{ json: summary }];"
+      },
+      "id": "generate-economic-summary",
+      "name": "Generate Economic Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2440, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_WORLD_SHEET_ID }}",
+        "range": "Economic_Simulation!A:P",
+        "options": {}
+      },
+      "id": "log-economic-simulation",
+      "name": "Log Economic Simulation",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2660, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, simulation_id: $json.simulation_id, events_processed: $json.economic_overview.total_events, market_condition: $json.economic_overview.market_condition, player_opportunities: $json.player_relevance.immediate_hooks, price_trends: $json.price_analysis, narrative_summary: $json.narrative_summary, next_simulation_focus: $json.next_simulation_factors.recommended_focus } }}"
+      },
+      "id": "economic-response",
+      "name": "Economic Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2880, 300]
+    }
+  ],
+  "connections": {
+    "Economic Simulation Trigger": {
+      "main": [
+        [
+          {
+            "node": "Initialize Economic Simulation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Economic Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Initialize Economic Simulation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Economic Simulation": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Fetch Economic Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j - Fetch Economic Data": {
+      "main": [
+        [
+          {
+            "node": "Process Economic Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Economic Data": {
+      "main": [
+        [
+          {
+            "node": "Process Campaigns Individually",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Campaigns Individually": {
+      "main": [
+        [
+          {
+            "node": "Generate Economic Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Economic Events": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek - Generate Economic Narratives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek - Generate Economic Narratives": {
+      "main": [
+        [
+          {
+            "node": "Process Economic Narratives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Economic Narratives": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Update Economic State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j - Update Economic State": {
+      "main": [
+        [
+          {
+            "node": "Notify Campaign Economics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Campaign Economics": {
+      "main": [
+        [
+          {
+            "node": "Generate Economic Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Economic Summary": {
+      "main": [
+        [
+          {
+            "node": "Log Economic Simulation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Economic Simulation": {
+      "main": [
+        [
+          {
+            "node": "Economic Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicyDefaultOption": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T13:00:00.000Z",
+      "updatedAt": "2024-10-23T13:00:00.000Z",
+      "id": "economic-simulation",
+      "name": "Economic Simulation"
+    },
+    {
+      "createdAt": "2024-10-23T13:00:00.000Z",
+      "updatedAt": "2024-10-23T13:00:00.000Z",
+      "id": "world-building",
+      "name": "World Building"
+    }
+  ],
+  "triggerCount": 2,
+  "updatedAt": "2024-10-23T13:00:00.000Z",
+  "versionId": "1.0.0"
+}

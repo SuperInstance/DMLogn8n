@@ -1,0 +1,355 @@
+{
+  "name": "Portal Health Monitoring",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "value": 30
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule - Every 30s",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/portals",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-all-portals",
+      "name": "Get All Portals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get all portals from the previous node\nconst portals = $input.all()[0].json;\n\n// Process each portal to check its health\nconst portalChecks = portals.map(portal => {\n  return {\n    portal_id: portal.id,\n    portal_type: portal.type,\n    port: portal.port,\n    status: portal.status,\n    active_sessions: portal.active_sessions,\n    url: portal.url,\n    last_activity: portal.last_activity\n  };\n});\n\n// Return portal checks for processing\nreturn portalChecks.map(check => ({ json: check }));"
+      },
+      "id": "process-portals",
+      "name": "Process Portal List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:{{ $json.port }}/status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "check-individual-portal",
+      "name": "Check Individual Portal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyze portal health response\nconst portalData = $input.first().json;\nconst healthData = $input.last().json;\n\n// Determine health status\nlet healthStatus = 'healthy';\nlet issues = [];\n\n// Check if portal responded\nif (!healthData || healthData.error) {\n  healthStatus = 'unhealthy';\n  issues.push('No response from portal');\n} else {\n  // Check response time\n  const responseTime = healthData.response_time || 0;\n  if (responseTime > 5000) {\n    healthStatus = 'degraded';\n    issues.push(`Slow response: ${responseTime}ms`);\n  }\n  \n  // Check active connections\n  const activeConnections = healthData.active_connections || 0;\n  if (activeConnections === 0 && portalData.status === 'active') {\n    healthStatus = 'degraded';\n    issues.push('No active connections');\n  }\n  \n  // Check last activity\n  const lastActivity = new Date(healthData.last_activity || portalData.last_activity);\n  const now = new Date();\n  const inactiveMinutes = (now - lastActivity) / (1000 * 60);\n  \n  if (inactiveMinutes > 5) {\n    healthStatus = 'degraded';\n    issues.push(`Inactive for ${Math.round(inactiveMinutes)} minutes`);\n  }\n}\n\nreturn {\n  json: {\n    portal_id: portalData.portal_id,\n    portal_type: portalData.portal_type,\n    port: portalData.port,\n    health_status: healthStatus,\n    issues: issues,\n    checked_at: new Date().toISOString(),\n    response_data: healthData\n  }\n};"
+      },
+      "id": "analyze-health",
+      "name": "Analyze Health Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "unhealthy-condition",
+              "leftValue": "={{ $json.health_status }}",
+              "rightValue": "unhealthy",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-unhealthy",
+      "name": "Check Unhealthy",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/portals/{{ $json.portal_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "httpMethod": "DELETE",
+        "options": {}
+      },
+      "id": "restart-portal",
+      "name": "Restart Portal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/bridge/broadcast",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event_type",
+              "value": "portal_health_alert"
+            },
+            {
+              "name": "data",
+              "value": "={{ { portal_id: $json.portal_id, portal_type: $json.portal_type, status: $json.health_status, issues: $json.issues } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-alert",
+      "name": "Send Health Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1780, 200]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "portal_id",
+              "value": "={{ $json.portal_id }}"
+            },
+            {
+              "name": "portal_type",
+              "value": "={{ $json.portal_type }}"
+            },
+            {
+              "name": "health_status",
+              "value": "={{ $json.health_status }}"
+            },
+            {
+              "name": "issues",
+              "value": "={{ $json.issues.join(', ') }}"
+            },
+            {
+              "name": "checked_at",
+              "value": "={{ $json.checked_at }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-health-check",
+      "name": "Log Health Check",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1340, 420]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "degraded-condition",
+              "leftValue": "={{ $json.health_status }}",
+              "rightValue": "degraded",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-degraded",
+      "name": "Check Degraded",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1560, 420]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/bridge/broadcast",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event_type",
+              "value": "portal_degraded_warning"
+            },
+            {
+              "name": "data",
+              "value": "={{ { portal_id: $json.portal_id, portal_type: $json.portal_type, issues: $json.issues } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-warning",
+      "name": "Send Degraded Warning",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1780, 420]
+    }
+  ],
+  "connections": {
+    "Schedule - Every 30s": {
+      "main": [
+        [
+          {
+            "node": "Get All Portals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Portals": {
+      "main": [
+        [
+          {
+            "node": "Process Portal List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Portal List": {
+      "main": [
+        [
+          {
+            "node": "Check Individual Portal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Individual Portal": {
+      "main": [
+        [
+          {
+            "node": "Analyze Health Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Health Status": {
+      "main": [
+        [
+          {
+            "node": "Check Unhealthy",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Health Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Unhealthy": {
+      "main": [
+        [
+          {
+            "node": "Restart Portal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restart Portal": {
+      "main": [
+        [
+          {
+            "node": "Send Health Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Health Check": {
+      "main": [
+        [
+          {
+            "node": "Check Degraded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Degraded": {
+      "main": [
+        [
+          {
+            "node": "Send Degraded Warning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1"
+}

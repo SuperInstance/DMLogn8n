@@ -1,0 +1,599 @@
+# Staging Environment Configuration for DMLogn8n Multi-Agent Platform
+# This configuration is optimized for staging/pre-production testing
+
+environment: staging
+debug: false
+log_level: INFO
+
+# Database Configuration
+database:
+  databases:
+    # Main application database (PostgreSQL for staging)
+    main:
+      name: main
+      type: postgresql
+      credentials:
+        username: "${DB_USERNAME:dmlogn8n_staging}"
+        password: "${DB_PASSWORD}"
+        host: "${DB_HOST:localhost}"
+        port: ${DB_PORT:5432}
+        database: "${DB_NAME:dmlogn8n_staging}"
+      pool:
+        min_connections: 5
+        max_connections: 20
+        connection_timeout: 10
+        idle_timeout: 600
+        max_lifetime: 3600
+        health_check_interval: 30
+      ssl:
+        ssl_mode: prefer
+        ssl_ca: "${DB_SSL_CA}"
+      retry:
+        max_retries: 3
+        retry_delay: 1.0
+        backoff_multiplier: 2.0
+        max_retry_delay: 30.0
+      enabled: true
+      read_only: false
+      options:
+        application_name: dmlogn8n_staging
+        connect_timeout: 10
+        statement_timeout: 30000
+
+    # Redis cache for staging
+    cache:
+      name: cache
+      type: redis
+      credentials:
+        username: "${REDIS_USERNAME:}"
+        password: "${REDIS_PASSWORD}"
+        host: "${REDIS_HOST:localhost}"
+        port: ${REDIS_PORT:6379}
+        database: "1"
+      pool:
+        min_connections: 2
+        max_connections: 15
+        connection_timeout: 5
+        idle_timeout: 300
+        health_check_interval: 30
+      enabled: true
+      options:
+        decode_responses: true
+        socket_connect_timeout: 5
+        socket_timeout: 5
+        max_connections: 15
+
+    # Read replica for analytics
+    analytics:
+      name: analytics
+      type: postgresql
+      credentials:
+        username: "${DB_READ_USERNAME:dmlogn8n_read}"
+        password: "${DB_READ_PASSWORD}"
+        host: "${DB_READ_HOST:localhost}"
+        port: ${DB_READ_PORT:5432}
+        database: "${DB_NAME:dmlogn8n_staging}"
+      pool:
+        min_connections: 2
+        max_connections: 10
+        connection_timeout: 15
+        idle_timeout: 300
+        max_lifetime: 3600
+      ssl:
+        ssl_mode: prefer
+        ssl_ca: "${DB_SSL_CA}"
+      enabled: true
+      read_only: true
+      options:
+        application_name: dmlogn8n_staging_readonly
+
+  default_database: main
+
+  # Connection clusters for high availability
+  clusters:
+    main_cluster:
+      name: main_cluster
+      primary: main
+      replicas: [analytics]
+      load_balancing_strategy: least_cost
+      failover_timeout: 15
+      health_check_interval: 10
+
+    cache_cluster:
+      name: cache_cluster
+      primary: cache
+      replicas: []
+      load_balancing_strategy: round_robin
+      failover_timeout: 10
+      health_check_interval: 15
+
+# AI Models Configuration
+ai_models:
+  models:
+    # OpenAI GPT-4 for staging
+    gpt4_staging:
+      name: gpt4_staging
+      provider: openai
+      model_id: gpt-4-turbo-preview
+      model_type: chat
+      capabilities:
+        - text_generation
+        - code_generation
+        - reasoning
+        - function_calling
+        - vision
+      credentials:
+        api_key: "${OPENAI_API_KEY}"
+        organization_id: "${OPENAI_ORG_ID}"
+      parameters:
+        temperature: 0.7
+        max_tokens: 4096
+        top_p: 1.0
+        frequency_penalty: 0.0
+        presence_penalty: 0.0
+        stream: false
+      rate_limiting:
+        requests_per_minute: 300
+        tokens_per_minute: 100000
+        concurrent_requests: 5
+        retry_after_quota: true
+      caching:
+        enabled: true
+        ttl_seconds: 3600
+        max_cache_size: 1000
+        cache_similar_inputs: true
+        similarity_threshold: 0.95
+      enabled: true
+      fallback_models: ["claude3_staging"]
+      priority: 10
+      cost_per_input_token: 0.01
+      cost_per_output_token: 0.03
+      quality_score: 9.0
+      latency_target_ms: 2000
+      tags: ["staging", "chat", "reasoning", "vision"]
+
+    # Claude 3 for staging
+    claude3_staging:
+      name: claude3_staging
+      provider: anthropic
+      model_id: claude-3-sonnet-20240229
+      model_type: chat
+      capabilities:
+        - text_generation
+        - code_generation
+        - reasoning
+        - multimodal
+        - vision
+      credentials:
+        api_key: "${ANTHROPIC_API_KEY}"
+      parameters:
+        temperature: 0.7
+        max_tokens: 4096
+        top_p: 1.0
+      rate_limiting:
+        requests_per_minute: 200
+        tokens_per_minute: 80000
+        concurrent_requests: 5
+      caching:
+        enabled: true
+        ttl_seconds: 3600
+        max_cache_size: 1000
+      enabled: true
+      fallback_models: []
+      priority: 9
+      cost_per_input_token: 0.003
+      cost_per_output_token: 0.015
+      quality_score: 9.2
+      latency_target_ms: 3000
+      tags: ["staging", "chat", "multimodal", "vision"]
+
+    # GPT-3.5 Turbo for high-volume tasks
+    gpt35_turbo_staging:
+      name: gpt35_turbo_staging
+      provider: openai
+      model_id: gpt-3.5-turbo-16k
+      model_type: chat
+      capabilities:
+        - text_generation
+        - code_generation
+        - reasoning
+      credentials:
+        api_key: "${OPENAI_API_KEY}"
+        organization_id: "${OPENAI_ORG_ID}"
+      parameters:
+        temperature: 0.7
+        max_tokens: 4096
+        top_p: 1.0
+      rate_limiting:
+        requests_per_minute: 500
+        tokens_per_minute: 150000
+        concurrent_requests: 10
+      caching:
+        enabled: true
+        ttl_seconds: 1800
+        max_cache_size: 2000
+      enabled: true
+      fallback_models: []
+      priority: 7
+      cost_per_input_token: 0.0015
+      cost_per_output_token: 0.002
+      quality_score: 8.0
+      latency_target_ms: 1500
+      tags: ["staging", "chat", "high-volume"]
+
+    # Text embedding model
+    text_embedding_staging:
+      name: text_embedding_staging
+      provider: openai
+      model_id: text-embedding-ada-002
+      model_type: embedding
+      capabilities:
+        - text_generation
+      credentials:
+        api_key: "${OPENAI_API_KEY}"
+      parameters:
+        temperature: 0.0
+      rate_limiting:
+        requests_per_minute: 1500
+        tokens_per_minute: 500000
+      caching:
+        enabled: true
+        ttl_seconds: 7200
+        max_cache_size: 5000
+      enabled: true
+      priority: 6
+      cost_per_input_token: 0.0001
+      quality_score: 8.5
+      latency_target_ms: 500
+      tags: ["staging", "embedding"]
+
+    # DALL-E 3 for image generation
+    dall_e3_staging:
+      name: dall_e3_staging
+      provider: openai
+      model_id: dall-e-3
+      model_type: image_generation
+      capabilities:
+        - image_generation
+      credentials:
+        api_key: "${OPENAI_API_KEY}"
+      parameters:
+        image_quality: standard
+        image_size: 1024x1024
+      rate_limiting:
+        requests_per_minute: 10
+        concurrent_requests: 2
+      caching:
+        enabled: true
+        ttl_seconds: 86400  # 24 hours
+        max_cache_size: 100
+      enabled: true
+      priority: 4
+      cost_per_output_token: 0.04  # Per image
+      quality_score: 9.0
+      latency_target_ms: 10000
+      tags: ["staging", "image-generation"]
+
+  pools:
+    chat_models:
+      name: chat_models
+      models: ["gpt4_staging", "claude3_staging", "gpt35_turbo_staging"]
+      strategy: least_cost
+      health_check_interval: 60
+      failure_threshold: 3
+      recovery_threshold: 2
+
+    high_performance_chat:
+      name: high_performance_chat
+      models: ["gpt35_turbo_staging"]
+      strategy: fastest
+      health_check_interval: 30
+      failure_threshold: 2
+      recovery_threshold: 1
+
+  default_models:
+    chat: gpt4_staging
+    embedding: text_embedding_staging
+    image_generation: dall_e3_staging
+
+  global_settings:
+    default_timeout: 60
+    max_retries: 3
+    retry_delay: 1.0
+    circuit_breaker_threshold: 5
+    circuit_breaker_timeout: 60
+
+# Monitoring Configuration
+monitoring:
+  enabled: true
+  backend: prometheus
+  namespace: dmlogn8n
+  service_name: dmlogn8n_staging
+  version: 1.0.0
+  environment: staging
+  sample_rate: 1.0  # Full sampling in staging
+
+  prometheus:
+    port: 9090
+    metrics_path: /metrics
+    job_name: dmlogn8n_staging
+    instance_name: "${HOSTNAME:staging-instance}"
+
+  logging:
+    level: INFO
+    format: json
+    console_output: false
+    file_path: /var/log/dmlogn8n/staging.log
+    max_file_size: 500MB
+    max_files: 20
+    compression: gzip
+    structured_logging: true
+    include_timestamps: true
+    include_hostname: true
+    include_process_id: true
+    async_logging: true
+    buffer_size: 2048
+    flush_interval: 5
+
+    loggers:
+      "":
+        level: INFO
+        handlers: [file, console_error]
+
+      "uvicorn":
+        level: INFO
+        handlers: [file]
+
+      "sqlalchemy":
+        level: WARNING
+        handlers: [file]
+
+      "httpx":
+        level: WARNING
+        handlers: [file]
+
+    handlers:
+      file:
+        class: RotatingFileHandler
+        level: INFO
+        formatter: json
+        filename: /var/log/dmlogn8n/staging.log
+        maxBytes: 524288000  # 500MB
+        backupCount: 20
+
+      console_error:
+        class: StreamHandler
+        level: ERROR
+        formatter: json
+        stream: ext://sys.stderr
+
+    formatters:
+      json:
+        class: pythonjsonlogger.jsonlogger.JsonFormatter
+        format: "%(asctime)s %(name)s %(levelname)s %(message)s"
+
+  health_check:
+    enabled: true
+    port: 8080
+    path: /health
+    check_interval: 15
+    timeout: 3
+    failure_threshold: 2
+    success_threshold: 2
+
+    checks:
+      database:
+        type: database
+        database: main
+        timeout: 3
+
+      database_readonly:
+        type: database
+        database: analytics
+        timeout: 5
+
+      redis:
+        type: endpoint
+        endpoint: "http://localhost:6379"
+        timeout: 2
+
+      disk_space:
+        type: command
+        command: "df -h / | tail -1 | awk '{print $5}' | sed 's/%//'"
+
+      memory_usage:
+        type: command
+        command: "free | grep Mem | awk '{printf \"%.2f\", $3/$2 * 100.0}'"
+
+  metrics:
+    request_count:
+      name: http_requests_total
+      type: counter
+      description: Total number of HTTP requests
+      labels:
+        method: ""
+        status: ""
+        endpoint: ""
+
+    request_duration:
+      name: http_request_duration_seconds
+      type: histogram
+      description: HTTP request duration in seconds
+      buckets: [0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0]
+
+    active_connections:
+      name: active_connections
+      type: gauge
+      description: Number of active connections
+      labels:
+        type: ""
+
+    model_usage:
+      name: model_usage_total
+      type: counter
+      description: Total number of model API calls
+      labels:
+        model: ""
+        provider: ""
+        type: ""
+        status: ""
+
+    model_tokens:
+      name: model_tokens_total
+      type: counter
+      description: Total number of tokens processed
+      labels:
+        model: ""
+        provider: ""
+        type: ""
+
+    model_cost:
+      name: model_cost_usd
+      type: counter
+      description: Total cost in USD for model usage
+      labels:
+        model: ""
+        provider: ""
+
+    database_connections:
+      name: database_connections_active
+      type: gauge
+      description: Active database connections
+      labels:
+        database: ""
+
+  alert_rules:
+    high_error_rate:
+      name: high_error_rate
+      description: High error rate detected
+      condition: 'rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05'
+      severity: warning
+      for_duration: 2m
+      labels:
+        service: dmlogn8n_staging
+        environment: staging
+      annotations:
+        summary: "High error rate on dmlogn8n staging"
+        description: "Error rate is above 5% for the last 2 minutes"
+
+    model_api_errors:
+      name: model_api_errors
+      description: Model API errors detected
+      condition: 'rate(model_usage_total{status="error"}[5m]) > 10'
+      severity: critical
+      for_duration: 1m
+      labels:
+        service: dmlogn8n_staging
+        environment: staging
+      annotations:
+        summary: "Model API errors are high"
+        description: "More than 10 model API errors per minute"
+
+    database_connections_high:
+      name: database_connections_high
+      description: Database connection usage is high
+      condition: 'database_connections_active / database_connections_max > 0.8'
+      severity: warning
+      for_duration: 5m
+      labels:
+        service: dmlogn8n_staging
+        environment: staging
+      annotations:
+        summary: "High database connection usage"
+        description: "Database connection usage is above 80%"
+
+    model_cost_spike:
+      name: model_cost_spike
+      description: Unusual spike in model costs
+      condition: 'increase(model_cost_usd[1h]) > 50'
+      severity: warning
+      for_duration: 0m
+      labels:
+        service: dmlogn8n_staging
+        environment: staging
+      annotations:
+        summary: "Model cost spike detected"
+        description: "Model costs increased by more than $50 in the last hour"
+
+  notification_channels:
+    slack:
+      name: slack
+      type: webhook
+      enabled: true
+      settings:
+        url: "${SLACK_WEBHOOK_URL}"
+        method: POST
+        headers:
+          Content-Type: application/json
+      rate_limit:
+        max_per_hour: 50
+
+    email:
+      name: email
+      type: email
+      enabled: true
+      settings:
+        smtp_host: "${SMTP_HOST}"
+        smtp_port: ${SMTP_PORT:587}
+        username: "${SMTP_USERNAME}"
+        password: "${SMTP_PASSWORD}"
+        from_address: "${SMTP_FROM:noreply@dmlogn8n.com}"
+        to_addresses: ["alerts@dmlogn8n.com"]
+      rate_limit:
+        max_per_hour: 20
+
+  performance_monitoring: true
+  trace_collection: true
+  error_tracking: true
+
+# Application Settings
+app:
+  name: DMLogn8n Multi-Agent Platform
+  version: 1.0.0
+  description: Staging instance of DMLogn8n multi-agent platform
+
+  # Server settings
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  reload: false
+
+  # Security settings
+  secret_key: "${SECRET_KEY}"
+  cors_origins:
+    - "https://staging.dmlogn8n.com"
+    - "https://admin-staging.dmlogn8n.com"
+  cors_methods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - OPTIONS
+  cors_headers:
+    - "Content-Type"
+    - "Authorization"
+    - "X-API-Key"
+
+  # Session settings
+  session_timeout: 3600
+  max_concurrent_sessions: 100
+
+  # Rate limiting
+  rate_limit:
+    enabled: true
+    requests_per_minute: 1000
+    burst_size: 100
+
+# Feature Flags
+features:
+  enable_config_watcher: true
+  enable_metrics: true
+  enable_health_checks: true
+  enable_model_caching: true
+  enable_rate_limiting: true
+  enable_secret_management: true
+  enable_api_key_rotation: true
+  enable_audit_logging: true
+  enable_performance_profiling: true
+  enable_circuit_breaker: true
+  enable_graceful_shutdown: true

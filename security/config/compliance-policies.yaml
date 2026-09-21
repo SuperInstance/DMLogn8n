@@ -1,0 +1,661 @@
+# Security Compliance Policies Configuration
+# DMLogn8n Security System
+
+# General Compliance Settings
+compliance:
+  enabled: true
+  strict_mode: true
+  auto_remediation: false
+  reporting_enabled: true
+  audit_trail: true
+
+# GDPR Compliance
+gdpr:
+  enabled: true
+  version: "2018"
+
+  # Data Protection Principles
+  principles:
+    lawfulness: true
+    fairness: true
+    transparency: true
+    purpose_limitation: true
+    data_minimization: true
+    accuracy: true
+    storage_limitation: true
+    integrity_confidentiality: true
+    accountability: true
+
+  # Individual Rights
+  rights:
+    right_to_information: true
+    right_of_access: true
+    right_to_rectification: true
+    right_to_erasure: true
+    right_to_restrict_processing: true
+    right_to_data_portability: true
+    right_to_object: true
+    rights_related_to_automated_decisionmaking: true
+
+  # Consent Management
+  consent:
+    explicit_consent_required: true
+    granular_consent: true
+    easily_withdrawable: true
+    consent_records: true
+    consent_expiry_days: 730  # 2 years
+
+  # Data Protection Officer (DPO)
+  dpo:
+    required: false
+    contact_info: ""
+    reporting_line: ""
+
+  # Data Breach Notification
+  breach_notification:
+    enabled: true
+    notification_threshold: 72  # hours
+    supervisory_authority_notification: true
+    individual_notification: true
+    high_risk_notification: true
+
+  # Data Retention
+  data_retention:
+    personal_data_days: 2555  # 7 years
+    sensitive_data_days: 1825  # 5 years
+    financial_data_days: 3650  # 10 years
+    automatic_deletion: true
+
+  # International Data Transfers
+  international_transfers:
+    enabled: true
+    adequacy_decisions: true
+    standard_contractual_clauses: true
+    binding_corporate_rules: false
+
+# SOC 2 Compliance
+soc2:
+  enabled: true
+  report_type: "Type II"  # Type I, Type II
+  trust_services_criteria:
+    security: true
+    availability: true
+    processing_integrity: true
+    confidentiality: true
+    privacy: true
+
+  # Security Criteria
+  security:
+    access_controls: true
+    encryption: true
+    network_security: true
+    vulnerability_management: true
+    incident_response: true
+    security_monitoring: true
+
+  # Availability Criteria
+  availability:
+    uptime_target: 99.9  # percentage
+    disaster_recovery: true
+    business_continuity: true
+    performance_monitoring: true
+
+  # Processing Integrity
+  processing_integrity:
+    data_validation: true
+    processing_controls: true
+    output_validation: true
+    change_management: true
+
+  # Confidentiality
+  confidentiality:
+    data_classification: true
+    access_restrictions: true
+    encryption_at_rest: true
+    encryption_in_transit: true
+
+  # Privacy
+  privacy:
+    privacy_policy: true
+    consent_management: true
+    data_minimization: true
+    user_rights: true
+
+# HIPAA Compliance
+hipaa:
+  enabled: false
+
+  # Administrative Safeguards
+  administrative_safeguards:
+    security_officer: true
+    workforce_security: true
+    information_access_management: true
+    workforce_training: true
+    contingency_planning: true
+    evaluation: true
+
+  # Physical Safeguards
+  physical_safeguards:
+    facility_access: true
+    workstation_security: true
+    device_security: true
+    media_controls: true
+
+  # Technical Safeguards
+  technical_safeguards:
+    access_control: true
+    audit_controls: true
+    integrity_controls: true
+    transmission_security: true
+    encryption: true
+
+  # Breach Notification Rule
+  breach_notification:
+    risk_assessment: true
+    notification_threshold: 60  # days
+    individual_notification: true
+    hhs_notification: true
+    media_notification: true
+
+  # Business Associate Agreements
+  baa:
+    required: true
+    template_file: ""
+    signed_agreements: true
+    periodic_review: true
+
+# PCI DSS Compliance
+pci_dss:
+  enabled: false
+  version: "4.0"
+  level: 1  # 1, 2, 3, 4
+
+  # Requirement 1: Install and maintain network security controls
+  network_security:
+    firewall_configuration: true
+    secure_network_architecture: true
+    secure_transmission: true
+
+  # Requirement 2: Apply secure configurations to all system components
+  secure_configuration:
+    vendor_defaults_changed: true
+    encryption_protocols: true
+    secure_systems_development: true
+
+  # Requirement 3: Protect stored account data
+  data_protection:
+    encryption_at_rest: true
+    key_management: true
+    cardholder_data_disposal: true
+    sensitive_data_minimization: true
+
+  # Requirement 4: Protect cardholder data with strong cryptography
+  cryptography:
+    encryption_in_transit: true
+    strong_cryptography: true
+    secure_key_management: true
+    secure_protocols: true
+
+  # Requirement 5: Protect all systems and networks from malicious software
+  malware_protection:
+    anti_virus_software: true
+    malware_scanning: true
+    automatic_updates: true
+
+  # Requirement 6: Develop and maintain secure systems and software
+  secure_development:
+    secure_development_lifecycle: true
+    vulnerability_testing: true
+    code_review: true
+    change_management: true
+
+  # Requirement 7: Restrict access to cardholder data
+  access_control:
+    need_to_know: true
+    unique_identifiers: true
+    privileged_access: true
+    physical_access: true
+
+  # Requirement 8: Identify users and authenticate access
+  authentication:
+    strong_authentication: true
+    multi_factor_authentication: true
+    secure_passwords: true
+    session_management: true
+
+  # Requirement 9: Restrict physical access to cardholder data
+  physical_access:
+    facility_access: true
+    media_access: true
+    visitor_logs: true
+    media_destruction: true
+
+  # Requirement 10: Log and monitor all access to network resources
+  monitoring:
+    audit_logging: true
+    log_review: true
+    security_monitoring: true
+    alert_systems: true
+
+  # Requirement 11: Test security systems and processes regularly
+  testing:
+    vulnerability_scanning: true
+    penetration_testing: true
+    intrusion_detection: true
+    incident_response_testing: true
+
+  # Requirement 12: Support information security with organizational policies
+  policies:
+    security_policy: true
+    risk_assessment: true
+    incident_response_plan: true
+    security_awareness: true
+
+# ISO 27001 Compliance
+iso27001:
+  enabled: true
+  version: "2022"
+
+  # Information Security Policies
+  policies:
+    information_security_policy: true
+    scope_of_isms: true
+    risk_assessment: true
+    risk_treatment: true
+
+  # Organization of Information Security
+  organization:
+    governance: true
+    roles_and_responsibilities: true
+    segregation_of_duties: true
+    contact_with_authorities: true
+
+  # People Security
+  people_security:
+    screening: true
+    terms_and_conditions: true
+    information_security_awareness: true
+    disciplinary_process: true
+
+  # Physical Security
+  physical_security:
+    secure_areas: true
+    equipment_security: true
+    media_handling: true
+    clear_desk_policy: true
+
+  # Technology Security
+  technology_security:
+    user_endpoint_devices: true
+    access_control: true
+    cryptography: true
+    operations_security: true
+    communications_security: true
+    system_development: true
+    supplier_relationships: true
+    incident_management: true
+    business_continuity: true
+    compliance: true
+
+# NIST Cybersecurity Framework
+nist_csf:
+  enabled: true
+  version: "1.1"
+
+  # Identify
+  identify:
+    asset_management: true
+    business_environment: true
+    governance: true
+    risk_assessment: true
+    risk_management_strategy: true
+    supply_chain_risk_management: true
+
+  # Protect
+  protect:
+    identity_management: true
+    access_control: true
+    awareness_and_training: true
+    data_security: true
+    information_protection_processes: true
+    protective_technology: true
+
+  # Detect
+  detect:
+    anomalies_and_events: true
+    security_continuous_monitoring: true
+    detection_processes: true
+
+  # Respond
+  respond:
+    response_planning: true
+    communications: true
+    analysis: true
+    mitigation: true
+    improvements: true
+
+  # Recover
+  recover:
+    recovery_planning: true
+    improvements: true
+    communications: true
+
+# OWASP Top 10 Compliance
+owasp_top10:
+  enabled: true
+  version: "2021"
+
+  # A01: Broken Access Control
+  access_control:
+    authorization_checks: true
+    privilege_escalation: true
+    metadata_manipulation: true
+    cors_misconfiguration: false
+
+  # A02: Cryptographic Failures
+  cryptography:
+    encryption_at_rest: true
+    encryption_in_transit: true
+    key_management: true
+    secure_algorithms: true
+
+  # A03: Injection
+  injection:
+    sql_injection_protection: true
+    nosql_injection_protection: true
+    command_injection_protection: true
+    xss_protection: true
+
+  # A04: Insecure Design
+  secure_design:
+    threat_modeling: true
+    secure_design_patterns: true
+    business_logic_validation: true
+
+  # A05: Security Misconfiguration
+  configuration:
+    secure_defaults: true
+    minimal_exposure: true
+    security_headers: true
+    error_handling: true
+
+  # A06: Vulnerable and Outdated Components
+  components:
+    dependency_scanning: true
+    vulnerability_management: true
+    update_management: true
+
+  # A07: Identification and Authentication Failures
+  authentication:
+    strong_passwords: true
+    multi_factor_authentication: true
+    session_management: true
+    credential_management: true
+
+  # A08: Software and Data Integrity Failures
+  integrity:
+    code_signing: true
+    secure_updates: true
+    ci_cd_security: true
+
+  # A09: Security Logging and Monitoring Failures
+  logging:
+    audit_logging: true
+    log_protection: true
+    monitoring: true
+    incident_response: true
+
+  # A10: Server-Side Request Forgery (SSRF)
+  ssrf:
+    input_validation: true
+    allowlist_validation: true
+    network_segmentation: true
+
+# Data Classification
+data_classification:
+  enabled: true
+
+  # Classification Levels
+  levels:
+    public:
+      description: "Public information that can be freely shared"
+      encryption_required: false
+      access_logging: false
+      retention_days: 3650
+
+    internal:
+      description: "Internal company information"
+      encryption_required: true
+      access_logging: true
+      retention_days: 2555
+
+    confidential:
+      description: "Confidential business information"
+      encryption_required: true
+      access_logging: true
+      retention_days: 1825
+
+    restricted:
+      description: "Highly sensitive or regulated information"
+      encryption_required: true
+      access_logging: true
+      retention_days: 3650
+
+  # Classification Rules
+  rules:
+    - name: "PII Classification"
+      patterns:
+        - "ssn"
+        - "social_security"
+        - "credit_card"
+        - "bank_account"
+        - "passport"
+      classification: "restricted"
+
+    - name: "Health Information"
+      patterns:
+        - "medical_record"
+        - "health_info"
+        - "diagnosis"
+        - "treatment"
+      classification: "restricted"
+
+    - name: "Financial Information"
+      patterns:
+        - "salary"
+        - "compensation"
+        - "financial_report"
+        - "revenue"
+      classification: "confidential"
+
+# Security Controls
+security_controls:
+  # Access Controls
+  access_controls:
+    principle_of_least_privilege: true
+    segregation_of_duties: true
+    job_function_based_access: true
+    periodic_access_review: true
+    privileged_access_management: true
+
+  # Encryption Controls
+  encryption:
+    encryption_at_rest: true
+    encryption_in_transit: true
+    key_rotation_days: 90
+    encryption_algorithms:
+      - "AES-256-GCM"
+      - "ChaCha20-Poly1305"
+    key_management: "HSM"
+
+  # Network Security
+  network_security:
+    firewall_configuration: true
+    network_segmentation: true
+    intrusion_detection: true
+    intrusion_prevention: true
+    vpn_access: true
+
+  # System Security
+  system_security:
+    secure_configuration: true
+    vulnerability_management: true
+    patch_management: true
+    malware_protection: true
+
+  # Application Security
+  application_security:
+    secure_coding_practices: true
+    code_review: true
+    static_analysis: true
+    dynamic_analysis: true
+    penetration_testing: true
+
+# Audit and Monitoring
+audit_monitoring:
+  enabled: true
+
+  # Event Types to Monitor
+  event_types:
+    - "authentication.success"
+    - "authentication.failure"
+    - "authorization.success"
+    - "authorization.failure"
+    - "data.access"
+    - "data.modification"
+    - "system.configuration"
+    - "privilege.escalation"
+    - "security.policy.violation"
+
+  # Log Retention
+  log_retention:
+    audit_logs_days: 2555  # 7 years
+    security_logs_days: 1825  # 5 years
+    access_logs_days: 1095  # 3 years
+    system_logs_days: 365   # 1 year
+
+  # Log Protection
+  log_protection:
+    encryption_at_rest: true
+    integrity_protection: true
+    tamper_protection: true
+    backup_logs: true
+
+  # Real-time Monitoring
+  real_time_monitoring:
+    enabled: true
+    alert_thresholds:
+      failed_login_attempts: 5
+      privileged_access_usage: 10
+      data_export_volume: 1073741824  # 1GB
+      security_policy_violations: 1
+
+# Reporting and Documentation
+reporting:
+  enabled: true
+
+  # Automated Reports
+  automated_reports:
+    compliance_status:
+      enabled: true
+      frequency: "weekly"
+      recipients: ["security-team@company.com"]
+      format: "pdf"
+
+    security_metrics:
+      enabled: true
+      frequency: "monthly"
+      recipients: ["management@company.com"]
+      format: "dashboard"
+
+    audit_summary:
+      enabled: true
+      frequency: "quarterly"
+      recipients: ["audit-committee@company.com"]
+      format: "report"
+
+  # Documentation Requirements
+  documentation:
+    security_policies: true
+    procedures: true
+    guidelines: true
+    standards: true
+    training_materials: true
+    incident_response_plans: true
+    business_continuity_plans: true
+
+# Training and Awareness
+training:
+  enabled: true
+
+  # Security Awareness Training
+  security_awareness:
+    new_hire_training: true
+    annual_training: true
+    phishing_simulation: true
+    security_newsletter: true
+
+  # Role-Specific Training
+  role_specific_training:
+    developers: true
+    administrators: true
+    managers: true
+    executives: true
+
+  # Training Frequency
+  training_frequency:
+    new_hire_days: 30
+    annual_training_months: 12
+    refresher_training_months: 6
+    phishing_simulation_months: 3
+
+# Incident Response
+incident_response:
+  enabled: true
+
+  # Response Team
+  response_team:
+    security_team: true
+    legal_team: true
+    communications_team: true
+    management_team: true
+
+  # Response Procedures
+  procedures:
+    incident_identification: true
+    incident_containment: true
+    incident_eradication: true
+    incident_recovery: true
+    post_incident_review: true
+
+  # Notification Requirements
+  notification:
+    internal_notification_hours: 1
+    regulatory_notification_hours: 72
+    customer_notification_hours: 72
+    law_enforcement_notification: false
+
+# Third-Party Risk Management
+third_party_risk:
+  enabled: true
+
+  # Vendor Assessment
+  vendor_assessment:
+    security_assessment: true
+    compliance_assessment: true
+    due_diligence: true
+    ongoing_monitoring: true
+
+  # Contract Requirements
+  contract_requirements:
+    security_clauses: true
+    compliance_clauses: true
+    audit_rights: true
+    data_protection: true
+
+  # Risk Scoring
+  risk_scoring:
+    critical_vendors: true
+    high_risk_vendors: true
+    medium_risk_vendors: true
+    low_risk_vendors: true

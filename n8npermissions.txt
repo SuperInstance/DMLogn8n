@@ -1,0 +1,132 @@
+n8npermissions
+
+
+Account API tokens
+Manage account API tokens. User API tokens are found in the 'My Profile' section.
+
+
+Not all APIs are guaranteed to support usage of Account API Tokens. Supported APIs are listed in the developer documentation.
+ Back to view all tokens
+Create Custom Token
+Token name
+Give your API token a descriptive name.
+n8n
+Permissions
+Select edit or read permissions to apply to your accounts or websites for this token.
+Resources
+Account
+Permissions
+D1
+Edit
+Resources
+Account
+Permissions
+Agents Gateway
+Edit
+Resources
+Account
+Permissions
+AI Gateway
+Edit
+Resources
+Account
+Permissions
+AI Search
+Edit
+Resources
+Account
+Permissions
+API Gateway
+Edit
+Resources
+Account
+Permissions
+Vectorize
+Edit
+Resources
+Account
+Permissions
+Containers
+Edit
+Resources
+Account
+Permissions
+Workers Agents Configuration
+Edit
+Resources
+Account
+Permissions
+Workers AI
+Edit
+Resources
+Account
+Permissions
+Workers Builds Configuration
+Edit
+Resources
+Account
+Permissions
+Workers KV Storage
+Edit
+Resources
+Account
+Permissions
+Workers Observability
+Edit
+Resources
+Account
+Permissions
+Workers Pipelines
+Edit
+Resources
+Account
+Permissions
+Workers R2 Data Catalog
+Edit
+Resources
+Account
+Permissions
+Workers R2 Storage
+Edit
+Resources
+Account
+Permissions
+Workers Scripts
+Select...
+Choose a permission
+Resources
+Account
+Permissions
+Workers Tail
+Select...
+Choose a permission
+
+Add more
+Client IP Address Filtering
+Select IP addresses or ranges of IP addresses to filter. This filter limits the client IP addresses that can use the API token with Cloudflare. By default, this token will apply to all addresses.
+Operator
+Value
+
+Select item...
+e.g. 192.168.1.88
+
+Add more
+TTL
+
+
+This API token will affect the below accounts and zones, along with their respective permissions
+
+
+Casey.digennaro@gmail.com's Account - D1:Edit, Agents Gateway:Edit, AI Gateway:Edit, AI Search:Edit, API Gateway:Edit, Vectorize:Edit, Containers:Edit, Workers Agents Configuration:Edit, Workers AI:Edit, Workers Builds Configuration:Edit, Workers KV Storage:Edit, Workers Observability:Edit, Workers Pipelines:Edit, Workers R2 Data Catalog:Edit, Workers R2 Storage:Edit
+TTL
+
+Start Date - October 21, 2025
+End Date - February 27, 2026
+
+
+key   _spPaQxUK9Hm26R_oCEWfTSAijJ8X2eLY9gqxx39
+
+
+
+curl "https://api.cloudflare.com/client/v4/accounts/049ff5e84ecf636b53b162cbb580aae6/tokens/verify" \
+-H "Authorization: Bearer _spPaQxUK9Hm26R_oCEWfTSAijJ8X2eLY9gqxx39"

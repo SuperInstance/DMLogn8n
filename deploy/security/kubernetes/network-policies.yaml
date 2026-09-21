@@ -1,0 +1,613 @@
+# Enhanced Network Policies for DMLog
+# Implements zero-trust networking with granular traffic control
+
+---
+# Default Deny All Policy - Deny all ingress and egress traffic by default
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: dmlog
+  labels:
+    app: dmlog
+    policy: default-deny
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+# Default Deny All for Monitoring Namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: monitoring
+  labels:
+    app: dmlog
+    policy: default-deny
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+# Backend Application Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-network-policy
+  namespace: dmlog
+  labels:
+    app: dmlog-backend
+    component: backend
+spec:
+  podSelector:
+    matchLabels:
+      app: dmlog
+      component: backend
+  policyTypes:
+  - Ingress
+  - Egress
+
+  ingress:
+  # Allow traffic from Ingress Controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+    ports:
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 80
+
+  # Allow traffic from Frontend
+  - from:
+    - podSelector:
+        matchLabels:
+          app: dmlog
+          component: frontend
+    ports:
+    - protocol: TCP
+      port: 8000
+
+  # Allow traffic from Monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090
+
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+  # Allow communication with Database
+  - to:
+    - podSelector:
+        matchLabels:
+          app: dmlog
+          component: database
+    ports:
+    - protocol: TCP
+      port: 5432
+
+  # Allow communication with Redis
+  - to:
+    - podSelector:
+        matchLabels:
+          app: dmlog
+          component: cache
+    ports:
+    - protocol: TCP
+      port: 6379
+
+  # Allow external API calls (HTTPS only)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+
+  # Allow time synchronization
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 123
+
+  # Allow Kubernetes API communication
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+---
+# Frontend Application Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-network-policy
+  namespace: dmlog
+  labels:
+    app: dmlog-frontend
+    component: frontend
+spec:
+  podSelector:
+    matchLabels:
+      app: dmlog
+      component: frontend
+  policyTypes:
+  - Ingress
+  - Egress
+
+  ingress:
+  # Allow traffic from Ingress Controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+    ports:
+    - protocol: TCP
+      port: 80
+
+  # Allow traffic from Monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 80
+
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+  # Allow communication with Backend
+  - to:
+    - podSelector:
+        matchLabels:
+          app: dmlog
+          component: backend
+    ports:
+    - protocol: TCP
+      port: 8000
+
+  # Allow external CDN/Static assets (HTTPS only)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+---
+# Database Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: database-network-policy
+  namespace: dmlog
+  labels:
+    app: dmlog-database
+    component: database
+spec:
+  podSelector:
+    matchLabels:
+      app: dmlog
+      component: database
+  policyTypes:
+  - Ingress
+  - Egress
+
+  ingress:
+  # Allow traffic from Backend only
+  - from:
+    - podSelector:
+        matchLabels:
+          app: dmlog
+          component: backend
+    ports:
+    - protocol: TCP
+      port: 5432
+
+  # Allow traffic from Database Backup jobs
+  - from:
+    - podSelector:
+        matchLabels:
+          app: dmlog
+          component: database-backup
+    ports:
+    - protocol: TCP
+      port: 5432
+
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+
+  # Allow backup storage (S3)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+---
+# Redis Cache Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-network-policy
+  namespace: dmlog
+  labels:
+    app: dmlog-redis
+    component: cache
+spec:
+  podSelector:
+    matchLabels:
+      app: dmlog
+      component: cache
+  policyTypes:
+  - Ingress
+  - Egress
+
+  ingress:
+  # Allow traffic from Backend
+  - from:
+    - podSelector:
+        matchLabels:
+          app: dmlog
+          component: backend
+    ports:
+    - protocol: TCP
+      port: 6379
+
+  # Allow traffic from Session workers
+  - from:
+    - podSelector:
+        matchLabels:
+          app: dmlog
+          component: session-worker
+    ports:
+    - protocol: TCP
+      port: 6379
+
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+---
+# Monitoring Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-network-policy
+  namespace: monitoring
+  labels:
+    app: prometheus
+    component: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app: prometheus
+  policyTypes:
+  - Ingress
+  - Egress
+
+  ingress:
+  # Allow traffic from Grafana
+  - from:
+    - podSelector:
+        matchLabels:
+          app: grafana
+    ports:
+    - protocol: TCP
+      port: 9090
+
+  # Allow traffic from AlertManager
+  - from:
+    - podSelector:
+        matchLabels:
+          app: alertmanager
+    ports:
+    - protocol: TCP
+      port: 9090
+
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+
+  # Allow scraping metrics from all namespaces
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 80
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 9090
+    - protocol: TCP
+      port: 9100
+    - protocol: TCP
+      port: 9113
+    - protocol: TCP
+      port: 9187
+
+  # Allow communication with AlertManager
+  - to:
+    - podSelector:
+        matchLabels:
+          app: alertmanager
+    ports:
+    - protocol: TCP
+      port: 9093
+---
+# Grafana Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grafana-network-policy
+  namespace: monitoring
+  labels:
+    app: grafana
+    component: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app: grafana
+  policyTypes:
+  - Ingress
+  - Egress
+
+  ingress:
+  # Allow traffic from Ingress Controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3000
+
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+
+  # Allow communication with Prometheus
+  - to:
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090
+---
+# Logging Network Policy (Fluent Bit)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fluent-bit-network-policy
+  namespace: logging
+  labels:
+    app: fluent-bit
+    component: logging
+spec:
+  podSelector:
+    matchLabels:
+      app: fluent-bit
+  policyTypes:
+  - Ingress
+  - Egress
+
+  ingress:
+  # Allow traffic from log collectors
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 2020
+
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+
+  # Allow communication with Elasticsearch/OpenSearch
+  - to:
+    - podSelector:
+        matchLabels:
+          app: elasticsearch
+    ports:
+    - protocol: TCP
+      port: 9200
+
+  # Allow communication with Loki
+  - to:
+    - podSelector:
+        matchLabels:
+          app: loki
+    ports:
+    - protocol: TCP
+      port: 3100
+---
+# Security Scanner Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: security-scanner-policy
+  namespace: dmlog
+  labels:
+    app: security-scanner
+    component: security
+spec:
+  podSelector:
+    matchLabels:
+      app: trivy-scanner
+  policyTypes:
+  - Ingress
+  - Egress
+
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+
+  # Allow external container registry access
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+
+  # Allow S3 access for scan results
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+
+  # Allow API access for notifications
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+---
+# Cilium Network Policies (Advanced Security)
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: advanced-security-policy
+  namespace: dmlog
+  labels:
+    app: dmlog
+    security: advanced
+spec:
+  endpointSelector:
+    matchLabels:
+      app: dmlog
+  ingress:
+  # Allow only specific HTTP methods
+  - fromEndpoints:
+    - matchLabels:
+        app: dmlog-frontend
+    toPorts:
+    - ports:
+      - port: "8000"
+        protocol: TCP
+      rules:
+        http:
+        - method: "GET"
+        - method: "POST"
+        - method: "PUT"
+        - method: "DELETE"
+  # Block SSH attempts
+  - fromEndpoints: []
+    toPorts:
+    - ports:
+      - port: "22"
+        protocol: TCP
+      rules:
+        deny:
+          http: []
+
+  egress:
+  # Allow only specific external domains
+  - toEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: kube-system
+  - toFQDNs:
+    - matchName: "api.github.com"
+    - matchName: "registry.npmjs.org"
+    - matchName: "pypi.org"
+    toPorts:
+    - ports:
+      - port: "443"
+        protocol: TCP
+
+  # DNS only
+  - toEndpoints: []
+    toPorts:
+    - ports:
+      - port: "53"
+        protocol: UDP
+      rules:
+        dns:
+        - matchPattern: "*"
+---
+# Service Mesh Policies (Istio)
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: dmlog-authorization-policy
+  namespace: dmlog
+spec:
+  selector:
+    matchLabels:
+      app: dmlog
+  action: ALLOW
+  rules:
+  # Allow only authenticated requests
+  - from:
+    - source:
+        principals: ["cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"]
+  - to:
+    - operation:
+        methods: ["GET", "POST", "PUT", "DELETE"]
+---
+# Calico Global Network Policy
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: dmlog-global-security
+spec:
+  selector: all()
+  order: 1000
+  ingress:
+  # Block common attack ports
+  - action: Deny
+    protocol: TCP
+    destination:
+      ports:
+      - 22    # SSH
+      - 23    # Telnet
+      - 3389  # RDP
+      - 5432  # PostgreSQL (external access)
+      - 6379  # Redis (external access)
+  egress:
+  # Block data exfiltration
+  - action: Deny
+    protocol: TCP
+    destination:
+      ports:
+      - 21    # FTP
+      - 22    # SSH
+      - 23    # Telnet

@@ -1,0 +1,429 @@
+# Authentication Security Rules Configuration
+# DMLogn8n Security System
+
+# General Authentication Settings
+authentication:
+  enabled: true
+  strict_mode: true
+  session_timeout: 3600  # seconds
+  max_session_idle: 1800  # seconds
+  concurrent_sessions: 3
+
+# Password Policy
+password_policy:
+  enabled: true
+  min_length: 12
+  max_length: 128
+  require_uppercase: true
+  require_lowercase: true
+  require_numbers: true
+  require_special_chars: true
+  forbidden_patterns:
+    - "password"
+    - "123456"
+    - "qwerty"
+    - "admin"
+    - "root"
+    - "user"
+    - "login"
+  forbidden_common_passwords: true
+  check_breached_passwords: true
+  password_history: 12  # number of previous passwords to remember
+  expiry_days: 90
+  warning_days: 7  # days before expiry to warn user
+
+# Multi-Factor Authentication (MFA)
+mfa:
+  enabled: true
+  required_for_admin: true
+  required_for_sensitive: true
+  grace_period: 86400  # 24 hours to setup MFA
+
+  # TOTP settings
+  totp:
+    enabled: true
+    issuer: "DMLogn8n"
+    algorithm: "SHA1"
+    digits: 6
+    period: 30
+    window: 1  # allowed time drift
+
+  # SMS settings
+  sms:
+    enabled: false
+    provider: "twilio"
+    max_attempts: 3
+    cooldown: 300  # seconds
+
+  # Email settings
+  email:
+    enabled: true
+    code_length: 6
+    expiry: 600  # 10 minutes
+    max_attempts: 3
+
+  # Backup codes
+  backup_codes:
+    enabled: true
+    count: 10
+    length: 8
+    single_use: true
+
+# Account Lockout Policy
+account_lockout:
+  enabled: true
+  max_attempts: 5
+  lockout_duration: 900  # 15 minutes
+  progressive_lockout:
+    enabled: true
+    durations:
+      - 300   # 5 minutes for first lockout
+      - 900   # 15 minutes for second
+      - 3600  # 1 hour for third
+      - 86400 # 24 hours for subsequent
+  reset_after: 3600  # 1 hour without failed attempts
+  notify_user: true
+  notify_admin: true
+
+# Session Management
+session_management:
+  enabled: true
+
+  # Session settings
+  session_timeout: 3600  # 1 hour
+  idle_timeout: 1800     # 30 minutes
+  absolute_timeout: 28800  # 8 hours
+  concurrent_sessions: 3
+
+  # Session security
+  secure_cookies: true
+  http_only_cookies: true
+  same_site_policy: "Strict"
+  rotate_session_id: true
+  validate_ip: true
+  validate_user_agent: true
+
+  # Session storage
+  storage_backend: "redis"  # redis, database, memory
+  encryption: true
+
+# Brute Force Protection
+brute_force_protection:
+  enabled: true
+
+  # Global thresholds
+  global_threshold:
+    requests_per_minute: 60
+    requests_per_hour: 1000
+
+  # IP-based protection
+  ip_protection:
+    enabled: true
+    max_attempts_per_ip: 20
+    lockout_duration: 3600  # 1 hour
+    whitelist_ips:
+      - "127.0.0.1"
+      - "::1"
+      - "192.168.1.0/24"
+
+  # Username-based protection
+  username_protection:
+    enabled: true
+    max_attempts_per_user: 10
+    lockout_duration: 1800  # 30 minutes
+
+  # Progress tracking
+  track_by_ip: true
+  track_by_username: true
+  track_by_user_agent: true
+
+# Authentication Methods
+authentication_methods:
+  # Username/Password
+  password_auth:
+    enabled: true
+    required: false
+
+  # LDAP/Active Directory
+  ldap_auth:
+    enabled: false
+    server: "ldap://localhost:389"
+    base_dn: "dc=example,dc=com"
+    user_filter: "(uid={username})"
+    bind_dn: "cn=admin,dc=example,dc=com"
+    secure: false
+
+  # SAML SSO
+  saml_auth:
+    enabled: false
+    idp_entity_id: ""
+    idp_sso_url: ""
+    sp_entity_id: ""
+    assertion_consumer_service: ""
+    certificate_file: ""
+
+  # OAuth2/OpenID Connect
+  oauth2_auth:
+    enabled: false
+    providers:
+      - name: "google"
+        client_id: ""
+        client_secret: ""
+        scope: "openid email profile"
+      - name: "github"
+        client_id: ""
+        client_secret: ""
+        scope: "user:email"
+
+  # API Key Authentication
+  api_key_auth:
+    enabled: true
+    header_name: "X-API-Key"
+    query_param: "api_key"
+    key_length: 32
+    expiry_days: 365
+
+# Password Recovery
+password_recovery:
+  enabled: true
+  methods:
+    - "email"
+    - "security_questions"
+
+  # Email recovery
+  email_recovery:
+    enabled: true
+    token_length: 32
+    expiry: 3600  # 1 hour
+    max_attempts: 3
+    cooldown: 300  # 5 minutes
+
+  # Security questions
+  security_questions:
+    enabled: false
+    required_questions: 3
+    min_questions: 5
+    case_sensitive: false
+
+# Registration Policy
+registration_policy:
+  enabled: true
+
+  # Registration limits
+  max_registrations_per_ip: 3
+  max_registrations_per_hour: 100
+  require_email_verification: true
+  require_admin_approval: false
+
+  # Email verification
+  email_verification:
+    enabled: true
+    token_length: 32
+    expiry: 86400  # 24 hours
+    max_resends: 3
+    resend_cooldown: 300  # 5 minutes
+
+  # Account approval
+  admin_approval:
+    enabled: false
+    auto_approve_domains: []
+    require_reason: false
+
+# User Roles and Permissions
+roles:
+  # Default roles
+  super_admin:
+    permissions:
+      - "user.create"
+      - "user.read"
+      - "user.update"
+      - "user.delete"
+      - "role.create"
+      - "role.read"
+      - "role.update"
+      - "role.delete"
+      - "system.configure"
+      - "security.manage"
+      - "audit.read"
+
+  admin:
+    permissions:
+      - "user.read"
+      - "user.update"
+      - "role.read"
+      - "audit.read"
+
+  user:
+    permissions:
+      - "profile.read"
+      - "profile.update"
+      - "data.read"
+      - "data.create"
+      - "data.update"
+
+  guest:
+    permissions:
+      - "public.read"
+
+# Privileged Access Management
+privileged_access:
+  enabled: true
+
+  # Admin access
+  admin_access:
+    require_mfa: true
+    require_approval: false
+    session_timeout: 1800  # 30 minutes
+    audit_all_actions: true
+
+  # Emergency access
+  emergency_access:
+    enabled: true
+    break_glass_accounts: []
+    approval_required: true
+    session_timeout: 900  # 15 minutes
+    auto_revoke: true
+
+# Device Management
+device_management:
+  enabled: true
+
+  # Device trust
+  device_trust:
+    enabled: true
+    trusted_devices: 5
+    trust_duration: 2592000  # 30 days
+    require_verification: true
+
+  # Device fingerprinting
+  fingerprinting:
+    enabled: true
+    factors:
+      - "user_agent"
+      - "ip_address"
+      - "screen_resolution"
+      - "timezone"
+      - "language"
+
+# Geographic Access Control
+geo_access:
+  enabled: false
+
+  # Allowed countries
+  allowed_countries: []
+  # Blocked countries
+  blocked_countries: []
+
+  # Time-based restrictions
+  time_restrictions:
+    enabled: false
+    business_hours:
+      start: "09:00"
+      end: "17:00"
+      timezone: "UTC"
+      allowed_days: ["monday", "tuesday", "wednesday", "thursday", "friday"]
+
+# Security Headers
+security_headers:
+  enabled: true
+  headers:
+    - "X-Content-Type-Options: nosniff"
+    - "X-Frame-Options: DENY"
+    - "X-XSS-Protection: 1; mode=block"
+    - "Strict-Transport-Security: max-age=31536000; includeSubDomains"
+    - "Content-Security-Policy: default-src 'self'"
+    - "Referrer-Policy: strict-origin-when-cross-origin"
+
+# Audit and Logging
+audit:
+  enabled: true
+
+  # Events to log
+  log_events:
+    - "login.success"
+    - "login.failure"
+    - "logout"
+    - "password.change"
+    - "password.reset"
+    - "mfa.setup"
+    - "mfa.verify"
+    - "account.lock"
+    - "account.unlock"
+    - "privilege.escalation"
+    - "sensitive.access"
+
+  # Log retention
+  retention_days: 365
+  log_ip_address: true
+  log_user_agent: true
+  log_session_id: true
+
+# Compliance Settings
+compliance:
+  # GDPR
+  gdpr:
+    enabled: true
+    data_portability: true
+    right_to_be_forgotten: true
+    consent_required: true
+    data_retention_days: 2555  # 7 years
+
+  # SOC 2
+  soc2:
+    enabled: true
+    security_controls: true
+    availability_controls: true
+    processing_integrity: true
+    confidentiality: true
+    privacy: true
+
+  # HIPAA
+  hipaa:
+    enabled: false
+    audit_controls: true
+    access_controls: true
+    integrity_controls: true
+    transmission_security: true
+
+# Integration Settings
+integrations:
+  # SIEM integration
+  siem:
+    enabled: false
+    endpoint: ""
+    api_key: ""
+    event_types:
+      - "authentication.failure"
+      - "account.lockout"
+      - "privilege.escalation"
+
+  # Alert integration
+  alerts:
+    enabled: false
+    webhook_url: ""
+    slack_channel: ""
+    email_recipients: []
+
+# Testing and Development
+development:
+  debug_mode: false
+  test_passwords:
+    - "TestPassword123!"
+    - "DevPassword456!"
+  bypass_mfa: false
+  bypass_email_verification: false
+
+# Performance Settings
+performance:
+  cache_session_data: true
+  cache_duration: 300  # seconds
+  async_logging: true
+  batch_size: 100
+
+# Error Handling
+error_handling:
+  generic_error_message: "Authentication failed"
+  account_locked_message: "Account temporarily locked"
+  mfa_required_message: "Multi-factor authentication required"
+  session_expired_message: "Session has expired"
+  rate_limit_message: "Too many authentication attempts"

@@ -1,0 +1,416 @@
+{
+  "name": "Codebase Intelligence System - Learn and Index Code Patterns",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "codebase-intelligence",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-codebase-intel",
+      "name": "Code Intelligence Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "codebase-intelligence-system"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse code intelligence request\nconst request = $input.first().json;\n\n// Validate required fields\nif (!request.operation_type) {\n  return [{\n    json: {\n      error: 'Missing required field: operation_type',\n      valid_operations: ['index_code', 'learn_pattern', 'search_patterns', 'analyze_success', 'update_knowledge'],\n      status: 'invalid_request'\n    }\n  }];\n}\n\n// Build request context\nconst context = {\n  operation_type: request.operation_type,\n  character_id: request.character_id || 'unknown',\n  session_id: request.session_id || 'unknown',\n  timestamp: new Date().toISOString(),\n  data: request.data || {},\n  options: {\n    learning_mode: request.learning_mode || 'adaptive',\n    analysis_depth: request.analysis_depth || 'standard',\n    pattern_matching: request.pattern_matching !== false,\n    success_tracking: request.success_tracking !== false\n  }\n};\n\nreturn [{\n  json: context\n}];"
+      },
+      "id": "code-parse-request",
+      "name": "Parse Intelligence Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.operation_type }}",
+              "rightValue": "index_code",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-operation-type",
+      "name": "Route Operation Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle code indexing operation\nconst request = $input.first().json;\n\nif (!request.data.code_snippet || !request.data.metadata) {\n  return [{\n    json: {\n      error: 'Missing required data for code indexing: code_snippet, metadata',\n      status: 'invalid_data'\n    }\n  }];\n}\n\n// Extract code features\nconst codeFeatures = {\n  code_snippet: request.data.code_snippet,\n  language: request.data.metadata.language || 'python',\n  character_class: request.data.metadata.character_class || 'unknown',\n  character_level: request.data.metadata.character_level || 1,\n  automation_type: request.data.metadata.automation_type || 'unknown',\n  intent: request.data.metadata.intent || 'unknown',\n  complexity: request.data.metadata.complexity || 'medium',\n  success_rate: request.data.metadata.success_rate || 0,\n  execution_count: request.data.metadata.execution_count || 0,\n  tags: request.data.metadata.tags || [],\n  dependencies: request.data.metadata.dependencies || [],\n  created_at: request.data.metadata.created_at || new Date().toISOString(),\n  last_updated: new Date().toISOString()\n};\n\n// Analyze code structure\nconst codeAnalysis = {\n  functions: extractFunctions(codeFeatures.code_snippet),\n  variables: extractVariables(codeFeatures.code_snippet),\n  control_structures: extractControlStructures(codeFeatures.code_snippet),\n  external_apis: extractExternalAPIs(codeFeatures.code_snippet),\n  error_handling: hasErrorHandling(codeFeatures.code_snippet),\n  documentation: hasDocumentation(codeFeatures.code_snippet)\n};\n\nfunction extractFunctions(code) {\n  const functionRegex = /(?:def|function|class)\\s+(\\w+)/g;\n  const functions = [];\n  let match;\n  while ((match = functionRegex.exec(code)) !== null) {\n    functions.push(match[1]);\n  }\n  return functions;\n}\n\nfunction extractVariables(code) {\n  const variableRegex = /(?:let|const|var|\\w+)\\s*=\\s*([^;\\n]+)/g;\n  const variables = [];\n  let match;\n  while ((match = variableRegex.exec(code)) !== null) {\n    variables.push(match[1].trim());\n  }\n  return variables;\n}\n\nfunction extractControlStructures(code) {\n  const structures = [];\n  if (code.includes('if ') || code.includes('if(')) structures.push('conditional');\n  if (code.includes('for ') || code.includes('for(')) structures.push('loop');\n  if (code.includes('while ') || code.includes('while(')) structures.push('loop');\n  if (code.includes('try ')) structures.push('error_handling');\n  return structures;\n}\n\nfunction extractExternalAPIs(code) {\n  const apiRegex = /(?:import|from|require)\\s+([\\w.]+)/g;\n  const apis = [];\n  let match;\n  while ((match = apiRegex.exec(code)) !== null) {\n    apis.push(match[1]);\n  }\n  return apis;\n}\n\nfunction hasErrorHandling(code) {\n  return code.includes('try') && code.includes('except') || code.includes('catch');\n}\n\nfunction hasDocumentation(code) {\n  return code.includes('#') || code.includes(\"'''\") || code.includes('\"\"\"');\n}\n\nreturn [{\n  json: {\n    ...request,\n    operation: 'index_code',\n    code_features: codeFeatures,\n    code_analysis: codeAnalysis,\n    indexing_strategy: 'semantic_and_structural'\n  }\n}];"
+      },
+      "id": "code-handle-indexing",
+      "name": "Handle Code Indexing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle pattern learning operation\nconst request = $input.first().json;\n\nif (!request.data.pattern_data || !request.data.outcome) {\n  return [{\n    json: {\n      error: 'Missing required data for pattern learning: pattern_data, outcome',\n      status: 'invalid_data'\n    }\n  }];\n}\n\n// Extract pattern features\nconst patternFeatures = {\n  pattern_id: generatePatternId(request.data.pattern_data),\n  character_id: request.character_id,\n  session_id: request.session_id,\n  pattern_type: request.data.pattern_data.type || 'unknown',\n  trigger_conditions: request.data.pattern_data.trigger_conditions || [],\n  actions_taken: request.data.pattern_data.actions_taken || [],\n  context: request.data.pattern_data.context || {},\n  outcome: {\n    success: request.data.outcome.success || false,\n    effectiveness_score: request.data.outcome.effectiveness_score || 0,\n    execution_time: request.data.outcome.execution_time || 0,\n    errors: request.data.outcome.errors || [],\n    user_feedback: request.data.outcome.user_feedback || ''\n  },\n  timestamp: new Date().toISOString(),\n  learning_weight: calculateLearningWeight(request.data.outcome)\n};\n\nfunction generatePatternId(patternData) {\n  const hash = require('crypto').createHash('md5');\n  const patternString = JSON.stringify({\n    type: patternData.type,\n    triggers: patternData.trigger_conditions,\n    actions: patternData.actions_taken\n  });\n  return hash.update(patternString).digest('hex').substring(0, 8);\n}\n\nfunction calculateLearningWeight(outcome) {\n  let weight = 0.5; // Base weight\n  \n  if (outcome.success) weight += 0.3;\n  if (outcome.effectiveness_score > 0.8) weight += 0.2;\n  if (outcome.execution_time < 5000) weight += 0.1; // Fast execution\n  if (outcome.errors.length === 0) weight += 0.1;\n  if (outcome.user_feedback && outcome.user_feedback.includes('good')) weight += 0.1;\n  \n  return Math.min(weight, 1.0);\n}\n\nreturn [{\n  json: {\n    ...request,\n    operation: 'learn_pattern',\n    pattern_features: patternFeatures,\n    learning_strategy: 'reinforcement_learning'\n  }\n}];"
+      },
+      "id": "code-handle-learning",
+      "name": "Handle Pattern Learning",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle pattern search operation\nconst request = $input.first().json;\n\nif (!request.data.search_criteria) {\n  return [{\n    json: {\n      error: 'Missing required data for pattern search: search_criteria',\n      status: 'invalid_data'\n    }\n  }];\n}\n\n// Build search query\nconst searchQuery = {\n  criteria: request.data.search_criteria,\n  filters: {\n    character_class: request.data.search_criteria.character_class || null,\n    automation_type: request.data.search_criteria.automation_type || null,\n    complexity_level: request.data.search_criteria.complexity_level || null,\n    success_rate_threshold: request.data.search_criteria.min_success_rate || 0.5,\n    tags: request.data.search_criteria.tags || []\n  },\n  sort_by: request.data.search_criteria.sort_by || 'success_rate',\n  limit: request.data.search_criteria.limit || 10,\n  include_analysis: request.data.search_criteria.include_analysis || false\n};\n\nreturn [{\n  json: {\n    ...request,\n    operation: 'search_patterns',\n    search_query: searchQuery,\n    search_strategy: 'semantic_similarity'\n  }\n}];"
+      },
+      "id": "code-handle-search",
+      "name": "Handle Pattern Search",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "resource": "operation",
+        "operation": "get",
+        "id": "={{ $json.operation }}_{{ $json.character_id }}_{{ $json.timestamp.slice(0, 10) }}"
+      },
+      "id": "google-sheets-retrieve",
+      "name": "Retrieve Existing Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create AI analysis prompt for intelligence processing\nconst request = $input.first().json;\n\nconst analysisPrompt = `\nYou are a Code Intelligence AI that analyzes and learns from character automation patterns. Your task is to process the following operation and provide intelligent insights.\n\n## Operation: ${request.operation}\n## Character ID: ${request.character_id}\n## Session ID: ${request.session_id}\n\n${request.code_features ? `\n## Code Features:\n- Language: ${request.code_features.language}\n- Character Class: ${request.code_features.character_class}\n- Automation Type: ${request.code_features.automation_type}\n- Intent: ${request.code_features.intent}\n- Complexity: ${request.code_features.complexity}\n- Success Rate: ${request.code_features.success_rate}\n- Execution Count: ${request.code_features.execution_count}\n` : ''}\n\n${request.pattern_features ? `\n## Pattern Features:\n- Pattern Type: ${request.pattern_features.pattern_type}\n- Success: ${request.pattern_features.outcome.success}\n- Effectiveness Score: ${request.pattern_features.outcome.effectiveness_score}\n- Learning Weight: ${request.pattern_features.learning_weight}\n` : ''}\n\n${request.search_query ? `\n## Search Criteria:\n${JSON.stringify(request.search_query, null, 2)}\n` : ''}\n\n## Analysis Required:\nBased on the operation type, provide detailed analysis:\n\n${request.operation === 'index_code' ? `\nFor code indexing, analyze:\n1. Code quality and structure\n2. Potential improvements\n3. Similar successful patterns\n4. Optimization opportunities\n5. Documentation suggestions\n` : ''}\n\n${request.operation === 'learn_pattern' ? `\nFor pattern learning, analyze:\n1. Pattern effectiveness and success factors\n2. Improvement recommendations\n3. Generalization opportunities\n4. Context dependencies\n5. Transferability to other scenarios\n` : ''}\n\n${request.operation === 'search_patterns' ? `\nFor pattern search, analyze:\n1. Search optimization strategies\n2. Relevance scoring criteria\n3. Pattern ranking methodology\n4. Contextual matching factors\n5. Personalization opportunities\n` : ''}\n\n## Response Format (JSON):\n{\n  \"analysis_summary\": \"Brief overview of findings\",\n  \"key_insights\": [\"important discoveries\"],\n  \"recommendations\": [\"actionable suggestions\"],\n  \"patterns_identified\": [\"recognized patterns\"],\n  \"success_factors\": [\"elements contributing to success\"],\n  \"improvement_opportunities\": [\"areas for enhancement\"],\n  \"knowledge_updates\": {\n    \"new_patterns\": [\"patterns to add to knowledge base\"],\n    \"updated_patterns\": [\"patterns to modify\"],\n    \"deprecated_patterns\": [\"patterns to remove\"]\n  },\n  \"next_steps\": [\"recommended follow-up actions\"]\n}\n\nFocus on actionable intelligence that improves the system's understanding and future performance.`;\n\nreturn [{\n  json: {\n    ...request,\n    deepseek_prompt: analysisPrompt,\n    analysis_type: 'code_intelligence'\n  }\n}];"
+      },
+      "id": "code-ai-analysis-prompt",
+      "name": "Create AI Analysis Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer sk-3b0251d9943549a2b475eb9e57e46ee6"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "deepseek-chat"
+            },
+            {
+              "name": "messages",
+              "value": "=[{\"role\": \"user\", \"content\": \"{{ $json.deepseek_prompt }}\"}]"
+            },
+            {
+              "name": "max_tokens",
+              "value": "=1500"
+            },
+            {
+              "name": "temperature",
+              "value": "=0.3"
+            },
+            {
+              "name": "response_format",
+              "value": "={\"type\": \"json_object\"}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-ai-analysis",
+      "name": "AI Intelligence Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process AI analysis and prepare knowledge base updates\nconst aiResponse = $input.first().json;\nconst originalRequest = items.find(item => item.json.deepseek_prompt)?.json;\n\nif (!aiResponse.choices || !aiResponse.choices[0]?.message?.content) {\n  return [{\n    json: {\n      error: 'Invalid AI response',\n      status: 'ai_error'\n    }\n  }];\n}\n\ntry {\n  const analysisResult = JSON.parse(aiResponse.choices[0].message.content);\n  \n  // Prepare knowledge base updates\n  const knowledgeUpdates = {\n    operation_id: generateOperationId(),\n    operation_type: originalRequest.operation,\n    character_id: originalRequest.character_id,\n    session_id: originalRequest.session_id,\n    timestamp: new Date().toISOString(),\n    analysis_result: analysisResult,\n    knowledge_base_updates: {\n      new_patterns: analysisResult.knowledge_updates?.new_patterns || [],\n      updated_patterns: analysisResult.knowledge_updates?.updated_patterns || [],\n      deprecated_patterns: analysisResult.knowledge_updates?.deprecated_patterns || []\n    },\n    learning_insights: {\n      success_factors: analysisResult.success_factors || [],\n      improvement_opportunities: analysisResult.improvement_opportunities || [],\n      next_steps: analysisResult.next_steps || []\n    },\n    metadata: {\n      ai_provider: 'deepseek',\n      model: 'deepseek-chat',\n      tokens_used: aiResponse.usage?.total_tokens || 0,\n      processing_time: Date.now() - originalRequest.timestamp\n    }\n  };\n  \n  function generateOperationId() {\n    return 'op_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);\n  }\n  \n  return [{\n    json: knowledgeUpdates\n  }];\n  \n} catch (error) {\n  return [{\n    json: {\n      error: 'Failed to process AI analysis',\n      details: error.message,\n      status: 'processing_error'\n    }\n  }];\n}"
+      },
+      "id": "code-process-ai-results",
+      "name": "Process AI Analysis Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 400]
+    },
+    {
+      "parameters": {
+        "resource": "operation",
+        "operation": "update",
+        "sheetName": "Code Intelligence",
+        "columnNames": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "OperationID": "={{ $json.operation_id }}",
+            "OperationType": "={{ $json.operation_type }}",
+            "CharacterID": "={{ $json.character_id }}",
+            "SessionID": "={{ $json.session_id }}",
+            "Timestamp": "={{ $json.timestamp }}",
+            "AnalysisSummary": "={{ $json.analysis_result.analysis_summary }}",
+            "KeyInsights": "={{ $json.analysis_result.key_insights.join(', ') }}",
+            "Recommendations": "={{ $json.analysis_result.recommendations.join(', ') }}",
+            "SuccessFactors": "={{ $json.learning_insights.success_factors.join(', ') }}",
+            "ImprovementOpportunities": "={{ $json.learning_insights.improvement_opportunities.join(', ') }}",
+            "NewPatterns": "={{ $json.knowledge_base_updates.new_patterns.join(', ') }}",
+            "UpdatedPatterns": "={{ $json.knowledge_base_updates.updated_patterns.join(', ') }}",
+            "DeprecatedPatterns": "={{ $json.knowledge_base_updates.deprecated_patterns.join(', ') }}",
+            "NextSteps": "={{ $json.learning_insights.next_steps.join(', ') }}",
+            "TokensUsed": "={{ $json.metadata.tokens_used }}",
+            "ProcessingTime": "={{ $json.metadata.processing_time }}",
+            "AIProvider": "={{ $json.metadata.ai_provider }}"
+          }
+        }
+      },
+      "id": "google-sheets-update",
+      "name": "Update Knowledge Base",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2000, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare final response\nconst result = $input.first().json;\n\nconst response = {\n  status: 'success',\n  timestamp: new Date().toISOString(),\n  operation_id: result.operation_id,\n  operation_type: result.operation_type,\n  character_id: result.character_id,\n  session_id: result.session_id,\n  analysis_summary: result.analysis_result.analysis_summary,\n  key_insights: result.analysis_result.key_insights,\n  recommendations: result.analysis_result.recommendations,\n  patterns_updated: {\n    new: result.knowledge_base_updates.new_patterns.length,\n    updated: result.knowledge_base_updates.updated_patterns.length,\n    deprecated: result.knowledge_base_updates.deprecated_patterns.length\n  },\n  learning_insights: result.learning_insights,\n  next_steps: result.learning_insights.next_steps,\n  metadata: {\n    tokens_used: result.metadata.tokens_used,\n    processing_time: result.metadata.processing_time,\n    ai_provider: result.metadata.ai_provider\n  }\n};\n\nreturn [{\n  json: response\n}];"
+      },
+      "id": "code-prepare-response",
+      "name": "Prepare Final Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.webhookResponse",
+      "typeVersion": 1,
+      "position": [2440, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Error handling\nconst error = $input.first().json;\n\nconst errorResponse = {\n  status: 'error',\n  timestamp: new Date().toISOString(),\n  error: error.error || 'Unknown error occurred',\n  details: error.details || 'No additional details',\n  operation_type: error.operation_type || 'unknown',\n  character_id: error.character_id || 'unknown',\n  session_id: error.session_id || 'unknown',\n  suggestions: [\n    'Check request format and required fields',\n    'Ensure operation type is valid',\n    'Verify data structure and completeness'\n  ]\n};\n\nreturn [{\n  json: errorResponse\n}];"
+      },
+      "id": "code-error-handling",
+      "name": "Error Handling",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 600]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "webhook-error-response",
+      "name": "Send Error Response",
+      "type": "n8n-nodes-base.webhookResponse",
+      "typeVersion": 1,
+      "position": [2000, 600]
+    }
+  ],
+  "connections": {
+    "Code Intelligence Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Intelligence Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Intelligence Request": {
+      "main": [
+        [
+          {
+            "node": "Route Operation Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Operation Type": {
+      "main": [
+        [
+          {
+            "node": "Handle Code Indexing",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Handle Pattern Learning",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Handle Pattern Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Code Indexing": {
+      "main": [
+        [
+          {
+            "node": "Create AI Analysis Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Pattern Learning": {
+      "main": [
+        [
+          {
+            "node": "Create AI Analysis Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Pattern Search": {
+      "main": [
+        [
+          {
+            "node": "Create AI Analysis Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create AI Analysis Prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Intelligence Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Intelligence Analysis": {
+      "main": [
+        [
+          {
+            "node": "Process AI Analysis Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process AI Analysis Results": {
+      "main": [
+        [
+          {
+            "node": "Update Knowledge Base",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Knowledge Base": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Final Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handling": {
+      "main": [
+        [
+          {
+            "node": "Send Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T14:45:00.000Z",
+      "updatedAt": "2024-10-23T14:45:00.000Z",
+      "id": "code-intelligence",
+      "name": "Code Intelligence"
+    },
+    {
+      "createdAt": "2024-10-23T14:45:00.000Z",
+      "updatedAt": "2024-10-23T14:45:00.000Z",
+      "id": "pattern-learning",
+      "name": "Pattern Learning"
+    },
+    {
+      "createdAt": "2024-10-23T14:45:00.000Z",
+      "updatedAt": "2024-10-23T14:45:00.000Z",
+      "id": "knowledge-base",
+      "name": "Knowledge Base"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T14:45:00.000Z",
+  "versionId": "1"
+}

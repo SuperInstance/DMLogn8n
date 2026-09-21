@@ -1,0 +1,495 @@
+# Database Scaling Policy
+# Intelligent scaling for database clusters with read replicas
+
+apiVersion: autoscaling.dmlogn8n/v1
+kind: ScalingPolicy
+metadata:
+  name: database-scaling
+  namespace: dmlogn8n
+  labels:
+    team: data
+    component: database
+    environment: production
+    tier: data
+  annotations:
+    description: "Auto-scaling policy for database cluster with read replicas"
+    version: "1.5.0"
+    lastModified: "2025-10-23T00:00:00Z"
+
+spec:
+  # Service identification
+  serviceId: "database-cluster"
+  serviceType: "database"
+
+  # Instance limits
+  minInstances: 1          # Primary writer instance
+  maxInstances: 10         # Up to 9 read replicas + primary
+  desiredInstances: 3      # 1 primary + 2 read replicas
+
+  # Target performance metrics
+  targetMetrics:
+    cpuUtilization: 60          # Target CPU utilization percentage
+    memoryUtilization: 70       # Target memory utilization percentage
+    connectionsActive: 100      # Target active connections
+    connectionsPerSecond: 50    # Target new connections per second
+    queryResponseTime: 100      # Target query response time in milliseconds
+    diskIOPS: 1000             # Target IOPS
+    diskUtilization: 70        # Target disk utilization percentage
+
+  # Scaling thresholds
+  scaleUpThresholds:
+    cpuUtilization: 75          # Scale up when CPU > 75%
+    memoryUtilization: 80       # Scale up when memory > 80%
+    connectionsActive: 200      # Scale up when active connections > 200
+    connectionsPerSecond: 100   # Scale up when new connections/sec > 100
+    queryResponseTime: 200      # Scale up when query time > 200ms
+    diskIOPS: 1500            # Scale up when IOPS > 1500
+    diskUtilization: 85        # Scale up when disk > 85%
+    replicationLag: 10         # Scale up when replication lag > 10 seconds
+    duration: 180             # Sustained for 3 minutes
+
+  scaleDownThresholds:
+    cpuUtilization: 40          # Scale down when CPU < 40%
+    memoryUtilization: 50       # Scale down when memory < 50%
+    connectionsActive: 50       # Scale down when active connections < 50
+    connectionsPerSecond: 20    # Scale down when new connections/sec < 20
+    queryResponseTime: 50       # Scale down when query time < 50ms
+    diskIOPS: 500             # Scale down when IOPS < 500
+    diskUtilization: 60        # Scale down when disk < 60%
+    replicationLag: 2          # Scale down when replication lag < 2 seconds
+    duration: 600             # Sustained for 10 minutes
+
+  # Scaling behavior
+  scaling:
+    cooldownPeriod: 900         # 15 minutes between scaling operations
+    scaleUpStepSize: 2          # Add 2 read replicas when scaling up
+    scaleDownStepSize: 1        # Remove 1 read replica when scaling down
+    stabilizationWindow: 600    # 10 minutes stabilization window
+    primaryInstanceProtection: true  # Never scale down the primary
+
+  # Predictive scaling
+  predictiveScaling:
+    enabled: true
+    modelType: "prophet"        # Facebook Prophet for time series forecasting
+    predictionWindow: 1800      # 30 minutes prediction window
+    confidenceThreshold: 0.80   # Only scale if confidence > 80%
+    trainingDataWindow: 30      # Use 30 days of historical data
+    features:
+      - "time_of_day"
+      - "day_of_week"
+      - "seasonal_patterns"
+      - "connection_trends"
+      - "query_complexity"
+
+  # Cost optimization
+  costOptimization:
+    enabled: true
+    strategy: "balanced"         # Balance between performance and cost
+    hourlyBudget: 200           # $200 per hour budget
+    costSavingsThreshold: 5     # Only scale down if savings > $5/hour
+    idleTimeout: 1800           # Terminate idle replicas after 30 minutes
+    storageOptimization: true    # Optimize storage allocation
+
+  # Database configuration
+  database:
+    engine: "postgresql"
+    version: "14.5"
+
+    primaryInstance:
+      instanceType: "db.m5.2xlarge"
+      cpu: 8
+      memory: "32Gi"
+      storage: "1000Gi"
+      storageType: "gp3"
+      iops: 3000
+      throughput: 125
+      multiAZ: true
+      backupRetention: 7
+      maintenanceWindow: "sun 03:00-sun 04:00"
+
+    replicaInstance:
+      instanceType: "db.m5.large"
+      cpu: 2
+      memory: "8Gi"
+      storage: "500Gi"
+      storageType: "gp3"
+      iops: 1500
+      throughput: 62.5
+
+    # High availability configuration
+    highAvailability:
+      enabled: true
+      multiAZ: true
+      failoverTimeout: 120     # Maximum failover time in seconds
+      automaticFailover: true
+
+    # Read replica configuration
+    readReplicas:
+      minReplicas: 2
+      maxReplicas: 9
+      promotionTier: 1
+      autoPromotion: false
+      lagThreshold: 10         # Replication lag threshold in seconds
+
+  # Resource specifications
+  resources:
+    instanceTypes:
+      # Primary instance types
+      - type: "db.m5.2xlarge"
+        cpu: 8
+        memory: "32Gi"
+        storage: "1000Gi"
+        cost_per_hour: 0.55
+        role: "primary"
+        priority: 1
+
+      - type: "db.m5.4xlarge"
+        cpu: 16
+        memory: "64Gi"
+        storage: "2000Gi"
+        cost_per_hour: 1.10
+        role: "primary"
+        priority: 2
+
+      # Replica instance types
+      - type: "db.m5.large"
+        cpu: 2
+        memory: "8Gi"
+        storage: "500Gi"
+        cost_per_hour: 0.138
+        role: "replica"
+        priority: 1
+
+      - type: "db.m5.xlarge"
+        cpu: 4
+        memory: "16Gi"
+        storage: "750Gi"
+        cost_per_hour: 0.276
+        role: "replica"
+        priority: 2
+
+      - type: "db.r5.large"
+        cpu: 2
+        memory: "16Gi"
+        storage: "500Gi"
+        cost_per_hour: 0.189
+        role: "replica"
+        priority: 3  # Memory optimized
+
+  # Health checks
+  healthChecks:
+    readinessProbe:
+      exec:
+        command:
+          - "/bin/sh"
+          - "-c"
+          - "pg_isready -h localhost -p 5432 -U postgres"
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+
+    livenessProbe:
+      exec:
+        command:
+          - "/bin/sh"
+          - "-c"
+          - "pg_isready -h localhost -p 5432 -U postgres"
+      initialDelaySeconds: 60
+      periodSeconds: 30
+      timeoutSeconds: 10
+      failureThreshold: 3
+
+    startupProbe:
+      exec:
+        command:
+          - "/bin/sh"
+          - "-c"
+          - "pg_isready -h localhost -p 5432 -U postgres"
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 30
+
+  # Custom metrics
+  customMetrics:
+    - name: "database_connections"
+      description: "Number of active database connections"
+      query: "pg_stat_database_numbackends"
+
+    - name: "query_response_time"
+      description: "Average query response time in milliseconds"
+      query: "pg_stat_statements_mean_time * 1000"
+
+    - name: "replication_lag"
+      description: "Replication lag in seconds"
+      query: "pg_stat_replication_lag"
+
+    - name: "disk_io_usage"
+      description: "Disk I/O operations per second"
+      query: "node_disk_io_time_seconds_total"
+
+    - name: "cache_hit_ratio"
+      description: "Database cache hit ratio percentage"
+      query: "(pg_stat_database_blks_hit / (pg_stat_database_blks_hit + pg_stat_database_blks_read)) * 100"
+
+    - name: "deadlock_count"
+      description: "Number of deadlocks per second"
+      query: "rate(pg_stat_database_deadlocks[1m])"
+
+    - name: "slow_queries"
+      description: "Number of slow queries per second"
+      query: 'rate(pg_stat_statements_calls{mean_time > 1000}[1m])'
+
+    - name: "transaction_rate"
+      description: "Transactions per second"
+      query: "rate(pg_stat_database_xact_commit[1m]) + rate(pg_stat_database_xact_rollback[1m])"
+
+  # Event-based scaling rules
+  eventScaling:
+    - name: "backup-window-scale-up"
+      eventType: "backup_started"
+      condition: "backup_type == 'full'"
+      action: "scale_up"
+      instances: 2
+      cooldown: 3600
+
+    - name: "maintenance-mode"
+      eventType: "maintenance_mode"
+      condition: "maintenance == true"
+      action: "scale_to_min"
+      cooldown: 7200
+
+    - name: "peak-traffic-response"
+      eventType: "traffic_spike"
+      condition: "connection_rate > 200"
+      action: "scale_up"
+      instances: 3
+      cooldown: 900
+
+    - name: "replication-failure"
+      eventType: "replication_failure"
+      condition: "replication_lag > 30"
+      action: "scale_up"
+      instances: 1
+      cooldown: 600
+
+  # Schedule-based scaling
+  scheduleScaling:
+    - name: "business-hours-scaling"
+      schedule: "0 8 * * 1-5"     # 8 AM Monday-Friday
+      timezone: "America/New_York"
+      action: "scale_to"
+      instances: 5
+
+    - name: "peak-load-scaling"
+      schedule: "0 14 * * 1-5"     # 2 PM Monday-Friday
+      timezone: "America/New_York"
+      action: "scale_to"
+      instances: 8
+
+    - name: "after-hours-scaling"
+      schedule: "0 20 * * 1-5"     # 8 PM Monday-Friday
+      timezone: "America/New_York"
+      action: "scale_to"
+      instances: 3
+
+    - name: "weekend-minimum"
+      schedule: "0 2 * * 6"        # 2 AM Saturday
+      timezone: "America/New_York"
+      action: "scale_to"
+      instances: 2
+
+    - name: "weekly-backup-scaling"
+      schedule: "0 3 * * 0"        # 3 AM Sunday
+      timezone: "America/New_York"
+      action: "scale_up"
+      instances: 6
+
+  # Backup and recovery
+  backup:
+    enabled: true
+    retentionPeriod: 7  # days
+    backupWindow: "02:00-04:00"
+    backupType: "snapshot"
+    crossRegionBackup: true
+    pointInTimeRecovery: true
+
+  # Security
+  security:
+    encryption:
+      atRest: true
+      inTransit: true
+      kmsKeyId: "your-kms-key-id"
+
+    accessControl:
+      vpcSecurityGroupIds: ["sg-12345678"]
+      dbSubnetGroupName: "default"
+      iamDatabaseAuthenticationEnabled: true
+
+    auditing:
+      enabled: true
+      logExports: ["postgresql", "upgrade"]
+      performanceInsightsEnabled: true
+      performanceInsightsRetentionDays: 7
+
+  # Notifications
+  notifications:
+    channels:
+      - type: "slack"
+        webhook_url: "https://hooks.slack.com/services/..."
+        channel: "#database-alerts"
+        severity_threshold: "warning"
+
+      - type: "email"
+        recipients: ["dba-team@company.com", "sre-team@company.com"]
+        severity_threshold: "error"
+
+      - type: "pagerduty"
+        service_key: "your-pagerduty-service-key"
+        severity_threshold: "critical"
+
+    alertRules:
+      - name: "high-replication-lag"
+        condition: "replication_lag > 30"
+        severity: "critical"
+        duration: 120
+        message: "Database replication lag is critically high"
+
+      - name: "connection-exhaustion"
+        condition: "database_connections > 400"
+        severity: "error"
+        duration: 180
+        message: "Database is running out of connections"
+
+      - name: "storage-full"
+        condition: "disk_utilization > 95"
+        severity: "critical"
+        duration: 60
+        message: "Database storage is almost full"
+
+      - name: "high-slow-query-rate"
+        condition: "slow_queries > 10"
+        severity: "warning"
+        duration: 300
+        message: "High rate of slow queries detected"
+
+      - name: "deadlock-detected"
+        condition: "deadlock_count > 5"
+        severity: "error"
+        duration: 60
+        message: "Database deadlocks detected"
+
+  # Performance tuning
+  performance:
+    connectionPooling:
+      enabled: true
+      maxConnections: 100
+      minConnections: 10
+      connectionTimeout: 30
+
+    queryOptimization:
+      enabled: true
+      autoExplain: true
+      logMinDurationStatement: 1000
+      logExplainAnalyze: true
+
+    indexMaintenance:
+      enabled: true
+      autoAnalyze: true
+      autoVacuum: true
+      vacuumCostDelay: 10
+
+  # Advanced features
+  advanced:
+    # Read routing
+    readRouting:
+      strategy: "least_connections"
+      primaryForWrites: true
+      replicaWeighting: true
+
+    # Connection management
+    connectionManagement:
+      maxIdleConnections: 20
+      maxLifetime: 3600
+      validationQuery: "SELECT 1"
+
+    # Scaling strategies
+    scalingStrategies:
+      readHeavyWorkload:
+        primaryRatio: 1
+        replicaRatio: 9
+        scaleUpTrigger: "read_iops > 2000"
+
+      writeHeavyWorkload:
+        primaryRatio: 1
+        replicaRatio: 4
+        scaleUpTrigger: "write_iops > 1500"
+
+      balancedWorkload:
+        primaryRatio: 1
+        replicaRatio: 6
+        scaleUpTrigger: "combined_load > 75"
+
+# Status and metrics
+status:
+  phase: "active"
+  observedGeneration: 8
+  lastScaleTime: "2025-10-23T17:20:00Z"
+  currentReplicas: 4
+  readyReplicas: 4
+  desiredReplicas: 4
+
+  conditions:
+    - type: "AbleToScale"
+      status: "True"
+      reason: "ReadyForNewScale"
+      lastTransitionTime: "2025-10-23T17:20:00Z"
+
+    - type: "ScalingActive"
+      status: "True"
+      reason: "ValidMetricFound"
+      lastTransitionTime: "2025-10-23T17:20:00Z"
+
+    - type: "ScalingLimited"
+      status: "False"
+      reason: "DesiredWithinReplicaLimits"
+      lastTransitionTime: "2025-10-23T17:20:00Z"
+
+    - type: "Healthy"
+      status: "True"
+      reason: "DatabaseHealthy"
+      lastTransitionTime: "2025-10-23T17:20:00Z"
+
+    - type: "ReplicasHealthy"
+      status: "True"
+      reason: "AllReplicasReady"
+      lastTransitionTime: "2025-10-23T17:20:00Z"
+
+  metrics:
+    currentMetrics:
+      - type: "Resource"
+        resource:
+          name: "cpu"
+          current:
+            averageUtilization: 62
+
+      - type: "Resource"
+        resource:
+          name: "memory"
+          current:
+            averageUtilization: 68
+
+      - type: "External"
+        external:
+          metric:
+            name: "database_connections"
+          current:
+            value: "185"
+
+      - type: "External"
+        external:
+          metric:
+            name: "replication_lag"
+          current:
+            value: "3"

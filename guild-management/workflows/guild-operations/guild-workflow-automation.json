@@ -1,0 +1,391 @@
+{
+  "name": "Guild Management Workflow Automation",
+  "description": "Comprehensive n8n workflows for guild operations, member management, and automated tasks",
+  "workflows": [
+    {
+      "id": "guild-member-onboarding",
+      "name": "Guild Member Onboarding",
+      "description": "Automated workflow for processing new guild member applications and integration",
+      "nodes": [
+        {
+          "id": "trigger-application",
+          "name": "Application Webhook",
+          "type": "webhook",
+          "parameters": {
+            "httpMethod": "POST",
+            "path": "guild-application",
+            "responseMode": "responseNode"
+          },
+          "position": [250, 150]
+        },
+        {
+          "id": "validate-application",
+          "name": "Validate Application",
+          "type": "function",
+          "parameters": {
+            "functionCode": "const application = $input.item.json;\nconst validation = {\n  valid: true,\n  errors: []\n};\n\nif (!application.playerId || !application.guildId) {\n  validation.valid = false;\n  validation.errors.push('Missing required fields');\n}\n\nreturn [{\n  json: {\n    application: application,\n    validation: validation\n  }\n}];"
+          },
+          "position": [450, 150]
+        },
+        {
+          "id": "check-guild-requirements",
+          "name": "Check Guild Requirements",
+          "type": "function",
+          "parameters": {
+            "functionCode": "const { application, validation } = $input.item.json;\n\nif (!validation.valid) {\n  return [{ json: { application, validation, requirementsMet: false } }];\n}\n\n// Check guild requirements\nconst requirements = {\n  minLevel: 10,\n  classRequirements: [],\n  approvalRequired: true\n};\n\n// Mock player data check\nconst playerData = {\n  level: 15,\n  class: 'Warrior',\n  achievements: ['new_player']\n};\n\nconst requirementsMet = \n  playerData.level >= requirements.minLevel &&\n  (requirements.classRequirements.length === 0 || requirements.classRequirements.includes(playerData.class));\n\nreturn [{\n  json: {\n    application,\n    validation,\n    playerData,\n    requirementsMet,\n    guildRequirements: requirements\n  }\n}];"
+          },
+          "position": [650, 150]
+        },
+        {
+          "id": "notify-officers",
+          "name": "Notify Guild Officers",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:3000/api/notifications/guild-officers",
+            "body": {
+              "type": "new_application",
+              "guildId": "{{$node[\"Check Guild Requirements\"].json[\"application\"][\"guildId\"]}}",
+              "application": "{{$node[\"Check Guild Requirements\"].json[\"application\"]}}",
+              "requirementsMet": "{{$node[\"Check Guild Requirements\"].json[\"requirementsMet\"]}}"
+            },
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [850, 150]
+        },
+        {
+          "id": "create-application-record",
+          "name": "Create Application Record",
+          "type": "mongodb",
+          "parameters": {
+            "operation": "insert",
+            "database": "dmln8n",
+n            "collection": "guild_applications",
+            "fields": {
+              "guildId": "{{$node[\"Check Guild Requirements\"].json[\"application\"][\"guildId\"]}}",
+              "playerId": "{{$node[\"Check Guild Requirements\"].json[\"application\"][\"playerId\"]}}",
+              "playerName": "{{$node[\"Check Guild Requirements\"].json[\"application\"][\"playerName\"]}}",
+              "applicationData": "{{$node[\"Check Guild Requirements\"].json[\"application\"]}}",
+              "playerData": "{{$node[\"Check Guild Requirements\"].json[\"playerData\"]}}",
+              "status": "pending",
+              "submittedAt": "{{new Date().toISOString()}}"
+            }
+          },
+          "position": [1050, 150]
+        },
+        {
+          "id": "auto-approve",
+          "name": "Auto-Approval Check",
+          "type": "if",
+          "parameters": {
+            "conditions": {
+              "options": {
+                "caseSensitive": true,
+                "leftValue": "",
+                "typeValidation": "strict"
+              },
+              "conditions": [
+                {
+                  "id": "auto-approve-condition",
+                  "leftValue": "={{$node[\"Check Guild Requirements\"].json[\"requirementsMet\"]}}",
+                  "rightValue": true,
+                  "operator": {
+                    "type": "boolean",
+                    "operation": "equal"
+                  }
+                },
+                {
+                  "id": "approval-not-required",
+                  "leftValue": "={{$node[\"Check Guild Requirements\"].json[\"guildRequirements\"][\"approvalRequired\"]}}",
+                  "rightValue": false,
+                  "operator": {
+                    "type": "boolean",
+                    "operation": "equal"
+                  },
+                  "combineOperation": "and"
+                }
+              ],
+              "combinator": "and"
+            }
+          },
+          "position": [1250, 150]
+        },
+        {
+          "id": "approve-application",
+          "name": "Approve Application",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:3000/api/guilds/add-member",
+            "body": {
+              "guildId": "{{$node[\"Check Guild Requirements\"].json[\"application\"][\"guildId\"]}}",
+              "playerId": "{{$node[\"Check Guild Requirements\"].json[\"application\"][\"playerId\"]}}",
+              "rank": "Initiate",
+              "approvedBy": "system_auto"
+            },
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [1450, 50]
+        },
+        {
+          "id": "send-welcome-message",
+          "name": "Send Welcome Message",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:3000/api/notifications/player",
+            "body": {
+              "playerId": "{{$node[\"Check Guild Requirements\"].json[\"application\"][\"playerId\"]}}",
+              "type": "guild_welcome",
+              "message": "Welcome to the guild! Your application has been automatically approved.",
+              "guildId": "{{$node[\"Check Guild Requirements\"].json[\"application\"][\"guildId\"]}}"
+            },
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [1650, 50]
+        },
+        {
+          "id": "schedule-onboarding-tasks",
+          "name": "Schedule Onboarding Tasks",
+          "type": "function",
+          "parameters": {
+            "functionCode": "const { application } = $input.item.json;\n\nconst onboardingTasks = [\n  {\n    type: 'welcome_message',\n    delay: 0,\n    data: { playerId: application.playerId }\n  },\n  {\n    type: 'guild_tour',\n    delay: 1000 * 60 * 5, // 5 minutes\n    data: { playerId: application.playerId }\n  },\n  {\n    type: 'introduction_request',\n    delay: 1000 * 60 * 60, // 1 hour\n    data: { playerId: application.playerId }\n  },\n  {\n    type: 'first_quest_suggestion',\n    delay: 1000 * 60 * 60 * 24, // 1 day\n    data: { playerId: application.playerId }\n  }\n];\n\nreturn [{\n  json: {\n    onboardingTasks,\n    application\n  }\n}];"
+          },
+          "position": [1450, 250]
+        },
+        {
+          "id": "wait-for-approval",
+          "name": "Wait for Manual Approval",
+          "type": "wait",
+          "parameters": {
+            "amount": 72,
+            "unit": "hours"
+          },
+          "position": [1450, 450]
+        },
+        {
+          "id": "check-approval-status",
+          "name": "Check Approval Status",
+          "type": "mongodb",
+          "parameters": {
+            "operation": "find",
+            "database": "dmln8n",
+            "collection": "guild_applications",
+            "query": {
+              "playerId": "{{$node[\"Check Guild Requirements\"].json[\"application\"][\"playerId\"]}}",
+              "guildId": "{{$node[\"Check Guild Requirements\"].json[\"application\"][\"guildId\"]}}"
+            }
+          },
+          "position": [1650, 450]
+        },
+        {
+          "id": "application-timeout",
+          "name": "Handle Application Timeout",
+          "type": "httpRequest",
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:3000/api/notifications/player",
+            "body": {
+              "playerId": "{{$node[\"Check Guild Requirements\"].json[\"application\"][\"playerId\"]}}",
+              "type": "application_timeout",
+              "message": "Your guild application has expired due to lack of response. Please reapply if still interested."
+            },
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          "position": [1850, 450]
+        },
+        {
+          "id": "update-application-status",
+          "name": "Update Application Status",
+          "type": "mongodb",
+          "parameters": {
+            "operation": "update",
+            "database": "dmln8n",
+            "collection": "guild_applications",
+            "query": {
+              "playerId": "{{$node[\"Check Guild Requirements\"].json[\"application\"][\"playerId\"]}}",
+              "guildId": "{{$node[\"Check Guild Requirements\"].json[\"application\"][\"guildId\"]}}"
+            },
+            "update": {
+              "status": "approved",
+              "approvedAt": "{{new Date().toISOString()}}",
+              "approvedBy": "system_auto"
+            }
+          },
+          "position": [1850, 50]
+        }
+      ],
+      "connections": {
+        "Application Webhook": {
+          "main": [
+            [
+              {
+                "node": "Validate Application",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Validate Application": {
+          "main": [
+            [
+              {
+                "node": "Check Guild Requirements",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Check Guild Requirements": {
+          "main": [
+            [
+              {
+                "node": "Notify Guild Officers",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Notify Guild Officers": {
+          "main": [
+            [
+              {
+                "node": "Create Application Record",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Create Application Record": {
+          "main": [
+            [
+              {
+                "node": "Auto-Approval Check",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Auto-Approval Check": {
+          "main": [
+            [
+              {
+                "node": "Approve Application",
+                "type": "main",
+                "index": 0
+              }
+            ],
+            [
+              {
+                "node": "Schedule Onboarding Tasks",
+                "type": "main",
+                "index": 0
+              },
+              {
+                "node": "Wait for Manual Approval",
+                "type": "main",
+                "index": 1
+              }
+            ]
+          ]
+        },
+        "Approve Application": {
+          "main": [
+            [
+              {
+                "node": "Send Welcome Message",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Send Welcome Message": {
+          "main": [
+            [
+              {
+                "node": "Update Application Status",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Wait for Manual Approval": {
+          "main": [
+            [
+              {
+                "node": "Check Approval Status",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Check Approval Status": {
+          "main": [
+            [
+              {
+                "node": "Application Timeout",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "guild-activity-monitoring",
+      "name": "Guild Activity Monitoring",
+      "description": "Monitor guild activity and generate alerts for inactivity",
+      "nodes": [
+        {
+          "id": "scheduled-check",
+          "name": "Daily Activity Check",
+          "type": "cron",
+          "parameters": {
+            "cronExpression": "0 0 * * *"
+          },
+          "position": [250, 150]
+        },
+        {
+          "id": "get-all-guilds",
+          "name": "Get All Guilds",
+          "type": "mongodb",
+          "parameters": {
+            "operation": "find",
+            "database": "dmln8n",
+            "collection": "guilds"
+          },
+          "position": [450, 150]
+        },
+        {
+          "id": "check-member-activity",
+          "name": "Check Member Activity",
+          "type": "function",
+          "parameters": {
+            "functionCode": "const guilds = $input.all();\nconst results = [];\n\nfor (const guild of guilds) {\n  const guildData = guild.json;\n  \n  // Get active members in last 7 days\n  const sevenDaysAgo = new Date();\n  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);\n  \n  // Mock activity check - would query actual activity data\n  const activeMembers = Math.floor(guildData.memberCount * 0.7); // 70% active\n  const inactiveMembers = guildData.memberCount - activeMembers;\n  \n  const activityLevel = activeMembers / guildData.memberCount;\n  \n  results.push({\n    guildId: guildData.id,\n    guildName: guildData.name,\n    totalMembers: guildData.memberCount,\n    activeMembers: activeMembers,\n    inactiveMembers: inactiveMembers,\n    activityLevel: activityLevel,\n    status: activityLevel < 0.3 ? 'critical' : activityLevel < 0.6 ? 'warning' : 'healthy'\n  });\n}\n\nreturn results.map(r => ({ json: r }));"
+          },
+          "position": [650, 150]
+        },
+        {
+          "id": "check-critical-activity",
+          "name": "Check Critical Activity",
+          "type": "if",
+          "parameters": {
+            "conditions": {
+              "options": {\n                "caseSensitive": true,\n                "leftValue": "",\n                "typeValidation": "strict"\n              },\n              "conditions": [\n                {\n                  "id": "critical-condition",\n                  "leftValue": "={{$json.status}}",\n                  "rightValue": "critical",\n                  "operator": {\n                    "type": "string",\n                    "operation": "equal"\n                  }\n                }\n              ],\n              "combinator": "and"\n            }\n          },\n          "position": [850, 150]\n        },\n        {\n          "id": "notify-leadership",\n          "name": "Notify Guild Leadership",\n          "type": "httpRequest",\n          "parameters": {\n            "method": "POST",\n            "url": "http://localhost:3000/api/notifications/guild-leadership",\n            "body": {\n              "type": "activity_alert",\n              "guildId": "={{$json.guildId}}",\n              "severity": "critical",\n              "message": "Guild activity is critically low. Only {{$json.activeMembers}} of {{$json.totalMembers}} members have been active in the last 7 days.",\n              "data": "={{$json}}"\n            },\n            "headers": {\n              "Content-Type": "application/json"\n            }\n          },\n          "position": [1050, 50]\n        },\n        {\n          "id": "create-activity-report",\n          "name": "Create Activity Report",\n          "type": "mongodb",\n          "parameters": {\n            "operation": "insert",\n            "database": "dmln8n",\n            "collection": "guild_activity_reports",\n            "fields": {\n              "guildId": "={{$json.guildId}}",\n              "guildName": "={{$json.guildName}}",\n              "totalMembers": "={{$json.totalMembers}}",\n              "activeMembers": "={{$json.activeMembers}}",\n              "activityLevel": "={{$json.activityLevel}}",\n              "status": "={{$json.status}}",\n              "reportDate": "{{new Date().toISOString()}}"\n            }\n          },\n          "position": [1050, 250]\n        },\n        {\n          "id": "check-warning-activity",\n          "name": "Check Warning Activity",\n          "type": "if",\n          "parameters": {\n            "conditions": {\n              "options": {\n                "caseSensitive": true,\n                "leftValue": "",\n                "typeValidation": "strict"\n              },\n              "conditions": [\n                {\n                  "id": "warning-condition",\n                  "leftValue": "={{$json.status}}",\n                  "rightValue": "warning",\n                  "operator": {\n                    "type": "string",\n                    "operation": "equal"\n                  }\n                }\n              ],\n              "combinator": "and"\n            }\n          },\n          "position": [850, 350]\n        },\n        {\n          "id": "schedule-activity-event",\n          "name": "Schedule Activity Event",\n          "type": "httpRequest",\n          "parameters": {\n            "method": "POST",\n            "url": "http://localhost:3000/api/guilds/events/create",\n            "body": {\n              "guildId": "={{$json.guildId}}",\n              "title": "Guild Activity Boost Event",\n              "description": "Let's boost our guild activity! Join us for special events and bonuses.",\n              "type": "social",\n              "creatorId": "system_activity_bot",\n              "startTime": "{{new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()}}",\n              "duration": 120\n            },\n            "headers": {\n              "Content-Type": "application/json"\n            }\n          },\n          "position": [1050, 450]\n        },\n        {\n          "id": "log-activity-data",\n          "name": "Log Activity Data",\n          "type": "mongodb",\n          "parameters": {\n            "operation": "insert",\n            "database": "dmln8n",\n            "collection": "guild_activity_log",\n            "fields": {\n              "guildId": "={{$json.guildId}}",\n              "activityData": "={{$json}}",\n              "timestamp": "{{new Date().toISOString()}}"\n            }\n          },\n          "position": [1250, 250]\n        }\n      ],\n      "connections": {\n        "Daily Activity Check": {\n          "main": [\n            [\n              {\n                "node": "Get All Guilds",\n                "type": "main",\n                "index": 0\n              }\n            ]\n          ]\n        },\n        "Get All Guilds": {\n          "main": [\n            [\n              {\n                "node": "Check Member Activity",\n                "type": "main",\n                "index": 0\n              }\n            ]\n          ]\n        },\n        "Check Member Activity": {\n          "main": [\n            [\n              {\n                "node": "Check Critical Activity",\n                "type": "main",\n                "index": 0\n              }\n            ]\n          ]\n        },\n        "Check Critical Activity": {\n          "main": [\n            [\n              {\n                "node": "Notify Guild Leadership",\n                "type": "main",\n                "index": 0\n              },\n              {\n                "node": "Create Activity Report",\n                "type": "main",\n                "index": 1\n              }\n            ],\n            [\n              {\n                "node": "Check Warning Activity",\n                "type": "main",\n                "index": 0\n              },\n              {\n                "node": "Create Activity Report",\n                "type": "main",\n                "index": 1\n              }\n            ]\n          ]\n        },\n        "Create Activity Report": {\n          "main": [\n            [\n              {\n                "node": "Log Activity Data",\n                "type": "main",\n                "index": 0\n              }\n            ]\n          ]\n        },\n        "Check Warning Activity": {\n          "main": [\n            [\n              {\n                "node": "Schedule Activity Event",\n                "type": "main",\n                "index": 0\n              }\n            ]\n          ]\n        },\n        "Schedule Activity Event": {\n          "main": [\n            [\n              {\n                "node": "Log Activity Data",\n                "type": "main",\n                "index": 0\n              }\n            ]\n          ]\n        }\n      }\n    },\n    {\n      "id": "guild-bank-automation",\n      "name": "Guild Bank Automation",\n      "description": "Automated guild bank management including tax collection and maintenance",\n      "nodes": [\n        {\n          "id": "weekly-maintenance",\n          "name": "Weekly Maintenance Trigger",\n          "type": "cron",\n          "parameters": {\n            "cronExpression": "0 0 * * 0"\n          },\n          "position": [250, 150]\n        },\n        {\n          "id": "get-guild-banks",\n          "name": "Get All Guild Banks",\n          "type": "mongodb",\n          "parameters": {\n            "operation": "find",\n            "database": "dmln8n",\n            "collection": "guild_banks"\n          },\n          "position": [450, 150]\n        },\n        {\n          "id": "calculate-maintenance",\n          "name": "Calculate Maintenance Costs",\n          "type": "function",\n          "parameters": {\n            "functionCode": "const banks = $input.all();\nconst maintenanceTasks = [];\n\nfor (const bank of banks) {\n  const bankData = bank.json;\n  \n  // Calculate maintenance cost based on bank level and features\n  const baseCost = 100;\n  const memberCost = bankData.memberCount * 10;\n  const facilityCost = bankData.facilities.length * 50;\n  const totalCost = baseCost + memberCost + facilityCost;\n  \n  maintenanceTasks.push({\n    guildId: bankData.guildId,\n    guildName: bankData.guildName,\n    currentBalance: bankData.gold,\n    maintenanceCost: totalCost,\n    canAfford: bankData.gold >= totalCost,\n    status: bankData.gold >= totalCost ? 'can_pay' : 'insufficient_funds'\n  });\n}\n\nreturn maintenanceTasks.map(task => ({ json: task }));"\n          },\n          "position": [650, 150]\n        },\n        {\n          "id": "check-payment-ability",\n          "name": "Check Payment Ability",\n          "type": "if",\n          "parameters": {\n            "conditions": {\n              "options": {\n                "caseSensitive": true,\n                "leftValue": "",\n                "typeValidation": "strict"\n              },\n              "conditions": [\n                {\n                  "id": "can-afford",\n                  "leftValue": "={{$json.canAfford}}",\n                  "rightValue": true,\n                  "operator": {\n                    "type": "boolean",\n                    "operation": "equal"\n                  }\n                }\n              ],\n              "combinator": "and"\n            }\n          },\n          "position": [850, 150]\n        },\n        {\n          "id": "process-maintenance-payment",\n          "name": "Process Maintenance Payment",\n          "type": "httpRequest",\n          "parameters": {\n            "method": "POST",\n            "url": "http://localhost:3000/api/guild-banks/withdraw",\n            "body": {\n              "guildId": "={{$json.guildId}}",\n              "amount": "={{$json.maintenanceCost}}",\n              "reason": "Weekly guild maintenance",\n              "processedBy": "system_maintenance"\n            },\n            "headers": {\n              "Content-Type": "application/json"\n            }\n          },\n          "position": [1050, 50]\n        },\n        {\n          "id": "update-facility-usage",\n          "name": "Reset Facility Usage",\n          "type": "httpRequest",\n          "parameters": {\n            "method": "POST",\n            "url": "http://localhost:3000/api/guild-halls/reset-facility-usage",\n            "body": {\n              "guildId": "={{$json.guildId}}"\n            },\n            "headers": {\n              "Content-Type": "application/json"\n            }\n          },\n          "position": [1250, 50]\n        },\n        {\n          "id": "notify-maintenance-complete",\n          "name": "Notify Maintenance Complete",\n          "type": "httpRequest",\n          "parameters": {\n            "method": "POST",\n            "url": "http://localhost:3000/api/notifications/guild-officers",\n            "body": {\n              "type": "maintenance_completed",\n              "guildId": "={{$json.guildId}}",\n              "amount": "={{$json.maintenanceCost}}",\n              "newBalance": "={{$json.currentBalance - $json.maintenanceCost}}"\n            },\n            "headers": {\n              "Content-Type": "application/json"\n            }\n          },\n          "position": [1450, 50]\n        },\n        {\n          "id": "handle-insufficient-funds",\n          "name": "Handle Insufficient Funds",\n          "type": "httpRequest",\n          "parameters": {\n            "method": "POST",\n            "url": "http://localhost:3000/api/guild-halls/degrade",\n            "body": {\n              "guildId": "={{$json.guildId}}",\n              "reason": "Insufficient funds for maintenance"\n            },\n            "headers": {\n              "Content-Type": "application/json"\n            }\n          },\n          "position": [1050, 250]\n        },\n        {\n          "id": "notify-insufficient-funds",\n          "name": "Notify Insufficient Funds",\n          "type": "httpRequest",\n          "parameters": {\n            "method": "POST",\n            "url": "http://localhost:3000/api/notifications/guild-leadership",\n            "body": {\n              "type": "maintenance_failed",\n              "guildId": "={{$json.guildId}}",\n              "requiredAmount": "={{$json.maintenanceCost}}",\n              "currentBalance": "={{$json.currentBalance}}",\n              "shortfall": "={{$json.maintenanceCost - $json.currentBalance}}"\n            },\n            "headers": {\n              "Content-Type": "application/json"\n            }\n          },\n          "position": [1250, 250]\n        },\n        {\n          "id": "log-maintenance",\n          "name": "Log Maintenance Activity",\n          "type": "mongodb",\n          "parameters": {\n            "operation": "insert",\n            "database": "dmln8n",\n            "collection": "guild_maintenance_log",\n            "fields": {\n              "guildId": "={{$json.guildId}}",\n              "maintenanceCost": "={{$json.maintenanceCost}}",\n              "status": "={{$json.status}}",\n              "processedAt": "{{new Date().toISOString()}}"\n            }\n          },\n          "position": [1450, 250]\n        }\n      ],\n      "connections": {\n        "Weekly Maintenance Trigger": {\n          "main": [\n            [\n              {\n                "node": "Get All Guild Banks",\n                "type": "main",\n                "index": 0\n              }\n            ]\n          ]\n        },\n        "Get All Guild Banks": {\n          "main": [\n            [\n              {\n                "node": "Calculate Maintenance Costs",\n                "type": "main",\n                "index": 0\n              }\n            ]\n          ]\n        },\n        "Calculate Maintenance Costs": {\n          "main": [\n            [\n              {\n                "node": "Check Payment Ability",\n                "type": "main",\n                "index": 0\n              }\n            ]\n          ]\n        },\n        "Check Payment Ability": {\n          "main": [\n            [\n              {\n                "node": "Process Maintenance Payment",\n                "type": "main",\n                "index": 0\n              }\n            ],\n            [\n              {\n                "node": "Handle Insufficient Funds",\n                "type": "main",\n                "index": 0\n              }\n            ]\n          ]\n        },\n        "Process Maintenance Payment": {\n          "main": [\n            [\n              {\n                "node": "Update Facility Usage",\n                "type": "main",\n                "index": 0\n              }\n            ]\n          ]\n        },\n        "Update Facility Usage": {\n          "main": [\n            [\n              {\n                "node": "Notify Maintenance Complete",\n                "type": "main",\n                "index": 0\n              }\n            ]\n          ]\n        },\n        "Notify Maintenance Complete": {\n          "main": [\n            [\n              {\n                "node": "Log Maintenance Activity",\n                "type": "main",\n                "index": 0\n              }\n            ]\n          ]\n        },\n        "Handle Insufficient Funds": {\n          "main": [\n            [\n              {\n                "node": "Notify Insufficient Funds",\n                "type": "main",\n                "index": 0\n              }\n            ]\n          ]\n        },\n        "Notify Insufficient Funds": {\n          "main": [\n            [\n              {\n                "node": "Log Maintenance Activity",\n                "type": "main",\n                "index": 0\n              }\n            ]\n          ]\n        }\n      }\n    }\n  ],\n  "settings": {\n    "executionOrder": "v1",\n    "saveManualExecutions": true,\n    "callerPolicyDefaultOption": "workflowsFromSameOwner"\n  }\n}

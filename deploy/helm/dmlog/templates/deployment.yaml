@@ -1,0 +1,153 @@
+apiVersion: {{ include "common.capabilities.deployment.apiVersion" . }}
+kind: Deployment
+metadata:
+  name: {{ include "dmlog.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dmlog.labels" . | nindent 4 }}
+    component: backend
+  annotations:
+    {{- if .Values.podAnnotations }}
+    {{- toYaml .Values.podAnnotations | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "dmlog.selectorLabels" . | nindent 6 }}
+      component: backend
+  {{- if .Values.updateStrategy }}
+  strategy:
+    {{- toYaml .Values.updateStrategy | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- if .Values.podAnnotations }}
+        {{- toYaml .Values.podAnnotations | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "dmlog.selectorLabels" . | nindent 8 }}
+        component: backend
+    spec:
+      {{- include "dmlog.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "dmlog.serviceAccountName" . }}
+      {{- if .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- end }}
+      {{- if .Values.initContainers }}
+      initContainers:
+        {{- toYaml .Values.initContainers | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- if .Values.securityContext }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- end }}
+          image: "{{ include "dmlog.image" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.ports.http }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.service.ports.metrics }}
+              protocol: TCP
+          {{- if .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+          {{- end }}
+          env:
+            - name: APP_NAME
+              value: {{ .Values.config.app.name }}
+            - name: APP_VERSION
+              value: {{ .Values.config.app.version | quote }}
+            - name: ENVIRONMENT
+              value: {{ .Values.config.app.environment }}
+            - name: DEBUG
+              value: {{ .Values.config.app.debug | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.config.app.logLevel }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dmlog.secretName" . }}
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              value: {{ include "dmlog.redisURL" . }}
+            - name: QDRANT_URL
+              value: {{ include "dmlog.qdrantURL" . }}
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dmlog.secretName" . }}
+                  key: SECRET_KEY
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dmlog.secretName" . }}
+                  key: OPENAI_API_KEY
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dmlog.secretName" . }}
+                  key: ANTHROPIC_API_KEY
+            - name: QDRANT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dmlog.secretName" . }}
+                  key: QDRANT_API_KEY
+            - name: CORS_ORIGINS
+              value: {{ join "," .Values.config.cors.origins }}
+            - name: MAX_CONNECTIONS
+              value: {{ .Values.config.performance.maxConnections | quote }}
+            - name: CONNECTION_TIMEOUT
+              value: {{ .Values.config.performance.connectionTimeout | quote }}
+            - name: WORKERS
+              value: {{ .Values.config.performance.workers | quote }}
+            - name: WORKER_CONNECTIONS
+              value: {{ .Values.config.performance.workerConnections | quote }}
+            {{- if .Values.extraEnv }}
+            {{- toYaml .Values.extraEnv | nindent 12 }}
+            {{- end }}
+          {{- if .Values.resources }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- end }}
+          {{- if .Values.volumeMounts }}
+          volumeMounts:
+            {{- toYaml .Values.volumeMounts | nindent 12 }}
+          {{- end }}
+        {{- if .Values.sidecars }}
+        {{- toYaml .Values.sidecars | nindent 8 }}
+        {{- end }}
+      {{- if .Values.volumes }}
+      volumes:
+        {{- toYaml .Values.volumes | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.affinity }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,91 @@
+# Testing Framework
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.1
+pytest-html>=3.2.0
+pytest-xdist>=3.3.1
+pytest-benchmark>=4.0.0
+pytest-timeout>=2.1.0
+pytest-randomly>=3.15.0
+pytest-env>=1.1.3
+
+# HTTP Testing
+httpx>=0.25.0
+requests>=2.31.0
+responses>=0.23.3
+
+# Database Testing
+sqlalchemy>=2.0.0
+alembic>=1.12.0
+psycopg2-binary>=2.9.7
+faker>=19.12.0
+factory-boy>=3.3.0
+
+# Async Testing
+asyncio>=3.4.3
+websockets>=11.0.3
+aiofiles>=23.2.1
+
+# Load Testing
+locust>=2.17.0
+bokeh>=3.2.2
+
+# Security Testing
+bandit>=1.7.5
+safety>=2.3.5
+semgrep>=1.52.0
+
+# Code Quality
+black>=23.9.1
+isort>=5.12.0
+flake8>=6.1.0
+mypy>=1.6.1
+pylint>=3.0.3
+
+# Performance Profiling
+py-spy>=0.3.14
+memory-profiler>=0.61.0
+line-profiler>=4.1.1
+
+# Browser Testing (E2E)
+playwright>=1.40.0
+selenium>=4.15.0
+pytest-playwright>=0.4.3
+
+# WebSocket Testing
+pytest-websocket>=0.2.1
+websockets>=11.0.3
+
+# Mock Services
+moto>=4.2.11  # AWS mocks
+responses>=0.23.3  # HTTP mocks
+redis-py>=5.0.1
+fakeredis>=2.20.1
+
+# Test Data Generation
+hypothesis>=6.88.0
+faker>=19.12.0
+factory-boy>=3.3.0
+pydantic-factories>=2.15.0
+
+# Reporting
+allure-pytest>=2.13.2
+pytest-json-report>=1.5.0
+coverage>=7.3.2
+pytest-cov>=4.1.0
+
+# Environment Management
+python-dotenv>=1.0.0
+environs>=10.0.0
+
+# Utilities
+python-multipart>=0.0.6
+email-validator>=2.0.0
+python-jose>=3.3.0
+passlib>=1.7.4
+bcrypt>=4.0.1
+
+# Development
+pre-commit>=3.5.0
+tox>=4.11.4

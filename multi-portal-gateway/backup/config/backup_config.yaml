@@ -1,0 +1,94 @@
+# DMLogn8n Backup Service Configuration
+# Comprehensive backup configuration for the multi-agent platform
+
+storage:
+  # Local storage configuration
+  local:
+    backup_path: "/home/activeloguser/DMLogn8n/multi-portal-gateway/backup/storage/local"
+    compression_level: 6
+    deduplication: true
+    encryption: true
+
+  # AWS S3 storage configuration
+  s3:
+    bucket: "dmlogn8n-backups-prod"
+    region: "us-east-1"
+    access_key_id: "${AWS_ACCESS_KEY_ID}"
+    secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
+    storage_class: "STANDARD_IA"
+    server_side_encryption: "AES256"
+    multipart_threshold_mb: 64
+    cross_region_replication: true
+    replication_regions: ["us-west-2", "eu-west-1"]
+
+  # Google Cloud Storage configuration
+  gcs:
+    bucket: "dmlogn8n-backups-prod"
+    credentials_path: "/home/activeloguser/DMLogn8n/multi-portal-gateway/backup/config/gcs_credentials.json"
+    storage_class: "NEARLINE"
+    encryption_method: "server_default"
+    lifecycle_management: true
+
+# Backup schedules using cron expressions
+schedules:
+  # Full database backup weekly on Sunday at 2 AM
+  database_full: "0 2 * * 0"
+
+  # Incremental database backup daily at 3 AM
+  database_incremental: "0 3 * * *"
+
+  # Full file backup weekly on Sunday at 1 AM
+  files_full: "0 1 * * 0"
+
+  # Configuration backup daily at 4 AM
+  config: "0 4 * * *"
+
+# Retention policies
+retention:
+  daily_retention_days: 7
+  weekly_retention_weeks: 4
+  monthly_retention_months: 12
+  yearly_retention_years: 7
+
+# Notification settings
+notifications:
+  email_enabled: true
+  smtp_server: "smtp.gmail.com"
+  smtp_port: 587
+  smtp_username: "${SMTP_USERNAME}"
+  smtp_password: "${SMTP_PASSWORD}"
+  admin_emails:
+    - "admin@dmlogn8n.com"
+    - "devops@dmlogn8n.com"
+  slack_webhook: "${SLACK_WEBHOOK_URL}"
+  pagerduty_key: "${PAGERDUTY_KEY}"
+
+# Encryption settings
+encryption:
+  enabled: true
+  key_rotation_days: 90
+  algorithm: "AES256"
+  key_derivation: "PBKDF2"
+
+# Monitoring and metrics
+monitoring:
+  prometheus_enabled: true
+  prometheus_port: 8090
+  health_check_interval_seconds: 60
+  metrics_retention_days: 30
+
+# Validation settings
+validation:
+  enabled: true
+  checksum_algorithms: ["md5", "sha256"]
+  integrity_check: true
+  post_backup_validation: true
+  corruption_detection: true
+
+# Disaster recovery settings
+disaster_recovery:
+  auto_detection_enabled: true
+  auto_recovery_enabled: false
+  testing_enabled: true
+  test_frequency_weeks: 4
+  runbook_path: "/home/activeloguser/DMLogn8n/multi-portal-gateway/backup/runbooks"

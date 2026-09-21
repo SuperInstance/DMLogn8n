@@ -1,0 +1,222 @@
+version: '3.8'
+
+services:
+  # Main Gateway Service
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://dmlogn8n:password@postgres:5432/portal_gateway
+      - REDIS_URL=redis://redis:6379
+      - AI_SERVICE_URL=http://ollama:11434
+      - DEBUG=false
+    depends_on:
+      - postgres
+      - redis
+      - ollama
+    volumes:
+      - ./logs:/app/logs
+      - ./config:/app/config
+    networks:
+      - dmlogn8n-network
+    restart: unless-stopped
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=portal_gateway
+      - POSTGRES_USER=dmlogn8n
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./config/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - dmlogn8n-network
+    restart: unless-stopped
+
+  # Redis for caching and session management
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - dmlogn8n-network
+    restart: unless-stopped
+
+  # Ollama for AI services
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - dmlogn8n-network
+    restart: unless-stopped
+    # Pull models on startup
+    command: sh -c "ollama serve & ollama pull llama2 & ollama pull codellama & wait"
+
+  # DM Portal (Fixed Port 9501)
+  dm-portal:
+    build:
+      context: .
+      dockerfile: Dockerfile.dm-portal
+    ports:
+      - "9501:9501"
+    environment:
+      - GATEWAY_URL=http://gateway:8000
+      - PORT=9501
+    depends_on:
+      - gateway
+      - postgres
+    networks:
+      - dmlogn8n-network
+    restart: unless-stopped
+
+  # Coder Workshop Portal (Fixed Port 9502)
+  coder-portal:
+    build:
+      context: .
+      dockerfile: Dockerfile.coder-portal
+    ports:
+      - "9502:9502"
+    environment:
+      - GATEWAY_URL=http://gateway:8000
+      - PORT=9502
+      - AI_SERVICE_URL=http://ollama:11434
+    depends_on:
+      - gateway
+      - ollama
+      - postgres
+    volumes:
+      - ./scripts:/app/scripts
+      - ./tmp:/app/tmp
+    networks:
+      - dmlogn8n-network
+    restart: unless-stopped
+
+  # Character Portal Example (Port 9000)
+  character-portal-example:
+    build:
+      context: .
+      dockerfile: Dockerfile.character-portal
+    ports:
+      - "9000:9000"
+    environment:
+      - GATEWAY_URL=http://gateway:8000
+      - PORT=9000
+      - CHARACTER_ID=example_char_001
+    depends_on:
+      - gateway
+      - postgres
+    networks:
+      - dmlogn8n-network
+    restart: unless-stopped
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_WS_URL=ws://localhost:8000
+    depends_on:
+      - gateway
+    networks:
+      - dmlogn8n-network
+    restart: unless-stopped
+
+  # N8N for workflow automation
+  n8n:
+    image: n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=password
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=America/New_York
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-workflows:/home/node/.n8n/workflows
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - dmlogn8n-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/nginx.conf:/etc/nginx/nginx.conf
+      - ./config/ssl:/etc/nginx/ssl
+    depends_on:
+      - gateway
+      - frontend
+    networks:
+      - dmlogn8n-network
+    restart: unless-stopped
+
+  # Monitoring with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - dmlogn8n-network
+    restart: unless-stopped
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - dmlogn8n-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  ollama_data:
+  n8n_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  dmlogn8n-network:
+    driver: bridge

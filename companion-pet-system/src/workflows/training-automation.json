@@ -1,0 +1,252 @@
+{
+  "name": "Pet Training Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Training Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/pets/training-eligible",
+        "options": {}
+      },
+      "id": "b2c3d4e5-f1a2-3456-bcde-f12345678901",
+      "name": "Get Training-Eligible Pets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Analyze pets for training opportunities\nconst pets = $input.first().json.data || [];\nconst trainingCandidates = [];\n\nfor (const pet of pets) {\n  const trainingAnalysis = analyzeTrainingReadiness(pet);\n  \n  if (trainingAnalysis.canTrain) {\n    trainingCandidates.push({\n      petId: pet.id,\n      petName: pet.name,\n      level: pet.level,\n      energy: pet.energy,\n      happiness: pet.happiness,\n      bonding: pet.bonding,\n      evolutionStage: pet.evolutionStage,\n      lastTrained: pet.lastTrained,\n      skills: pet.unlockedSkills || [],\n      personality: pet.personality,\n      traits: pet.traits,\n      trainingOpportunities: trainingAnalysis.opportunities,\n      recommendedSessions: trainingAnalysis.recommendedSessions,\n      priority: calculateTrainingPriority(pet, trainingAnalysis)\n    });\n  }\n}\n\n// Sort by priority and filter for max 5 pets per run\ntrainingCandidates.sort((a, b) => b.priority - a.priority);\nconst selectedPets = trainingCandidates.slice(0, 5);\n\nreturn {\n  eligiblePets: selectedPets,\n  totalChecked: pets.length,\n  candidatesFound: trainingCandidates.length,\n  selectedForTraining: selectedPets.length\n};\n\nfunction analyzeTrainingReadiness(pet) {\n  const timeSinceLastTraining = pet.lastTrained ? Date.now() - pet.lastTrained : Infinity;\n  const hoursSinceTraining = timeSinceLastTraining / (1000 * 60 * 60);\n  \n  // Basic readiness checks\n  const readiness = {\n    energySufficient: pet.energy >= 40,\n    moodSuitable: pet.happiness >= 30,\n    timeElapsed: hoursSinceTraining >= 4,\n    healthOk: pet.currentHealth >= pet.maxHealth * 0.7,\n    bondingAdequate: pet.bonding >= 20\n  };\n  \n  const canTrain = Object.values(readiness).every(check => check);\n  \n  // Identify training opportunities\n  const opportunities = identifyTrainingOpportunities(pet);\n  \n  // Determine recommended sessions\n  const recommendedSessions = calculateRecommendedSessions(pet, opportunities, hoursSinceTraining);\n  \n  return {\n    canTrain,\n    readiness,\n    opportunities,\n    recommendedSessions,\n    timeSinceLastTraining: hoursSinceTraining\n  };\n}\n\nfunction identifyTrainingOpportunities(pet) {\n  const opportunities = [];\n  \n  // Basic obedience for young or new pets\n  if (pet.evolutionStage <= 1 || !pet.unlockedSkills.includes('sit')) {\n    opportunities.push({\n      type: 'basic_obedience',\n      skills: ['sit', 'stay', 'come'],\n      priority: 'high',\n      reason: 'Fundamental training needed'\n    });\n  }\n  \n  // Advanced skills for experienced pets\n  if (pet.level >= 20 && pet.unlockedSkills.includes('sit')) {\n    opportunities.push({\n      type: 'advanced_skills',\n      skills: ['attack', 'defend', 'agility'],\n      priority: 'medium',\n      reason: 'Ready for advanced training'\n    });\n  }\n  \n  // Magic skills for magical pets\n  if (isMagicalPet(pet) && pet.level >= 15) {\n    opportunities.push({\n      type: 'magical_training',\n      skills: ['magic_control', 'spell_casting'],\n      priority: 'medium',\n      reason: 'Magical potential detected'\n    });\n  }\n  \n  // Utility skills based on personality\n  if (pet.personality.primary === 'curious' || pet.personality.primary === 'adventurous') {\n    opportunities.push({\n      type: 'utility_skills',\n      skills: ['tracking', 'foraging'],\n      priority: 'low',\n      reason: 'Personality suited for utility skills'\n    });\n  }\n  \n  // Social skills for social pets\n  if (pet.personality.primary === 'affectionate' || pet.personality.primary === 'social') {\n    opportunities.push({\n      type: 'social_skills',\n      skills: ['socialize', 'teamwork'],\n      priority: 'medium',\n      reason: 'Social personality detected'\n    });\n  }\n  \n  return opportunities;\n}\n\nfunction isMagicalPet(pet) {\n  return pet.category === 'magical' ||\n         pet.category === 'elemental' ||\n         pet.category === 'celestial' ||\n         pet.traits.some(trait => trait.includes('magic'));\n}\n\nfunction calculateRecommendedSessions(pet, opportunities, hoursSinceTraining) {\n  const sessions = [];\n  \n  // Prioritize opportunities\n  const sortedOpportunities = opportunities.sort((a, b) => {\n    const priorityOrder = { high: 0, medium: 1, low: 2 };\n    return priorityOrder[a.priority] - priorityOrder[b.priority];\n  });\n  \n  // Limit sessions based on energy and time\n  const maxSessions = Math.min(3, Math.floor(pet.energy / 20));\n  \n  for (let i = 0; i < Math.min(maxSessions, sortedOpportunities.length); i++) {\n    const opportunity = sortedOpportunities[i];\n    const skill = opportunity.skills[0]; // Train first skill in list\n    \n    sessions.push({\n      skillId: skill,\n      method: selectTrainingMethod(pet, opportunity.type),\n      intensity: determineIntensity(pet, hoursSinceTraining),\n      opportunityType: opportunity.type,\n      reason: opportunity.reason\n    });\n  }\n  \n  return sessions;\n}\n\nfunction selectTrainingMethod(pet, trainingType) {\n  const methods = {\n    basic_obedience: pet.personality.primary === 'playful' ? 'play_training' : 'positive_reinforcement',\n    advanced_skills: pet.personality.primary === 'serious' ? 'dominance_training' : 'target_training',\n    magical_training: 'shaping',\n    utility_skills: pet.personality.primary === 'curious' ? 'lure_training' : 'target_training',\n    social_skills: 'model_training'\n  };\n  \n  return methods[trainingType] || 'positive_reinforcement';\n}\n\nfunction determineIntensity(pet, hoursSinceTraining) {\n  if (hoursSinceTraining > 24) return 'moderate';\n  if (pet.energy > 70) return 'intense';\n  return 'light';\n}\n\nfunction calculateTrainingPriority(pet, analysis) {\n  let priority = 0;\n  \n  // Higher priority for pets that haven't been trained recently\n  if (analysis.timeSinceLastTraining > 24) priority += 5;\n  else if (analysis.timeSinceLastTraining > 12) priority += 3;\n  else if (analysis.timeSinceLastTraining > 6) priority += 1;\n  \n  // Higher priority for young pets\n  if (pet.evolutionStage <= 1) priority += 3;\n  else if (pet.evolutionStage <= 2) priority += 1;\n  \n  // Higher priority for pets with good energy and mood\n  if (pet.energy > 70) priority += 2;\n  if (pet.happiness > 70) priority += 1;\n  \n  // Higher priority for pets with high bonding\n  if (pet.bonding > 80) priority += 2;\n  \n  // Priority based on training opportunities\n  for (const opportunity of analysis.opportunities) {\n    if (opportunity.priority === 'high') priority += 4;\n    else if (opportunity.priority === 'medium') priority += 2;\n    else priority += 1;\n  }\n  \n  return Math.min(20, priority); // Cap at 20\n}"
+      },
+      "id": "c3d4e5f6-a2b3-4567-cdef-234567890123",
+      "name": "Analyze Training Opportunities",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.eligiblePets.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d4e5f6g7-b3c4-5678-def0-345678901234",
+      "name": "Pets Need Training?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Execute training sessions for selected pets\nconst eligiblePets = $input.first().json.eligiblePets || [];\nconst trainingResults = [];\n\nfor (const petCandidate of eligiblePets) {\n  try {\n    console.log(`Starting training for pet: ${petCandidate.petName}`);\n    \n    // Get detailed pet information\n    const petResponse = await $helpers.httpRequest({\n      method: 'GET',\n      url: `http://localhost:3000/api/pets/${petCandidate.petId}`,\n      headers: { 'Content-Type': 'application/json' }\n    });\n    \n    const pet = petResponse.data;\n    const petResults = [];\n    \n    // Execute each recommended training session\n    for (const session of petCandidate.recommendedSessions) {\n      try {\n        const trainingResult = await executeTrainingSession(pet, session);\n        petResults.push(trainingResult);\n        \n        // Update pet data with training results\n        if (trainingResult.success) {\n          pet.energy = Math.max(0, pet.energy - trainingResult.energyConsumed);\n          pet.lastTrained = Date.now();\n          \n          // Add new skills if learned\n          if (trainingResult.skillLearned) {\n            pet.unlockedSkills = pet.unlockedSkills || [];\n            if (!pet.unlockedSkills.includes(session.skillId)) {\n              pet.unlockedSkills.push(session.skillId);\n            }\n          }\n        }\n        \n        // Add delay between sessions\n        await new Promise(resolve => setTimeout(resolve, 1000));\n        \n      } catch (error) {\n        console.error(`Training session failed for ${pet.name}:`, error);\n        petResults.push({\n          success: false,\n          skill: session.skillId,\n          error: error.message,\n          method: session.method\n        });\n      }\n    }\n    \n    // Calculate overall training result for this pet\n    const successCount = petResults.filter(r => r.success).length;\n    const overallSuccess = successCount > 0;\n    \n    trainingResults.push({\n      petId: petCandidate.petId,\n      petName: petCandidate.petName,\n      sessionsCompleted: petResults.length,\n      successfulSessions: successCount,\n      overallSuccess,\n      sessionResults: petResults,\n      totalEnergyConsumed: petResults.reduce((sum, r) => sum + (r.energyConsumed || 0), 0),\n      totalExperienceGained: petResults.reduce((sum, r) => sum + (r.experienceGained || 0), 0),\n      newSkillsLearned: petResults.filter(r => r.skillLearned).map(r => r.skill),\n      timestamp: new Date().toISOString()\n    });\n    \n    // Add delay between pets\n    await new Promise(resolve => setTimeout(resolve, 2000));\n    \n  } catch (error) {\n    console.error(`Training failed for pet ${petCandidate.petName}:`, error);\n    trainingResults.push({\n      petId: petCandidate.petId,\n      petName: petCandidate.petName,\n      success: false,\n      error: error.message,\n      timestamp: new Date().toISOString()\n    });\n  }\n}\n\nreturn {\n  processedPets: eligiblePets.length,\n  totalSessions: trainingResults.reduce((sum, r) => sum + (r.sessionsCompleted || 0), 0),\n  successfulSessions: trainingResults.reduce((sum, r) => sum + (r.successfulSessions || 0), 0),\n  results: trainingResults\n};\n\nasync function executeTrainingSession(pet, session) {\n  const endpoint = `http://localhost:3000/api/pets/${pet.id}/train`;\n  const payload = {\n    skillId: session.skillId,\n    method: session.method,\n    intensity: session.intensity,\n    options: {\n      location: 'training_ground',\n      equipment: ['treats', 'clicker'],\n      performer: 'auto_training_system'\n    }\n  };\n  \n  const response = await $helpers.httpRequest({\n    method: 'POST',\n    url: endpoint,\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify(payload)\n  });\n  \n  return {\n    success: true,\n    skill: session.skillId,\n    method: session.method,\n    intensity: session.intensity,\n    ...response.data.results,\n    sessionType: session.opportunityType\n  };\n}"
+      },
+      "id": "e5f6g7h8-c4d5-6789-ef01-456789012345",
+      "name": "Execute Training Sessions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create comprehensive training summary\nconst data = $input.first().json;\nconst results = data.results || [];\n\nconst summary = {\n  processingDate: new Date().toISOString(),\n  statistics: {\n    petsProcessed: data.processedPets || 0,\n    totalSessions: data.totalSessions || 0,\n    successfulSessions: data.successfulSessions || 0,\n    successRate: data.totalSessions > 0 ? ((data.successfulSessions / data.totalSessions) * 100).toFixed(1) : 0\n  },\n  skillProgress: analyzeSkillProgress(results),\n  petResults: results.map(result => ({\n    petId: result.petId,\n    petName: result.petName,\n    sessionsCompleted: result.sessionsCompleted,\n    successfulSessions: result.successfulSessions,\n    successRate: result.sessionsCompleted > 0 ? ((result.successfulSessions / result.sessionsCompleted) * 100).toFixed(1) : 0,\n    energyConsumed: result.totalEnergyConsumed,\n    experienceGained: result.totalExperienceGained,\n    newSkills: result.newSkillsLearned || [],\n    overallSuccess: result.overallSuccess,\n    timestamp: result.timestamp\n  })),\n  recommendations: generateTrainingRecommendations(results),\n  notifications: generateTrainingNotifications(results)\n};\n\nreturn summary;\n\nfunction analyzeSkillProgress(results) {\n  const skillStats = {};\n  \n  for (const petResult of results) {\n    if (petResult.sessionResults) {\n      for (const session of petResult.sessionResults) {\n        if (session.success && session.skill) {\n          if (!skillStats[session.skill]) {\n            skillStats[session.skill] = {\n              attempts: 0,\n              successes: 0,\n              petsLearned: 0\n            };\n          }\n          \n          skillStats[session.skill].attempts++;\n          if (session.success) {\n            skillStats[session.skill].successes++;\n          }\n          if (session.skillLearned) {\n            skillStats[session.skill].petsLearned++;\n          }\n        }\n      }\n    }\n  }\n  \n  // Calculate success rates\n  for (const skill of Object.keys(skillStats)) {\n    const stats = skillStats[skill];\n    stats.successRate = stats.attempts > 0 ? ((stats.successes / stats.attempts) * 100).toFixed(1) : 0;\n  }\n  \n  return skillStats;\n}\n\nfunction generateTrainingRecommendations(results) {\n  const recommendations = [];\n  \n  // Analyze failed sessions\n  const failedSessions = [];\n  const successfulSessions = [];\n  \n  for (const petResult of results) {\n    if (petResult.sessionResults) {\n      for (const session of petResult.sessionResults) {\n        if (session.success) {\n          successfulSessions.push(session);\n        } else {\n          failedSessions.push(session);\n        }\n      }\n    }\n  }\n  \n  // Method effectiveness analysis\n  const methodStats = {};\n  for (const session of [...failedSessions, ...successfulSessions]) {\n    if (!methodStats[session.method]) {\n      methodStats[session.method] = { attempts: 0, successes: 0 };\n    }\n    methodStats[session.method].attempts++;\n    if (session.success) {\n      methodStats[session.method].successes++;\n    }\n  }\n  \n  // Find least effective method\n  let leastEffectiveMethod = null;\n  let lowestSuccessRate = 100;\n  \n  for (const [method, stats] of Object.entries(methodStats)) {\n    const successRate = stats.attempts > 0 ? (stats.successes / stats.attempts) * 100 : 0;\n    if (successRate < lowestSuccessRate && stats.attempts >= 3) {\n      lowestSuccessRate = successRate;\n      leastEffectiveMethod = method;\n    }\n  }\n  \n  if (leastEffectiveMethod && lowestSuccessRate < 60) {\n    recommendations.push({\n      type: 'method_optimization',\n      title: 'Training Method Optimization',\n      message: `Consider alternative methods to ${leastEffectiveMethod} (success rate: ${lowestSuccessRate.toFixed(1)}%)`,\n      priority: 'medium'\n    });\n  }\n  \n  // Energy management recommendations\n  const highEnergyPets = results.filter(r => r.totalEnergyConsumed > 60);\n  if (highEnergyPets.length > 0) {\n    recommendations.push({\n      type: 'energy_management',\n      title: 'Energy Management',\n      message: `${highEnergyPets.length} pet(s) consumed high energy during training. Consider scheduling more rest.`,\n      priority: 'low'\n    });\n  }\n  \n  // Skill variety recommendations\n  const skillTypes = [...new Set(successfulSessions.map(s => s.sessionType))];\n  if (skillTypes.length < 3 && successfulSessions.length > 5) {\n    recommendations.push({\n      type: 'skill_variety',\n      title: 'Training Variety',\n      message: 'Consider diversifying training types to provide balanced skill development.',\n      priority: 'low'\n    });\n  }\n  \n  return recommendations;\n}\n\nfunction generateTrainingNotifications(results) {\n  const notifications = [];\n  \n  // Successful training sessions\n  const successfulPets = results.filter(r => r.overallSuccess);\n  if (successfulPets.length > 0) {\n    notifications.push({\n      type: 'training_success',\n      title: '📚 Training Sessions Completed',\n      message: `${successfulPets.length} pet(s) completed training successfully!`,\n      pets: successfulPets.map(r => ({\n        name: r.petName,\n        sessions: r.successfulSessions,\n        newSkills: r.newSkills.length\n      })),\n      priority: 'normal'\n    });\n  }\n  \n  // New skills learned\n  const petsWithNewSkills = results.filter(r => r.newSkills && r.newSkills.length > 0);\n  if (petsWithNewSkills.length > 0) {\n    notifications.push({\n      type: 'new_skills',\n      title: '🎯 New Skills Learned!',\n      message: `${petsWithNewSkills.length} pet(s) learned new skills!`,\n      pets: petsWithNewSkills.map(r => ({\n        name: r.petName,\n        skills: r.newSkills\n      })),\n      priority: 'high'\n    });\n  }\n  \n  // Failed training sessions\n  const failedPets = results.filter(r => !r.overallSuccess);\n  if (failedPets.length > 0) {\n    notifications.push({\n      type: 'training_issues',\n      title: '⚠️ Training Difficulties',\n      message: `${failedPets.length} pet(s) experienced training difficulties`,\n      pets: failedPets.map(r => ({ name: r.petName })),\n      priority: 'medium'\n    });\n  }\n  \n  return notifications;\n}"
+      },
+      "id": "f6g7h8i9-d5e6-7890-f012-567890123456",
+      "name": "Create Training Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/training/log",
+        "sendBody": true,
+        "jsonParameters": true,
+        "bodyParametersJson": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "g7h8i9j0-e6f7-8901-0123-678901234567",
+      "name": "Log Training Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1560,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle case where no pets need training\nconst data = $input.first().json;\n\nreturn {\n  message: 'Training check completed',\n  timestamp: new Date().toISOString(),\n  petsChecked: data.totalChecked || 0,\n  eligibleFound: data.candidatesFound || 0,\n  status: 'no_training_needed',\n  nextCheck: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString() // 6 hours from now\n};"
+      },
+      "id": "h8i9j0k1-f7g8-9012-1234-789012345678",
+      "name": "No Training Required",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/training/log",
+        "sendBody": true,
+        "jsonParameters": true,
+        "bodyParametersJson": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "i9j0k1l2-g8h9-0123-2345-890123456789",
+      "name": "Log No Training",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1340,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Training Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Training-Eligible Pets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Training-Eligible Pets": {
+      "main": [
+        [
+          {
+            "node": "Analyze Training Opportunities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Training Opportunities": {
+      "main": [
+        [
+          {
+            "node": "Pets Need Training?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pets Need Training?": {
+      "main": [
+        [
+          {
+            "node": "Execute Training Sessions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Training Required",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Training Sessions": {
+      "main": [
+        [
+          {
+            "node": "Create Training Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Training Summary": {
+      "main": [
+        [
+          {
+            "node": "Log Training Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Training Required": {
+      "main": [
+        [
+          {
+            "node": "Log No Training",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["pet", "training", "automation"],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T16:20:00.000Z",
+  "versionId": "1.0.0"
+}

@@ -1,0 +1,920 @@
+{
+  "collections": {
+    "alliances": {
+      "description": "Alliance information and configuration",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["id", "name", "tag", "creatorGuildId", "leaderGuildId", "memberGuilds", "status", "created"],
+          "properties": {
+            "id": {
+              "bsonType": "string",
+              "description": "Unique alliance identifier",
+              "pattern": "^alliance_[a-z0-9]{9,}$"
+            },
+            "name": {
+              "bsonType": "string",
+              "description": "Alliance display name",
+              "minLength": 3,
+              "maxLength": 32,
+              "pattern": "^[a-zA-Z0-9\\s]{3,32}$"
+            },
+            "tag": {
+              "bsonType": "string",
+              "description": "Alliance tag (2-5 uppercase characters)",
+              "minLength": 2,
+              "maxLength": 5,
+              "pattern": "^[A-Z0-9]{2,5}$"
+            },
+            "description": {
+              "bsonType": "string",
+              "description": "Alliance description",
+              "maxLength": 1000
+            },
+            "charter": {
+              "bsonType": "string",
+              "description": "Alliance charter and principles",
+              "maxLength": 3000
+            },
+            "creatorGuildId": {
+              "bsonType": "string",
+              "description": "Guild that created the alliance"
+            },
+            "leaderGuildId": {
+              "bsonType": "string",
+              "description": "Current alliance leader guild"
+            },
+            "memberGuilds": {
+              "bsonType": "array",
+              "description": "Alliance member guild IDs",
+              "items": {
+                "bsonType": "string"
+              },
+              "minItems": 1,
+              "maxItems": 20
+            },
+            "requirements": {
+              "bsonType": "object",
+              "description": "Requirements for joining alliance",
+              "properties": {
+                "minGuildLevel": {
+                  "bsonType": "int",
+                  "minimum": 1,
+                  "maximum": 100,
+                  "description": "Minimum guild level required"
+                },
+                "minMemberCount": {
+                  "bsonType": "int",
+                  "minimum": 5,
+                  "maximum": 500,
+                  "description": "Minimum member count required"
+                },
+                "maxGuilds": {
+                  "bsonType": "int",
+                  "minimum": 2,
+                  "maximum": 20,
+                  "description": "Maximum guilds in alliance"
+                },
+                "approvalRequired": {
+                  "bsonType": "bool",
+                  "description": "Whether approval is required to join"
+                },
+                "votingRequired": {
+                  "bsonType": "bool",
+                  "description": "Whether voting is required for new members"
+                },
+                "voteThreshold": {
+                  "bsonType": "double",
+                  "minimum": 0.5,
+                  "maximum": 1.0,
+                  "description": "Vote threshold required (0.5-1.0)"
+                }
+              }
+            },
+            "settings": {
+              "bsonType": "object",
+              "description": "Alliance configuration settings",
+              "properties": {
+                "sharedChat": {
+                  "bsonType": "bool",
+                  "description": "Enable shared alliance chat"
+                },
+                "sharedEvents": {
+                  "bsonType": "bool",
+                  "description": "Enable alliance-wide events"
+                },
+                "sharedBank": {
+                  "bsonType": "bool",
+                  "description": "Enable shared alliance banking"
+                },
+                "sharedResources": {
+                  "bsonType": "bool",
+                  "description": "Enable resource sharing between guilds"
+                },
+                "allianceWars": {
+                  "bsonType": "bool",
+                  "description": "Enable alliance wars"
+                },
+                "autoAcceptRequests": {
+                  "bsonType": "bool",
+                  "description": "Automatically accept qualifying applications"
+                },
+                "memberContribution": {
+                  "bsonType": "int",
+                  "minimum": 0,
+                  "description": "Required contribution from member guilds"
+                }
+              }
+            },
+            "resources": {
+              "bsonType": "object",
+              "description": "Alliance-wide resources",
+              "properties": {
+                "allianceBank": {
+                  "bsonType": "long",
+                  "minimum": 0,
+                  "description": "Alliance bank gold"
+                },
+                "sharedStorage": {
+                  "bsonType": "array",
+                  "description": "Shared alliance storage items"
+                },
+                "territories": {
+                  "bsonType": "array",
+                  "description": "Controlled territories"
+                },
+                "influence": {
+                  "bsonType": "int",
+                  "minimum": 0,
+                  "description": "Alliance influence points"
+                }
+              }
+            },
+            "status": {
+              "bsonType": "string",
+              "enum": ["active", "inactive", "dissolved", "suspended"],
+              "description": "Alliance status"
+            },
+            "level": {
+              "bsonType": "int",
+              "minimum": 1,
+              "maximum": 50,
+              "description": "Alliance level"
+            },
+            "experience": {
+              "bsonType": "long",
+              "minimum": 0,
+              "description": "Alliance experience points"
+            },
+            "statistics": {
+              "bsonType": "object",
+              "description": "Alliance statistics",
+              "properties": {
+                "totalGuilds": {
+                  "bsonType": "int"
+                },
+                "totalMembers": {
+                  "bsonType": "int"
+                },
+                "totalWars": {
+                  "bsonType": "int"
+                },
+                "warsWon": {
+                  "bsonType": "int"
+                },
+                "territoriesControlled": {
+                  "bsonType": "int"
+                },
+                "eventsCompleted": {
+                  "bsonType": "int"
+                }
+              }
+            },
+            "created": {
+              "bsonType": "date",
+              "description": "Alliance creation date"
+            },
+            "lastModified": {
+              "bsonType": "date",
+              "description": "Last modification date"
+            }
+          }
+        }
+      },
+      "indexes": [
+        {
+          "key": { "id": 1 },
+          "unique": true,
+          "name": "alliance_id_unique"
+        },
+        {
+          "key": { "name": 1 },
+          "unique": true,
+          "name": "alliance_name_unique"
+        },
+        {
+          "key": { "tag": 1 },
+          "unique": true,
+          "name": "alliance_tag_unique"
+        },
+        {
+          "key": { "leaderGuildId": 1 },
+          "name": "alliance_leader"
+        },
+        {
+          "key": { "memberGuilds": 1 },
+          "name": "alliance_members"
+        },
+        {
+          "key": { "status": 1, "level": -1 },
+          "name": "alliance_status_level"
+        }
+      ]
+    },
+    "alliance_applications": {
+      "description": "Guild applications to join alliances",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["allianceId", "guildId", "status", "submittedAt"],
+          "properties": {
+            "id": {
+              "bsonType": "string",
+              "description": "Application ID"
+            },
+            "allianceId": {
+              "bsonType": "string",
+              "description": "Target alliance ID"
+            },
+            "guildId": {
+              "bsonType": "string",
+              "description": "Applying guild ID"
+            },
+            "guildName": {
+              "bsonType": "string",
+              "description": "Applying guild name"
+            },
+            "guildTag": {
+              "bsonType": "string",
+              "description": "Applying guild tag"
+            },
+            "applicantId": {
+              "bsonType": "string",
+              "description": "Player who submitted application"
+            },
+            "applicantName": {
+              "bsonType": "string",
+              "description": "Applicant player name"
+            },
+            "message": {
+              "bsonType": "string",
+              "description": "Application message",
+              "maxLength": 2000
+            },
+            "contribution": {
+              "bsonType": "object",
+              "description": "What guild can contribute to alliance"
+            },
+            "expectations": {
+              "bsonType": "object",
+              "description": "What guild expects from alliance"
+            },
+            "guildData": {
+              "bsonType": "object",
+              "description": "Guild data at time of application",
+              "properties": {
+                "level": {
+                  "bsonType": "int"
+                },
+                "memberCount": {
+                  "bsonType": "int"
+                },
+                "achievements": {
+                  "bsonType": "array"
+                },
+                "resources": {
+                  "bsonType": "object"
+                }
+              }
+            },
+            "status": {
+              "bsonType": "string",
+              "enum": ["pending", "accepted", "rejected", "withdrawn"],
+              "description": "Application status"
+            },
+            "votes": {
+              "bsonType": "array",
+              "description": "Votes from alliance members",
+              "items": {
+                "bsonType": "object",
+                "properties": {
+                  "guildId": {
+                    "bsonType": "string"
+                  },
+                  "voterId": {
+                    "bsonType": "string"
+                  },
+                  "vote": {
+                    "bsonType": "string",
+                    "enum": ["approve", "reject", "abstain"]
+                  },
+                  "reason": {
+                    "bsonType": "string"
+                  },
+                  "votedAt": {
+                    "bsonType": "date"
+                  }
+                }
+              }
+            },
+            "submittedAt": {
+              "bsonType": "date",
+              "description": "Application submission date"
+            },
+            "reviewedAt": {
+              "bsonType": "date",
+              "description": "When application was reviewed"
+            },
+            "reviewedBy": {
+              "bsonType": "string",
+              "description": "Who reviewed the application"
+            },
+            "response": {
+              "bsonType": "string",
+              "description": "Response message",
+              "maxLength": 1000
+            }
+          }
+        }
+      },
+      "indexes": [
+        {
+          "key": { "id": 1 },
+          "unique": true,
+          "name": "alliance_app_id_unique"
+        },
+        {
+          "key": { "allianceId": 1, "status": 1 },
+          "name": "alliance_app_alliance_status"
+        },
+        {
+          "key": { "guildId": 1 },
+          "name": "alliance_app_guild"
+        },
+        {
+          "key": { "submittedAt": 1 },
+          "name": "alliance_app_submitted"
+        }
+      ]
+    },
+    "alliance_invitations": {
+      "description": "Alliance invitations to guilds",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["allianceId", "guildId", "status", "sentAt"],
+          "properties": {
+            "id": {
+              "bsonType": "string",
+              "description": "Invitation ID"
+            },
+            "allianceId": {
+              "bsonType": "string",
+              "description": "Inviting alliance ID"
+            },
+            "allianceName": {
+              "bsonType": "string",
+              "description": "Inviting alliance name"
+            },
+            "guildId": {
+              "bsonType": "string",
+              "description": "Invited guild ID"
+            },
+            "guildName": {
+              "bsonType": "string",
+              "description": "Invited guild name"
+            },
+            "inviterId": {
+              "bsonType": "string",
+              "description": "Player who sent invitation"
+            },
+            "inviterName": {
+              "bsonType": "string",
+              "description": "Inviter player name"
+            },
+            "message": {
+              "bsonType": "string",
+              "description": "Invitation message",
+              "maxLength": 1000
+            },
+            "status": {
+              "bsonType": "string",
+              "enum": ["pending", "accepted", "rejected", "expired"],
+              "description": "Invitation status"
+            },
+            "expiresAt": {
+              "bsonType": "date",
+              "description": "Invitation expiration date"
+            },
+            "sentAt": {
+              "bsonType": "date",
+              "description": "When invitation was sent"
+            },
+            "respondedAt": {
+              "bsonType": "date",
+              "description": "When invitation was responded to"
+            },
+            "respondedBy": {
+              "bsonType": "string",
+              "description": "Who responded to invitation"
+            }
+          }
+        }
+      },
+      "indexes": [
+        {
+          "key": { "id": 1 },
+          "unique": true,
+          "name": "alliance_inv_id_unique"
+        },
+        {
+          "key": { "allianceId": 1, "status": 1 },
+          "name": "alliance_inv_alliance_status"
+        },
+        {
+          "key": { "guildId": 1 },
+          "name": "alliance_inv_guild"
+        },
+        {
+          "key": { "expiresAt": 1 },
+          "name": "alliance_inv_expires"
+        }
+      ]
+    },
+    "alliance_wars": {
+      "description": "Wars between alliances",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["alliance1Id", "alliance2Id", "declaredBy", "status", "startedAt"],
+          "properties": {
+            "id": {
+              "bsonType": "string",
+              "description": "War ID"
+            },
+            "alliance1Id": {
+              "bsonType": "string",
+              "description": "First alliance ID (declarer)"
+            },
+            "alliance2Id": {
+              "bsonType": "string",
+              "description": "Second alliance ID (defender)"
+            },
+            "declaredBy": {
+              "bsonType": "string",
+              "description": "Player who declared war"
+            },
+            "declaredByAlliance": {
+              "bsonType": "string",
+              "description": "Alliance that declared war"
+            },
+            "warType": {
+              "bsonType": "string",
+              "enum": ["territory", "resource", "dominance", "retribution"],
+              "description": "Type of war"
+            },
+            "objectives": {
+              "bsonType": "array",
+              "description": "War objectives",
+              "items": {
+                "bsonType": "object"
+              }
+            },
+            "rules": {
+              "bsonType": "array",
+              "description": "War rules and restrictions",
+              "items": {
+                "bsonType": "object"
+              }
+            },
+            "duration": {
+              "bsonType": "long",
+              "minimum": 3600000,
+              "description": "War duration in milliseconds"
+            },
+            "stakes": {
+              "bsonType": "object",
+              "description": "What's at stake in the war"
+            },
+            "status": {
+              "bsonType": "string",
+              "enum": ["active", "paused", "completed", "surrendered"],
+              "description": "War status"
+            },
+            "winner": {
+              "bsonType": "string",
+              "description": "Winning alliance ID (if completed)"
+            },
+            "startedAt": {
+              "bsonType": "date",
+              "description": "War start date"
+            },
+            "endsAt": {
+              "bsonType": "date",
+              "description": "War end date"
+            },
+            "statistics": {
+              "bsonType": "object",
+              "description": "War statistics",
+              "properties": {
+                "battles": {
+                  "bsonType": "array"
+                },
+                "casualties": {
+                  "bsonType": "object"
+                },
+                "territoryChanges": {
+                  "bsonType": "array"
+                },
+                "victories": {
+                  "bsonType": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "indexes": [
+        {
+          "key": { "id": 1 },
+          "unique": true,
+          "name": "alliance_war_id_unique"
+        },
+        {
+          "key": { "alliance1Id": 1 },
+          "name": "alliance_war_alliance1"
+        },
+        {
+          "key": { "alliance2Id": 1 },
+          "name": "alliance_war_alliance2"
+        },
+        {
+          "key": { "status": 1, "startedAt": -1 },
+          "name": "alliance_war_status_time"
+        }
+      ]
+    },
+    "alliance_relations": {
+      "description": "Diplomatic relations between alliances",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["alliance1Id", "alliance2Id", "status", "established"],
+          "properties": {
+            "alliance1Id": {
+              "bsonType": "string",
+              "description": "First alliance ID"
+            },
+            "alliance2Id": {
+              "bsonType": "string",
+              "description": "Second alliance ID"
+            },
+            "status": {
+              "bsonType": "string",
+              "enum": ["friendly", "neutral", "hostile", "war", "trade", "non_aggression"],
+              "description": "Relationship status"
+            },
+            "established": {
+              "bsonType": "date",
+              "description": "When relationship was established"
+            },
+            "lastModified": {
+              "bsonType": "date",
+              "description": "Last modification date"
+            },
+            "agreements": {
+              "bsonType": "array",
+              "description": "Active agreements between alliances"
+            },
+            "tradeRoutes": {
+              "bsonType": "array",
+              "description": "Trade routes between alliances"
+            },
+            "sharedResources": {
+              "bsonType": "object",
+              "description": "Resources being shared"
+            }
+          }
+        }
+      },
+      "indexes": [
+        {
+          "key": { "alliance1Id": 1, "alliance2Id": 1 },
+          "unique": true,
+          "name": "alliance_relation_unique"
+        },
+        {
+          "key": { "status": 1 },
+          "name": "alliance_relation_status"
+        }
+      ]
+    },
+    "alliance_chat": {
+      "description": "Alliance-wide chat messages",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["allianceId", "senderId", "senderName", "content", "timestamp"],
+          "properties": {
+            "id": {
+              "bsonType": "string",
+              "description": "Message ID"
+            },
+            "allianceId": {
+              "bsonType": "string",
+              "description": "Alliance ID"
+            },
+            "senderId": {
+              "bsonType": "string",
+              "description": "Sender player ID"
+            },
+            "senderName": {
+              "bsonType": "string",
+              "description": "Sender player name"
+            },
+            "senderGuild": {
+              "bsonType": "string",
+              "description": "Sender guild name"
+            },
+            "senderGuildTag": {
+              "bsonType": "string",
+              "description": "Sender guild tag"
+            },
+            "senderRank": {
+              "bsonType": "string",
+              "description": "Sender rank in guild"
+            },
+            "channel": {
+              "bsonType": "string",
+              "enum": ["general", "leadership", "events", "strategy"],
+              "description": "Chat channel"
+            },
+            "content": {
+              "bsonType": "string",
+              "description": "Message content",
+              "maxLength": 1000
+            },
+            "timestamp": {
+              "bsonType": "date",
+              "description": "Message timestamp"
+            },
+            "edited": {
+              "bsonType": "bool",
+              "description": "Whether message was edited"
+            },
+            "editedAt": {
+              "bsonType": "date",
+              "description": "Edit timestamp"
+            },
+            "editedBy": {
+              "bsonType": "string",
+              "description": "Who edited the message"
+            },
+            "reactions": {
+              "bsonType": "array",
+              "description": "Message reactions",
+              "items": {
+                "bsonType": "object",
+                "properties": {
+                  "emoji": {
+                    "bsonType": "string"
+                  },
+                  "userIds": {
+                    "bsonType": "array",
+                    "items": {
+                      "bsonType": "string"
+                    }
+                  },
+                  "count": {
+                    "bsonType": "int"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "indexes": [
+        {
+          "key": { "allianceId": 1, "timestamp": -1 },
+          "name": "alliance_chat_alliance_time"
+        },
+        {
+          "key": { "channel": 1, "timestamp": -1 },
+          "name": "alliance_chat_channel_time"
+        },
+        {
+          "key": { "senderId": 1, "timestamp": -1 },
+          "name": "alliance_chat_sender_time"
+        },
+        {
+          "key": { "timestamp": 1 },
+          "name": "alliance_chat_ttl",
+          "expireAfterSeconds": 2592000
+        }
+      ]
+    },
+    "alliance_events": {
+      "description": "Alliance-wide events",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["allianceId", "title", "creatorId", "startTime", "status", "created"],
+          "properties": {
+            "id": {
+              "bsonType": "string",
+              "description": "Event ID"
+            },
+            "allianceId": {
+              "bsonType": "string",
+              "description": "Alliance ID"
+            },
+            "title": {
+              "bsonType": "string",
+              "description": "Event title",
+              "maxLength": 100
+            },
+            "description": {
+              "bsonType": "string",
+              "description": "Event description",
+              "maxLength": 2000
+            },
+            "type": {
+              "bsonType": "string",
+              "enum": ["summit", "tournament", "raid", "defense", "celebration", "meeting"],
+              "description": "Event type"
+            },
+            "creatorId": {
+              "bsonType": "string",
+              "description": "Event creator player ID"
+            },
+            "creatorGuildId": {
+              "bsonType": "string",
+              "description": "Creator guild ID"
+            },
+            "startTime": {
+              "bsonType": "date",
+              "description": "Event start time"
+            },
+            "endTime": {
+              "bsonType": "date",
+              "description": "Event end time"
+            },
+            "duration": {
+              "bsonType": "int",
+              "minimum": 1,
+              "description": "Event duration in minutes"
+            },
+            "participatingGuilds": {
+              "bsonType": "array",
+              "description": "Participating guild IDs",
+              "items": {
+                "bsonType": "string"
+              }
+            },
+            "requirements": {
+              "bsonType": "object",
+              "description": "Participation requirements"
+            },
+            "rewards": {
+              "bsonType": "object",
+              "description": "Event rewards"
+            },
+            "status": {
+              "bsonType": "string",
+              "enum": ["scheduled", "active", "completed", "cancelled"],
+              "description": "Event status"
+            },
+            "participants": {
+              "bsonType": "array",
+              "description": "Event participants"
+            },
+            "results": {
+              "bsonType": "object",
+              "description": "Event results"
+            },
+            "created": {
+              "bsonType": "date",
+              "description": "Event creation date"
+            }
+          }
+        }
+      },
+      "indexes": [
+        {
+          "key": { "id": 1 },
+          "unique": true,
+          "name": "alliance_event_id_unique"
+        },
+        {
+          "key": { "allianceId": 1, "status": 1 },
+          "name": "alliance_event_alliance_status"
+        },
+        {
+          "key": { "startTime": 1 },
+          "name": "alliance_event_start_time"
+        }
+      ]
+    },
+    "alliance_trades": {
+      "description": "Resource trades between alliance guilds",
+      "validator": {
+        "$jsonSchema": {
+          "bsonType": "object",
+          "required": ["allianceId", "status", "created"],
+          "properties": {
+            "id": {
+              "bsonType": "string",
+              "description": "Trade ID"
+            },
+            "allianceId": {
+              "bsonType": "string",
+              "description": "Alliance ID"
+            },
+            "requestingGuildId": {
+              "bsonType": "string",
+              "description": "Guild requesting trade"
+            },
+            "donorGuildId": {
+              "bsonType": "string",
+              "description": "Guild providing resources"
+            },
+            "resourceType": {
+              "bsonType": "string",
+              "description": "Type of resource being traded"
+            },
+            "quantity": {
+              "bsonType": "int",
+              "minimum": 1,
+              "description": "Amount being traded"
+            },
+            "status": {
+              "bsonType": "string",
+              "enum": ["pending_approval", "approved", "rejected", "completed", "cancelled"],
+              "description": "Trade status"
+            },
+            "priority": {
+              "bsonType": "string",
+              "enum": ["low", "normal", "high", "urgent"],
+              "description": "Trade priority"
+            },
+            "expiresAt": {
+              "bsonType": "date",
+              "description": "Trade expiration date"
+            },
+            "approvedBy": {
+              "bsonType": "string",
+              "description": "Who approved the trade"
+            },
+            "completedAt": {
+              "bsonType": "date",
+              "description": "When trade was completed"
+            },
+            "notes": {
+              "bsonType": "string",
+              "description": "Trade notes",
+              "maxLength": 500
+            },
+            "created": {
+              "bsonType": "date",
+              "description": "Trade creation date"
+            }
+          }
+        }
+      },
+      "indexes": [
+        {
+          "key": { "id": 1 },
+          "unique": true,
+          "name": "alliance_trade_id_unique"
+        },
+        {
+          "key": { "allianceId": 1, "status": 1 },
+          "name": "alliance_trade_alliance_status"
+        },
+        {
+          "key": { "requestingGuildId": 1 },
+          "name": "alliance_trade_requester"
+        },
+        {
+          "key": { "donorGuildId": 1 },
+          "name": "alliance_trade_donor"
+        },
+        {
+          "key": { "expiresAt": 1 },
+          "name": "alliance_trade_expires"
+        }
+      ]
+    }
+  }
+}

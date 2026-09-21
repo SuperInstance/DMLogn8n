@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: dmlogn8n
+  labels:
+    app: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+      - name: api
+        image: dmlogn8n/api:latest
+        ports:
+        - containerPort: 8000
+          name: api
+        env:
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: dmlogn8n-config
+              key: ENVIRONMENT
+        - name: FLASK_ENV
+          value: "production"
+        - name: DEBUG
+          value: "false"
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: dmlogn8n-secrets
+              key: api-secret-key
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: dmlogn8n-secrets
+              key: api-jwt-secret
+        - name: DATABASE_URL
+          value: "mysql://dmlogn8n_user:$(MYSQL_PASSWORD)@mysql:3306/dmlogn8n"
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dmlogn8n-secrets
+              key: mysql-password
+        - name: REDIS_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379/0"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dmlogn8n-secrets
+              key: redis-password
+        - name: CORS_ORIGINS
+          valueFrom:
+            configMapKeyRef:
+              name: dmlogn8n-config
+              key: CORS_ORIGINS
+        - name: RATE_LIMIT
+          valueFrom:
+            configMapKeyRef:
+              name: dmlogn8n-config
+              key: RATE_LIMIT
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: dmlogn8n-config
+              key: LOG_LEVEL
+        - name: TZ
+          valueFrom:
+            configMapKeyRef:
+              name: dmlogn8n-config
+              key: TZ
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: dmlogn8n
+  labels:
+    app: api
+spec:
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: api
+  selector:
+    app: api
+  type: ClusterIP

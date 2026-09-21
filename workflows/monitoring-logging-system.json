@@ -1,0 +1,534 @@
+{
+  "name": "World State Monitoring & Logging System",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "monitoring-trigger",
+      "name": "Monitoring Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "monitoring/health-check",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "manual-health-check",
+      "name": "Manual Health Check",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 450],
+      "webhookId": "health-check"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize monitoring and logging cycle\nconst triggerData = $input.first().json;\nconst triggerType = $node['Monitoring Trigger'].isRunning ? 'scheduled' : 'manual';\n\nconst monitoringConfig = {\n  monitoring_id: `monitor_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n  trigger_type: triggerType,\n  timestamp: new Date().toISOString(),\n  manual_settings: triggerData || {},\n  monitoring_parameters: {\n    health_checks: triggerData.health_checks !== false, // default true\n    performance_metrics: triggerData.performance_metrics !== false,\n    error_detection: triggerData.error_detection !== false,\n    log_aggregation: triggerData.log_aggregation !== false,\n    alert_thresholds: triggerData.alert_thresholds || {\n      error_rate: 0.05, // 5% error rate threshold\n      response_time: 5000, // 5 second response time threshold\n      memory_usage: 0.8, // 80% memory usage threshold\n      cascade_depth: 5, // cascade depth threshold\n      event_frequency: 100 // events per minute threshold\n    },\n    monitoring_scope: triggerData.scope || {\n      systems: ['all'], // world-evolution, event-cascade, faction-manager, economic-simulator, seasonal-time\n      campaigns: ['all'], // all campaigns or specific ones\n      severity_levels: ['all'], // all severity levels or specific ones\n      time_window: 'last_hour' // last_hour, last_day, last_week\n    }\n  },\n  logging_parameters: {\n    log_level: triggerData.log_level || 'info', // debug, info, warn, error, fatal\n    log_categories: triggerData.log_categories || ['all'], // performance, errors, events, cascades, user_actions\n    retention_period: triggerData.retention_period || '7_days', // 1_day, 7_days, 30_days, permanent\n    structured_logging: triggerData.structured_logging !== false,\n    correlation_ids: triggerData.correlation_ids !== false\n  }\n};\n\nreturn [{ json: monitoringConfig }];"
+      },
+      "id": "initialize-monitoring",
+      "name": "Initialize Monitoring",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.NEO4J_URI }}",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.NEO4J_PASSWORD }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "=MATCH (c:Campaign) WHERE c.status = 'active' RETURN c.id as campaignId, c.name as campaignName, c.worldState as worldState, c.lastHealthCheck as lastHealthCheck, c.systemMetrics as systemMetrics"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-campaign-metrics",
+      "name": "Neo4j - Fetch Campaign Metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process campaign metrics and prepare monitoring analysis\nconst monitoringConfig = $input.first().json;\nconst campaigns = $input.last().json.results || [];\n\nconst processedCampaigns = campaigns.map(campaign => {\n  const { campaignId, campaignName, worldState, systemMetrics, lastHealthCheck } = campaign;\n  \n  // Calculate health metrics\n  const healthMetrics = calculateHealthMetrics(campaignId, worldState, systemMetrics);\n  \n  // Analyze system performance\n  const performanceAnalysis = analyzeSystemPerformance(campaignId, systemMetrics, worldState);\n  \n  // Detect anomalies and issues\n  const anomalyDetection = detectAnomalies(campaignId, healthMetrics, performanceAnalysis, monitoringConfig.monitoring_parameters.alert_thresholds);\n  \n  // Generate log entries\n  const logEntries = generateLogEntries(campaignId, healthMetrics, performanceAnalysis, anomalyDetection, monitoringConfig.logging_parameters);\n  \n  return {\n    campaignId,\n    campaignName,\n    healthMetrics,\n    performanceAnalysis,\n    anomalyDetection,\n    logEntries,\n    lastHealthCheck,\n    systemMetrics: systemMetrics || {},\n    monitoringPriority: calculateMonitoringPriority(healthMetrics, anomalyDetection)\n  };\n});\n\n// Sort campaigns by monitoring priority (issues first)\nprocessedCampaigns.sort((a, b) => b.monitoringPriority - a.monitoringPriority);\n\nfunction calculateHealthMetrics(campaignId, worldState, systemMetrics) {\n  const metrics = {\n    overall_health: 'healthy', // healthy, warning, critical, unknown\n    system_health: {},\n    data_integrity: {},\n    performance_indicators: {},\n    resource_usage: {},\n    error_rates: {},\n    last_updated: new Date().toISOString()\n  };\n  \n  // World state health\n  if (worldState) {\n    metrics.system_health.world_state = {\n      status: 'healthy',\n      locations_count: worldState.locations?.length || 0,\n      npcs_count: worldState.npcs?.length || 0,\n      factions_count: worldState.factions?.length || 0,\n      quests_count: worldState.quests?.length || 0,\n      last_modified: worldState.last_updated || 'unknown',\n      data_completeness: calculateDataCompleteness(worldState)\n    };\n  } else {\n    metrics.system_health.world_state = {\n      status: 'critical',\n      issue: 'world_state_missing',\n      message: 'World state data is missing or corrupted'\n    };\n  }\n  \n  // System metrics health\n  if (systemMetrics) {\n    metrics.system_health.system_metrics = {\n      status: 'healthy',\n      last_collected: systemMetrics.last_collected || 'unknown',\n      cpu_usage: systemMetrics.cpu_usage || 0,\n      memory_usage: systemMetrics.memory_usage || 0,\n      disk_usage: systemMetrics.disk_usage || 0,\n      network_latency: systemMetrics.network_latency || 0\n    };\n    \n    // Check resource thresholds\n    if (systemMetrics.memory_usage > 0.8) {\n      metrics.system_health.system_metrics.status = 'warning';\n    }\n    if (systemMetrics.memory_usage > 0.95) {\n      metrics.system_health.system_metrics.status = 'critical';\n    }\n  } else {\n    metrics.system_health.system_metrics = {\n      status: 'warning',\n      issue: 'system_metrics_missing',\n      message: 'System metrics are not being collected'\n    };\n  }\n  \n  // Data integrity checks\n  metrics.data_integrity = {\n    world_state_consistency: checkWorldStateConsistency(worldState),\n    relationship_integrity: checkRelationshipIntegrity(worldState),\n    temporal_integrity: checkTemporalIntegrity(worldState),\n    referential_integrity: checkReferentialIntegrity(worldState)\n  };\n  \n  // Performance indicators\n  metrics.performance_indicators = {\n    response_time: calculateAverageResponseTime(systemMetrics),\n    throughput: calculateThroughput(systemMetrics),\n    availability: calculateAvailability(systemMetrics),\n    efficiency: calculateEfficiency(worldState, systemMetrics)\n  };\n  \n  // Error rates\n  metrics.error_rates = {\n    system_errors: calculateSystemErrorRate(systemMetrics),\n    data_errors: calculateDataErrorRate(worldState),\n    network_errors: calculateNetworkErrorRate(systemMetrics),\n    user_errors: calculateUserErrorRate(systemMetrics)\n  };\n  \n  // Calculate overall health\n  const healthScore = calculateOverallHealthScore(metrics);\n  if (healthScore >= 90) metrics.overall_health = 'healthy';\n  else if (healthScore >= 70) metrics.overall_health = 'warning';\n  else if (healthScore >= 50) metrics.overall_health = 'critical';\n  else metrics.overall_health = 'unknown';\n  \n  return metrics;\n}\n\nfunction calculateDataCompleteness(worldState) {\n  if (!worldState) return 0;\n  \n  const requiredFields = ['locations', 'npcs', 'factions', 'quests'];\n  const presentFields = requiredFields.filter(field => \n    worldState[field] && Array.isArray(worldState[field]) && worldState[field].length > 0\n  );\n  \n  return (presentFields.length / requiredFields.length) * 100;\n}\n\nfunction checkWorldStateConsistency(worldState) {\n  if (!worldState) return { status: 'unknown', issues: ['no_data'] };\n  \n  const issues = [];\n  \n  // Check for duplicate IDs\n  const checkDuplicates = (array, fieldName) => {\n    if (!array || !Array.isArray(array)) return;\n    const ids = array.map(item => item.id).filter(Boolean);\n    const duplicates = ids.filter((id, index) => ids.indexOf(id) !== index);\n    if (duplicates.length > 0) {\n      issues.push(`duplicate_${fieldName}_ids: ${duplicates.join(', ')}`);\n    }\n  };\n  \n  checkDuplicates(worldState.locations, 'location');\n  checkDuplicates(worldState.npcs, 'npc');\n  checkDuplicates(worldState.factions, 'faction');\n  checkDuplicates(worldState.quests, 'quest');\n  \n  // Check for orphaned references\n  if (worldState.npcs && worldState.locations) {\n    const locationIds = new Set(worldState.locations.map(l => l.id));\n    const orphanedNPCs = worldState.npcs.filter(npc => \n      npc.location_id && !locationIds.has(npc.location_id)\n    );\n    \n    if (orphanedNPCs.length > 0) {\n      issues.push(`orphaned_npcs: ${orphanedNPCs.length} NPCs reference non-existent locations`);\n    }\n  }\n  \n  return {\n    status: issues.length === 0 ? 'consistent' : 'inconsistent',\n    issues,\n    issue_count: issues.length\n  };\n}\n\nfunction checkRelationshipIntegrity(worldState) {\n  if (!worldState) return { status: 'unknown', issues: ['no_data'] };\n  \n  const issues = [];\n  \n  // Check NPC relationships\n  if (worldState.npcs) {\n    worldState.npcs.forEach(npc => {\n      if (npc.relationships && typeof npc.relationships === 'object') {\n        Object.entries(npc.relationships).forEach(([targetId, relationship]) => {\n          const targetNPC = worldState.npcs.find(n => n.id === targetId);\n          if (!targetNPC) {\n            issues.push(`invalid_npc_relationship: ${npc.name} -> ${targetId}`);\n          }\n        });\n      }\n    });\n  }\n  \n  // Check faction relationships\n  if (worldState.factions) {\n    worldState.factions.forEach(faction => {\n      if (faction.relationships && typeof faction.relationships === 'object') {\n        Object.entries(faction.relationships).forEach(([targetId, relationship]) => {\n          const targetFaction = worldState.factions.find(f => f.id === targetId);\n          if (!targetFaction) {\n            issues.push(`invalid_faction_relationship: ${faction.name} -> ${targetId}`);\n          }\n        });\n      }\n    });\n  }\n  \n  return {\n    status: issues.length === 0 ? 'intact' : 'corrupted',\n    issues,\n    issue_count: issues.length\n  };\n}\n\nfunction checkTemporalIntegrity(worldState) {\n  if (!worldState) return { status: 'unknown', issues: ['no_data'] };\n  \n  const issues = [];\n  const now = new Date();\n  \n  // Check for future timestamps\n  const checkFutureTimestamps = (array, fieldName) => {\n    if (!array || !Array.isArray(array)) return;\n    array.forEach(item => {\n      if (item.created_at && new Date(item.created_at) > now) {\n        issues.push(`future_timestamp_${fieldName}: ${item.id}`);\n      }\n    });\n  };\n  \n  checkFutureTimestamps(worldState.locations, 'location');\n  checkFutureTimestamps(worldState.npcs, 'npc');\n  checkFutureTimestamps(worldState.factions, 'faction');\n  checkFutureTimestamps(worldState.quests, 'quest');\n  \n  // Check for stale data (older than 30 days without updates)\n  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);\n  if (worldState.last_updated && new Date(worldState.last_updated) < thirtyDaysAgo) {\n    issues.push('stale_world_state: world state not updated in 30 days');\n  }\n  \n  return {\n    status: issues.length === 0 ? 'valid' : 'invalid',\n    issues,\n    issue_count: issues.length\n  };\n}\n\nfunction checkReferentialIntegrity(worldState) {\n  if (!worldState) return { status: 'unknown', issues: ['no_data'] };\n  \n  const issues = [];\n  \n  // Check quest giver references\n  if (worldState.quests && (worldState.npcs || worldState.factions)) {\n    worldState.quests.forEach(quest => {\n      if (quest.giver_id) {\n        const giverNPC = worldState.npcs?.find(n => n.id === quest.giver_id);\n        const giverFaction = worldState.factions?.find(f => f.id === quest.giver_id);\n        \n        if (!giverNPC && !giverFaction) {\n          issues.push(`invalid_quest_giver: quest ${quest.id} references non-existent giver ${quest.giver_id}`);\n        }\n      }\n      \n      if (quest.location_id && worldState.locations) {\n        const location = worldState.locations.find(l => l.id === quest.location_id);\n        if (!location) {\n          issues.push(`invalid_quest_location: quest ${quest.id} references non-existent location ${quest.location_id}`);\n        }\n      }\n    });\n  }\n  \n  return {\n    status: issues.length === 0 ? 'intact' : 'broken',\n    issues,\n    issue_count: issues.length\n  };\n}\n\nfunction calculateAverageResponseTime(systemMetrics) {\n  if (!systemMetrics || !systemMetrics.response_times) return 0;\n  \n  const times = systemMetrics.response_times;\n  return times.reduce((sum, time) => sum + time, 0) / times.length;\n}\n\nfunction calculateThroughput(systemMetrics) {\n  if (!systemMetrics || !systemMetrics.requests_per_minute) return 0;\n  return systemMetrics.requests_per_minute;\n}\n\nfunction calculateAvailability(systemMetrics) {\n  if (!systemMetrics || !systemMetrics.uptime_percentage) return 0;\n  return systemMetrics.uptime_percentage;\n}\n\nfunction calculateEfficiency(worldState, systemMetrics) {\n  if (!worldState || !systemMetrics) return 0;\n  \n  // Simple efficiency calculation based on resource usage vs data size\n  const dataSize = JSON.stringify(worldState).length;\n  const memoryUsage = systemMetrics.memory_usage || 0;\n  \n  if (memoryUsage === 0) return 100;\n  \n  return Math.max(0, 100 - (memoryUsage * 100));\n}\n\nfunction calculateSystemErrorRate(systemMetrics) {\n  if (!systemMetrics || !systemMetrics.error_count || !systemMetrics.total_requests) return 0;\n  return (systemMetrics.error_count / systemMetrics.total_requests) * 100;\n}\n\nfunction calculateDataErrorRate(worldState) {\n  if (!worldState) return 100; // 100% error rate if no data\n  \n  const totalEntities = \n    (worldState.locations?.length || 0) +\n    (worldState.npcs?.length || 0) +\n    (worldState.factions?.length || 0) +\n    (worldState.quests?.length || 0);\n  \n  if (totalEntities === 0) return 0;\n  \n  // Count entities with missing required fields\n  let errorCount = 0;\n  \n  if (worldState.locations) {\n    errorCount += worldState.locations.filter(l => !l.id || !l.name).length;\n  }\n  \n  if (worldState.npcs) {\n    errorCount += worldState.npcs.filter(n => !n.id || !n.name).length;\n  }\n  \n  if (worldState.factions) {\n    errorCount += worldState.factions.filter(f => !f.id || !f.name).length;\n  }\n  \n  if (worldState.quests) {\n    errorCount += worldState.quests.filter(q => !q.id || !q.name).length;\n  }\n  \n  return (errorCount / totalEntities) * 100;\n}\n\nfunction calculateNetworkErrorRate(systemMetrics) {\n  if (!systemMetrics || !systemMetrics.network_errors || !systemMetrics.total_requests) return 0;\n  return (systemMetrics.network_errors / systemMetrics.total_requests) * 100;\n}\n\nfunction calculateUserErrorRate(systemMetrics) {\n  if (!systemMetrics || !systemMetrics.user_errors || !systemMetrics.user_actions) return 0;\n  return (systemMetrics.user_errors / systemMetrics.user_actions) * 100;\n}\n\nfunction calculateOverallHealthScore(metrics) {\n  let score = 100;\n  \n  // System health penalties\n  Object.values(metrics.system_health).forEach(health => {\n    if (health.status === 'warning') score -= 10;\n    if (health.status === 'critical') score -= 30;\n    if (health.status === 'unknown') score -= 20;\n  });\n  \n  // Data integrity penalties\n  Object.values(metrics.data_integrity).forEach(integrity => {\n    if (integrity.status !== 'consistent' && integrity.status !== 'intact' && integrity.status !== 'valid') {\n      score -= integrity.issue_count * 5;\n    }\n  });\n  \n  // Performance penalties\n  if (metrics.performance_indicators.response_time > 5000) score -= 10;\n  if (metrics.performance_indicators.availability < 95) score -= 15;\n  \n  // Error rate penalties\n  Object.values(metrics.error_rates).forEach(rate => {\n    if (rate > 5) score -= 10;\n    if (rate > 10) score -= 20;\n  });\n  \n  return Math.max(0, score);\n}\n\nfunction analyzeSystemPerformance(campaignId, systemMetrics, worldState) {\n  const analysis = {\n    performance_score: 0,\n    bottlenecks: [],\n    recommendations: [],\n    trends: {},\n    capacity_utilization: {},\n    response_patterns: {}\n  };\n  \n  if (!systemMetrics) {\n    analysis.performance_score = 0;\n    analysis.bottlenecks.push('no_metrics_available');\n    return analysis;\n  }\n  \n  // Calculate performance score\n  let score = 100;\n  \n  // Response time scoring\n  if (systemMetrics.average_response_time > 1000) score -= 10;\n  if (systemMetrics.average_response_time > 3000) score -= 20;\n  if (systemMetrics.average_response_time > 5000) score -= 30;\n  \n  // Throughput scoring\n  if (systemMetrics.throughput < 10) score -= 5;\n  if (systemMetrics.throughput < 5) score -= 15;\n  \n  // Error rate scoring\n  if (systemMetrics.error_rate > 1) score -= 10;\n  if (systemMetrics.error_rate > 5) score -= 25;\n  \n  // Resource usage scoring\n  if (systemMetrics.cpu_usage > 0.7) score -= 10;\n  if (systemMetrics.cpu_usage > 0.9) score -= 20;\n  \n  if (systemMetrics.memory_usage > 0.8) score -= 10;\n  if (systemMetrics.memory_usage > 0.95) score -= 25;\n  \n  analysis.performance_score = Math.max(0, score);\n  \n  // Identify bottlenecks\n  if (systemMetrics.average_response_time > 3000) {\n    analysis.bottlenecks.push({\n      type: 'response_time',\n      severity: systemMetrics.average_response_time > 5000 ? 'high' : 'medium',\n      value: systemMetrics.average_response_time,\n      threshold: 3000\n    });\n  }\n  \n  if (systemMetrics.memory_usage > 0.8) {\n    analysis.bottlenecks.push({\n      type: 'memory_usage',\n      severity: systemMetrics.memory_usage > 0.95 ? 'high' : 'medium',\n      value: systemMetrics.memory_usage,\n      threshold: 0.8\n    });\n  }\n  \n  if (systemMetrics.cpu_usage > 0.7) {\n    analysis.bottlenecks.push({\n      type: 'cpu_usage',\n      severity: systemMetrics.cpu_usage > 0.9 ? 'high' : 'medium',\n      value: systemMetrics.cpu_usage,\n      threshold: 0.7\n    });\n  }\n  \n  if (systemMetrics.error_rate > 5) {\n    analysis.bottlenecks.push({\n      type: 'error_rate',\n      severity: systemMetrics.error_rate > 10 ? 'high' : 'medium',\n      value: systemMetrics.error_rate,\n      threshold: 5\n    });\n  }\n  \n  // Generate recommendations\n  if (systemMetrics.memory_usage > 0.8) {\n    analysis.recommendations.push({\n      type: 'optimization',\n      priority: 'high',\n      description: 'Optimize memory usage or increase memory allocation',\n      action: 'memory_optimization'\n    });\n  }\n  \n  if (systemMetrics.average_response_time > 3000) {\n    analysis.recommendations.push({\n      type: 'performance',\n      priority: 'medium',\n      description: 'Investigate and optimize slow response times',\n      action: 'response_optimization'\n    });\n  }\n  \n  if (systemMetrics.error_rate > 5) {\n    analysis.recommendations.push({\n      type: 'reliability',\n      priority: 'high',\n      description: 'Address high error rate to improve reliability',\n      action: 'error_reduction'\n    });\n  }\n  \n  // Capacity utilization analysis\n  analysis.capacity_utilization = {\n    cpu: systemMetrics.cpu_usage || 0,\n    memory: systemMetrics.memory_usage || 0,\n    disk: systemMetrics.disk_usage || 0,\n    network: systemMetrics.network_usage || 0\n  };\n  \n  return analysis;\n}\n\nfunction detectAnomalies(campaignId, healthMetrics, performanceAnalysis, thresholds) {\n  const anomalies = {\n    detected: [],\n    severity_distribution: { low: 0, medium: 0, high: 0, critical: 0 },\n    anomaly_patterns: [],\n    alert_required: false,\n    last_anomaly_time: null\n  };\n  \n  // Health anomalies\n  if (healthMetrics.overall_health === 'critical') {\n    anomalies.detected.push({\n      type: 'health_critical',\n      severity: 'critical',\n      description: 'Overall system health is critical',\n      timestamp: new Date().toISOString(),\n      affected_systems: ['all'],\n      recommended_action: 'immediate_investigation'\n    });\n    anomalies.severity_distribution.critical++;\n    anomalies.alert_required = true;\n  }\n  \n  // Performance anomalies\n  if (performanceAnalysis.performance_score < 70) {\n    anomalies.detected.push({\n      type: 'performance_degradation',\n      severity: performanceAnalysis.performance_score < 50 ? 'high' : 'medium',\n      description: `Performance score is ${performanceAnalysis.performance_score}%`,\n      timestamp: new Date().toISOString(),\n      affected_systems: ['system'],\n      bottlenecks: performanceAnalysis.bottlenecks,\n      recommended_action: 'performance_optimization'\n    });\n    \n    const severity = performanceAnalysis.performance_score < 50 ? 'high' : 'medium';\n    anomalies.severity_distribution[severity]++;\n    \n    if (severity === 'high') {\n      anomalies.alert_required = true;\n    }\n  }\n  \n  // Data integrity anomalies\n  Object.entries(healthMetrics.data_integrity).forEach(([component, integrity]) {\n    if (integrity.issue_count > 0) {\n      const severity = integrity.issue_count > 5 ? 'high' : 'medium';\n      \n      anomalies.detected.push({\n        type: 'data_integrity_issue',\n        severity,\n        component,\n        description: `${integrity.issue_count} integrity issues found in ${component}`,\n        timestamp: new Date().toISOString(),\n        affected_systems: [component],\n        issues: integrity.issues,\n        recommended_action: 'data_repair'\n      });\n      \n      anomalies.severity_distribution[severity]++;\n    }\n  });\n  \n  // Error rate anomalies\n  Object.entries(healthMetrics.error_rates).forEach(([error_type, rate]) => {\n    if (rate > thresholds.error_rate * 100) {\n      anomalies.detected.push({\n        type: 'elevated_error_rate',\n        severity: rate > thresholds.error_rate * 200 ? 'high' : 'medium',\n        error_type,\n        description: `${error_type} error rate is ${rate.toFixed(2)}%`,\n        timestamp: new Date().toISOString(),\n        threshold: thresholds.error_rate * 100,\n        recommended_action: 'error_investigation'\n      });\n      \n      const severity = rate > thresholds.error_rate * 200 ? 'high' : 'medium';\n      anomalies.severity_distribution[severity]++;\n    }\n  });\n  \n  // Update last anomaly time if anomalies were detected\n  if (anomalies.detected.length > 0) {\n    const latestAnomaly = anomalies.detected.reduce((latest, anomaly) => \n      new Date(anomaly.timestamp) > new Date(latest.timestamp) ? anomaly : latest\n    );\n    anomalies.last_anomaly_time = latestAnomaly.timestamp;\n  }\n  \n  return anomalies;\n}\n\nfunction generateLogEntries(campaignId, healthMetrics, performanceAnalysis, anomalyDetection, loggingParameters) {\n  const logEntries = [];\n  const timestamp = new Date().toISOString();\n  \n  // Health log entry\n  logEntries.push({\n    id: `log_${campaignId}_health_${Date.now()}`,\n    timestamp,\n    level: healthMetrics.overall_health === 'critical' ? 'error' : \n           healthMetrics.overall_health === 'warning' ? 'warn' : 'info',\n    category: 'health',\n    campaign_id: campaignId,\n    message: `Health status: ${healthMetrics.overall_health}`,\n    details: {\n      overall_health: healthMetrics.overall_health,\n      system_health: healthMetrics.system_health,\n      data_integrity: healthMetrics.data_integrity,\n      error_rates: healthMetrics.error_rates\n    },\n    correlation_id: `monitor_${campaignId}_${Date.now()}`\n  });\n  \n  // Performance log entry\n  logEntries.push({\n    id: `log_${campaignId}_performance_${Date.now()}`,\n    timestamp,\n    level: performanceAnalysis.performance_score < 70 ? 'warn' : 'info',\n    category: 'performance',\n    campaign_id: campaignId,\n    message: `Performance score: ${performanceAnalysis.performance_score}%`,\n    details: {\n      performance_score: performanceAnalysis.performance_score,\n      bottlenecks: performanceAnalysis.bottlenecks,\n      capacity_utilization: performanceAnalysis.capacity_utilization,\n      recommendations: performanceAnalysis.recommendations\n    },\n    correlation_id: `monitor_${campaignId}_${Date.now()}`\n  });\n  \n  // Anomaly log entries\n  anomalyDetection.detected.forEach(anomaly => {\n    logEntries.push({\n      id: `log_${campaignId}_anomaly_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n      timestamp: anomaly.timestamp,\n      level: anomaly.severity === 'critical' ? 'fatal' : \n             anomaly.severity === 'high' ? 'error' : \n             anomaly.severity === 'medium' ? 'warn' : 'info',\n      category: 'anomaly',\n      campaign_id: campaignId,\n      message: anomaly.description,\n      details: anomaly,\n      correlation_id: `monitor_${campaignId}_${Date.now()}`,\n      alert_required: anomalyDetection.alert_required\n    });\n  });\n  \n  // System metrics log entry\n  logEntries.push({\n    id: `log_${campaignId}_metrics_${Date.now()}`,\n    timestamp,\n    level: 'info',\n    category: 'metrics',\n    campaign_id: campaignId,\n    message: 'System metrics collected',\n    details: {\n      performance_indicators: healthMetrics.performance_indicators,\n      resource_usage: performanceAnalysis.capacity_utilization\n    },\n    correlation_id: `monitor_${campaignId}_${Date.now()}`\n  });\n  \n  return logEntries;\n}\n\nfunction calculateMonitoringPriority(healthMetrics, anomalyDetection) {\n  let priority = 5;\n  \n  // Health-based priority\n  if (healthMetrics.overall_health === 'critical') priority += 5;\n  if (healthMetrics.overall_health === 'warning') priority += 3;\n  \n  // Anomaly-based priority\n  priority += anomalyDetection.severity_distribution.critical * 5;\n  priority += anomalyDetection.severity_distribution.high * 3;\n  priority += anomalyDetection.severity_distribution.medium * 1;\n  \n  // Data integrity issues\n  const totalIntegrityIssues = Object.values(healthMetrics.data_integrity)\n    .reduce((sum, integrity) => sum + integrity.issue_count, 0);\n  priority += totalIntegrityIssues * 2;\n  \n  return Math.min(priority, 10);\n}\n\nreturn [{\n  json: {\n    ...monitoringConfig,\n    campaigns: processedCampaigns,\n    total_campaigns: processedCampaigns.length,\n    monitoring_timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "process-metrics",
+      "name": "Process Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "process-campaigns-individually",
+      "name": "Process Campaigns Individually",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate alerts and notifications for campaign\nconst monitoringConfig = $input.first().json;\nconst campaign = $input.first().json.campaigns[$input.first().json.currentCampaignIndex || 0];\n\nconst { campaignId, healthMetrics, performanceAnalysis, anomalyDetection, logEntries } = campaign;\n\nconst alerts = [];\nconst notifications = [];\n\n// Generate alerts based on health and anomalies\nif (healthMetrics.overall_health === 'critical') {\n  alerts.push({\n    id: `alert_critical_${campaignId}_${Date.now()}`,\n    type: 'critical_health',\n    severity: 'critical',\n    title: `CRITICAL: Campaign ${campaignId} Health Status`,\n    message: `Campaign health status is critical. Immediate attention required.`,\n    campaign_id: campaignId,\n    timestamp: new Date().toISOString(),\n    details: {\n      overall_health: healthMetrics.overall_health,\n      system_health: healthMetrics.system_health,\n      data_integrity_issues: Object.values(healthMetrics.data_integrity).reduce((sum, integrity) => sum + integrity.issue_count, 0),\n      error_rates: healthMetrics.error_rates\n    },\n    recommended_actions: [\n      'Investigate system health immediately',\n      'Check data integrity issues',\n      'Review error rates and system metrics',\n      'Consider emergency recovery procedures'\n    ],\n    escalation_required: true,\n    auto_escalate: true\n  });\n}\n\nif (healthMetrics.overall_health === 'warning') {\n  alerts.push({\n    id: `alert_warning_${campaignId}_${Date.now()}`,\n    type: 'warning_health',\n    severity: 'warning',\n    title: `WARNING: Campaign ${campaignId} Health Status`,\n    message: `Campaign health status requires attention.`,\n    campaign_id: campaignId,\n    timestamp: new Date().toISOString(),\n    details: {\n      overall_health: healthMetrics.overall_health,\n      performance_score: performanceAnalysis.performance_score,\n      bottlenecks: performanceAnalysis.bottlenecks\n    },\n    recommended_actions: performanceAnalysis.recommendations,\n    escalation_required: false,\n    auto_escalate: false\n  });\n}\n\n// Generate alerts for anomalies\nanomalyDetection.detected.forEach(anomaly => {\n  if (anomaly.severity === 'critical' || anomaly.severity === 'high') {\n    alerts.push({\n      id: `alert_anomaly_${campaignId}_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n      type: 'anomaly_detected',\n      severity: anomaly.severity,\n      title: `${anomaly.severity.toUpperCase()}: ${anomaly.type.replace('_', ' ').toUpperCase()}`,\n      message: anomaly.description,\n      campaign_id: campaignId,\n      timestamp: anomaly.timestamp,\n      details: anomaly,\n      recommended_actions: [anomaly.recommended_action],\n      escalation_required: anomaly.severity === 'critical',\n      auto_escalate: anomaly.severity === 'critical'\n    });\n  }\n});\n\n// Generate performance alerts\nif (performanceAnalysis.performance_score < 60) {\n  alerts.push({\n    id: `alert_performance_${campaignId}_${Date.now()}`,\n    type: 'performance_issue',\n    severity: performanceAnalysis.performance_score < 40 ? 'high' : 'medium',\n    title: `Performance Issue in Campaign ${campaignId}`,\n    message: `Performance score is ${performanceAnalysis.performance_score}%`,\n    campaign_id: campaignId,\n    timestamp: new Date().toISOString(),\n    details: {\n      performance_score: performanceAnalysis.performance_score,\n      bottlenecks: performanceAnalysis.bottlenecks,\n      capacity_utilization: performanceAnalysis.capacity_utilization\n    },\n    recommended_actions: performanceAnalysis.recommendations,\n    escalation_required: false,\n    auto_escalate: false\n  });\n}\n\n// Generate data integrity alerts\nconst totalIntegrityIssues = Object.values(healthMetrics.data_integrity)\n  .reduce((sum, integrity) => sum + integrity.issue_count, 0);\n\nif (totalIntegrityIssues > 0) {\n  alerts.push({\n    id: `alert_integrity_${campaignId}_${Date.now()}`,\n    type: 'data_integrity',\n    severity: totalIntegrityIssues > 10 ? 'high' : 'medium',\n    title: `Data Integrity Issues in Campaign ${campaignId}`,\n    message: `${totalIntegrityIssues} data integrity issues detected`,\n    campaign_id: campaignId,\n    timestamp: new Date().toISOString(),\n    details: {\n      total_issues: totalIntegrityIssues,\n      integrity_details: healthMetrics.data_integrity\n    },\n    recommended_actions: [\n      'Run data integrity repair procedures',\n      'Check for orphaned references',\n      'Validate data consistency',\n      'Review data entry processes'\n    ],\n    escalation_required: totalIntegrityIssues > 20,\n    auto_escalate: false\n  });\n}\n\n// Generate notifications for general monitoring\nnotifications.push({\n  id: `notification_monitoring_${campaignId}_${Date.now()}`,\n  type: 'monitoring_summary',\n  severity: 'info',\n  title: `Monitoring Summary for Campaign ${campaignId}`,\n  message: `Regular monitoring cycle completed`,\n  campaign_id: campaignId,\n  timestamp: new Date().toISOString(),\n  details: {\n    health_status: healthMetrics.overall_health,\n    performance_score: performanceAnalysis.performance_score,\n    anomalies_detected: anomalyDetection.detected.length,\n    alerts_generated: alerts.length,\n    log_entries_created: logEntries.length\n  },\n  recipients: ['admin', 'operators'],\n  channels: ['dashboard', 'email']\n});\n\n// Generate notification if no critical issues\nif (alerts.length === 0 && healthMetrics.overall_health === 'healthy') {\n  notifications.push({\n    id: `notification_healthy_${campaignId}_${Date.now()}`,\n    type: 'health_status',\n    severity: 'success',\n    title: `All Systems Healthy for Campaign ${campaignId}`,\n    message: `All systems operating normally`,\n    campaign_id: campaignId,\n    timestamp: new Date().toISOString(),\n    details: {\n      health_status: healthMetrics.overall_health,\n      performance_score: performanceAnalysis.performance_score,\n      uptime: performanceAnalysis.capacity_utilization\n    },\n    recipients: ['admin'],\n    channels: ['dashboard']\n  });\n}\n\nreturn [{\n  json: {\n    campaignId,\n    alerts,\n    notifications,\n    log_entries: logEntries,\n    health_summary: {\n      overall_health: healthMetrics.overall_health,\n      performance_score: performanceAnalysis.performance_score,\n      anomaly_count: anomalyDetection.detected.length,\n      alert_count: alerts.length,\n      log_count: logEntries.length\n    },\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "generate-alerts",
+      "name": "Generate Alerts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.NEO4J_URI }}",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.NEO4J_PASSWORD }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "=MATCH (c:Campaign {id: '{{ $json.campaignId }}' }) SET c.lastHealthCheck = '{{ $json.timestamp }}', c.healthMetrics = {{ JSON.stringify($json.health_summary) }}, c.monitoringHistory = COALESCE(c.monitoringHistory, []) + [{{ JSON.stringify({ monitoring_id: $json.campaignId + '_' + $json.timestamp, health_summary: $json.health_summary, alerts: $json.alerts, notifications: $json.notifications }) }}] RETURN c"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "store-monitoring-data-neo4j",
+      "name": "Neo4j - Store Monitoring Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "alerts-check",
+              "leftValue": "={{ $json.alerts.length }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-alerts",
+      "name": "Check for Alerts",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.ALERT_SERVICE_URL }}/api/alerts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.ALERT_SERVICE_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "alerts",
+              "value": "={{ $json.alerts }}"
+            },
+            {
+              "name": "campaign_id",
+              "value": "={{ $json.campaignId }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $json.timestamp }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-alerts",
+      "name": "Send Alerts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.LOGGING_SERVICE_URL }}/api/logs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.LOGGING_SERVICE_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "logs",
+              "value": "={{ $json.log_entries }}"
+            },
+            {
+              "name": "campaign_id",
+              "value": "={{ $json.campaignId }}"
+            },
+            {
+              "name": "monitoring_id",
+              "value": "={{ $json.campaignId + '_' + $json.timestamp }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-logs",
+      "name": "Send Logs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.NOTIFICATION_SERVICE_URL }}/api/notifications",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.NOTIFICATION_SERVICE_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "notifications",
+              "value": "={{ $json.notifications }}"
+            },
+            {
+              "name": "campaign_id",
+              "value": "={{ $json.campaignId }}"
+            },
+            {
+              "name": "priority",
+              "value": "={{ $json.alerts.some(a => a.severity === 'critical') ? 'high' : 'normal' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-notifications",
+      "name": "Send Notifications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate monitoring summary report\nconst monitoringData = $input.first().json;\n\nconst summary = {\n  monitoring_id: `monitor_summary_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n  campaign_id: monitoringData.campaignId,\n  processing_time: new Date().toISOString(),\n  monitoring_cycle: {\n    campaigns_monitored: 1,\n    alerts_generated: monitoringData.alerts.length,\n    notifications_sent: monitoringData.notifications.length,\n    log_entries_created: monitoringData.log_entries.length,\n    processing_duration: Date.now() - new Date(monitoringData.timestamp).getTime()\n  },\n  health_summary: monitoringData.health_summary,\n  alert_analysis: {\n    total_alerts: monitoringData.alerts.length,\n    critical_alerts: monitoringData.alerts.filter(a => a.severity === 'critical').length,\n    high_alerts: monitoringData.alerts.filter(a => a.severity === 'high').length,\n    medium_alerts: monitoringData.alerts.filter(a => a.severity === 'medium').length,\n    low_alerts: monitoringData.alerts.filter(a => a.severity === 'low').length,\n    alerts_by_type: categorizeAlerts(monitoringData.alerts),\n    escalation_required: monitoringData.alerts.some(a => a.escalation_required),\n    auto_escalated: monitoringData.alerts.filter(a => a.auto_escalate).length\n  },\n  system_health_trends: {\n    current_status: monitoringData.health_summary.overall_health,\n    performance_trend: 'stable', // Would calculate from historical data\n    error_rate_trend: 'stable', // Would calculate from historical data\n    resource_usage_trend: 'stable' // Would calculate from historical data\n  },\n  recommendations: generateMonitoringRecommendations(monitoringData),\n  next_steps: generateNextSteps(monitoringData),\n  compliance_status: checkComplianceStatus(monitoringData)\n};\n\nfunction categorizeAlerts(alerts) {\n  const categories = {};\n  \n  alerts.forEach(alert => {\n    if (!categories[alert.type]) {\n      categories[alert.type] = {\n        total: 0,\n        critical: 0,\n        high: 0,\n        medium: 0,\n        low: 0\n      };\n    }\n    \n    categories[alert.type].total++;\n    categories[alert.type][alert.severity]++;\n  });\n  \n  return categories;\n}\n\nfunction generateMonitoringRecommendations(monitoringData) {\n  const recommendations = [];\n  \n  // Health-based recommendations\n  if (monitoringData.health_summary.overall_health !== 'healthy') {\n    recommendations.push({\n      type: 'health_improvement',\n      priority: 'high',\n      description: 'Investigate and resolve health issues',\n      action_items: ['Review system logs', 'Check resource utilization', 'Verify data integrity']\n    });\n  }\n  \n  // Performance-based recommendations\n  if (monitoringData.health_summary.performance_score < 80) {\n    recommendations.push({\n      type: 'performance_optimization',\n      priority: 'medium',\n      description: 'Optimize system performance',\n      action_items: ['Identify bottlenecks', 'Optimize resource usage', 'Review system configuration']\n    });\n  }\n  \n  // Alert-based recommendations\n  if (monitoringData.alerts.length > 0) {\n    recommendations.push({\n      type: 'alert_management',\n      priority: 'high',\n      description: 'Address active alerts',\n      action_items: ['Review alert details', 'Implement corrective actions', 'Monitor for resolution']\n    });\n  }\n  \n  // Monitoring improvement recommendations\n  recommendations.push({\n    type: 'monitoring_enhancement',\n    priority: 'low',\n    description: 'Enhance monitoring coverage',\n    action_items: ['Add custom metrics', 'Improve alert thresholds', 'Expand monitoring scope']\n  });\n  \n  return recommendations;\n}\n\nfunction generateNextSteps(monitoringData) {\n  const steps = [];\n  \n  // Immediate next steps based on alerts\n  if (monitoringData.alerts.some(a => a.severity === 'critical')) {\n    steps.push({\n      action: 'immediate_response',\n      description: 'Respond to critical alerts immediately',\n      priority: 'urgent',\n      timeline: 'immediate',\n      responsible: 'operations_team'\n    });\n  }\n  \n  // Standard monitoring tasks\n  steps.push({\n    action: 'log_review',\n    description: 'Review monitoring logs and metrics',\n    priority: 'medium',\n    timeline: 'next_4_hours',\n    responsible: 'monitoring_team'\n  });\n  \n  steps.push({\n    action: 'performance_analysis',\n    description: 'Analyze performance trends and patterns',\n    priority: 'medium',\n    timeline: 'next_24_hours',\n    responsible: 'performance_team'\n  });\n  \n  steps.push({\n    action: 'report_generation',\n    description: 'Generate comprehensive monitoring report',\n    priority: 'low',\n    timeline: 'next_week',\n    responsible: 'monitoring_team'\n  });\n  \n  return steps;\n}\n\nfunction checkComplianceStatus(monitoringData) {\n  const compliance = {\n    status: 'compliant',\n    issues: [],\n    last_check: new Date().toISOString()\n  };\n  \n  // Check alert compliance\n  if (monitoringData.alerts.some(a => a.severity === 'critical' && !a.escalation_required)) {\n    compliance.issues.push('Critical alerts without escalation');\n    compliance.status = 'non_compliant';\n  }\n  \n  // Check log compliance\n  if (monitoringData.log_entries.length === 0) {\n    compliance.issues.push('No log entries generated');\n    compliance.status = 'non_compliant';\n  }\n  \n  // Check notification compliance\n  if (monitoringData.alerts.length > 0 && monitoringData.notifications.length === 0) {\n    compliance.issues.push('Alerts generated without notifications');\n    compliance.status = 'non_compliant';\n  }\n  \n  return compliance;\n}\n\nreturn [{ json: summary }];"
+      },
+      "id": "generate-monitoring-summary",
+      "name": "Generate Monitoring Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2660, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_MONITORING_SHEET_ID }}",
+        "range": "Monitoring_Log!A:Z",
+        "options": {}
+      },
+      "id": "log-monitoring-activity",
+      "name": "Log Monitoring Activity",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2880, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, monitoring_id: $json.monitoring_id, campaign_id: $json.campaign_id, health_status: $json.health_summary.overall_health, performance_score: $json.health_summary.performance_score, alerts_generated: $json.monitoring_cycle.alerts_generated, notifications_sent: $json.monitoring_cycle.notifications_sent, recommendations: $json.recommendations, next_steps: $json.next_steps, compliance_status: $json.compliance_status.status, processing_time: $json.monitoring_cycle.processing_duration, timestamp: $json.processing_time } }}"
+      },
+      "id": "monitoring-response",
+      "name": "Monitoring Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [3100, 300]
+    }
+  ],
+  "connections": {
+    "Monitoring Trigger": {
+      "main": [
+        [
+          {
+            "node": "Initialize Monitoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Health Check": {
+      "main": [
+        [
+          {
+            "node": "Initialize Monitoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Monitoring": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Fetch Campaign Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j - Fetch Campaign Metrics": {
+      "main": [
+        [
+          {
+            "node": "Process Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Metrics": {
+      "main": [
+        [
+          {
+            "node": "Process Campaigns Individually",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Campaigns Individually": {
+      "main": [
+        [
+          {
+            "node": "Generate Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Alerts": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Store Monitoring Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j - Store Monitoring Data": {
+      "main": [
+        [
+          {
+            "node": "Check for Alerts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Alerts": {
+      "main": [
+        [
+          {
+            "node": "Send Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Logs": {
+      "main": [
+        [
+          {
+            "node": "Generate Monitoring Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Notifications": {
+      "main": [
+        [
+          {
+            "node": "Generate Monitoring Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Monitoring Summary": {
+      "main": [
+        [
+          {
+            "node": "Log Monitoring Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Monitoring Activity": {
+      "main": [
+        [
+          {
+            "node": "Monitoring Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicyDefaultOption": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T13:00:00.000Z",
+      "updatedAt": "2024-10-23T13:00:00.000Z",
+      "id": "monitoring",
+      "name": "Monitoring"
+    },
+    {
+      "createdAt": "2024-10-23T13:00:00.000Z",
+      "updatedAt": "2024-10-23T13:00:00.000Z",
+      "id": "logging",
+      "name": "Logging"
+    },
+    {
+      "createdAt": "2024-10-23T13:00:00.000Z",
+      "updatedAt": "2024-10-23T13:00:00.000Z",
+      "id": "system-health",
+      "name": "System Health"
+    }
+  ],
+  "triggerCount": 2,
+  "updatedAt": "2024-10-23T13:00:00.000Z",
+  "versionId": "1.0.0"
+}

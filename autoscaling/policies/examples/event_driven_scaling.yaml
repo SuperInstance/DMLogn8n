@@ -1,0 +1,483 @@
+# Event-Driven Scaling Policy
+# Responsive scaling based on system events and triggers
+
+apiVersion: autoscaling.dmlogn8n/v1
+kind: EventScalingPolicy
+metadata:
+  name: event-driven-scaling
+  namespace: dmlogn8n
+  labels:
+    team: platform
+    component: event-scaling
+    environment: production
+    tier: orchestration
+  annotations:
+    description: "Event-driven auto-scaling policy for responsive infrastructure"
+    version: "2.3.0"
+    lastModified: "2025-10-23T00:00:00Z"
+
+spec:
+  # Global event scaling configuration
+  enabled: true
+  defaultCooldown: 300          # Default 5 minutes cooldown
+  maxConcurrentEvents: 10       # Maximum concurrent scaling events
+  eventQueueSize: 100          # Maximum events in queue
+  eventTimeout: 600            # Event processing timeout in seconds
+
+  # Event sources
+  eventSources:
+    - name: "internal_monitoring"
+      type: "prometheus_alertmanager"
+      enabled: true
+      endpoint: "http://alertmanager:9093"
+      retryPolicy:
+        maxRetries: 3
+        backoffDuration: 30
+
+    - name: "external_webhooks"
+      type: "http_webhook"
+      enabled: true
+      endpoint: "/api/events/webhook"
+      authentication:
+        type: "bearer_token"
+        token: "your-webhook-token"
+
+    - name: "message_queue"
+      type: "rabbitmq"
+      enabled: true
+      connection:
+        host: "rabbitmq.service.consul"
+        port: 5672
+        vhost: "/"
+        username: "events"
+        password: "events_password"
+
+    - name: "kubernetes_events"
+      type: "kubernetes"
+      enabled: true
+      namespaces: ["dmlogn8n", "monitoring"]
+      eventTypes: ["Warning", "Normal"]
+
+    - name: "cloud_provider"
+      type: "cloud_events"
+      enabled: true
+      providers: ["aws", "azure"]
+      services: ["ec2", "lambda", "cloudwatch"]
+
+  # Event triggers and responses
+  eventTriggers:
+    # High priority critical events
+    - name: "critical-service-failure"
+      eventType: "service_failure"
+      severity: "critical"
+      condition: "error_rate > 50 OR availability < 95"
+      affectedServices: ["api-gateway", "character-portal"]
+      response:
+        action: "immediate_scale_up"
+        scaleFactor: 2.0
+        targetInstances: 10
+        timeout: 120
+      cooldown: 1800
+      notifications:
+        channels: ["pagerduty", "slack", "email"]
+        message: "Critical service failure detected - immediate scaling initiated"
+
+    - name: "database-overload"
+      eventType: "database_overload"
+      severity: "critical"
+      condition: "connection_pool_usage > 90 OR query_latency > 2000"
+      affectedServices: ["database-cluster"]
+      response:
+        action: "scale_to_max"
+        targetInstances: 10
+        timeout: 300
+      cooldown: 1800
+      notifications:
+        channels: ["pagerduty", "email"]
+        message: "Database overload detected - scaling to maximum capacity"
+
+    - name: "security-incident"
+      eventType: "security_breach"
+      severity: "critical"
+      condition: "security_alert_level >= high"
+      affectedServices: ["*"]
+      response:
+        action: "emergency_scale_down"
+        targetInstances: 1
+        enableMaintenanceMode: true
+        timeout: 60
+      cooldown: 3600
+      notifications:
+        channels: ["pagerduty", "slack", "email"]
+        message: "Security incident detected - emergency scaling down"
+
+    # High priority events
+    - name: "traffic-surge"
+      eventType: "traffic_spike"
+      severity: "high"
+      condition: "requests_per_second > 2000 OR active_connections > 5000"
+      affectedServices: ["api-gateway", "character-portal"]
+      response:
+        action: "gradual_scale_up"
+        scaleFactor: 1.5
+        maxInstances: 15
+        scaleUpSteps: 3
+        stepDelay: 60
+        timeout: 300
+      cooldown: 900
+      notifications:
+        channels: ["slack", "email"]
+        message: "Traffic surge detected - gradual scaling up initiated"
+
+    - name: "game-event-start"
+      eventType: "game_event"
+      severity: "high"
+      condition: "event_type == 'boss_battle' OR event_type == 'tournament'"
+      affectedServices: ["combat-engine", "dialogue-system", "world-simulation"]
+      response:
+        action: "scale_to_optimal"
+        optimalInstances:
+          combat-engine: 6
+          dialogue-system: 8
+          world-simulation: 4
+        timeout: 180
+      cooldown: 1200
+      notifications:
+        channels: ["slack"]
+        message: "Game event started - scaling to optimal configuration"
+
+    - name: "queue-overflow"
+      eventType: "queue_overflow"
+      severity: "high"
+      condition: "queue_depth > 1000 OR message_age > 300"
+      affectedServices: ["dialogue-system", "combat-engine"]
+      response:
+        action: "consumer_scale_up"
+        scaleFactor: 2.0
+        targetInstances: 8
+        timeout: 240
+      cooldown: 600
+      notifications:
+        channels: ["slack"]
+        message: "Message queue overflow detected - scaling up consumers"
+
+    - name: "resource-exhaustion"
+      eventType: "resource_exhaustion"
+      severity: "high"
+      condition: "cpu_usage > 95 OR memory_usage > 95 OR disk_usage > 90"
+      affectedServices: ["*"]
+      response:
+        action: "emergency_scale_up"
+        scaleFactor: 1.5
+        maxInstances: 20
+        timeout: 120
+      cooldown: 900
+      notifications:
+        channels: ["pagerduty", "slack"]
+        message: "Resource exhaustion detected - emergency scaling up"
+
+    # Medium priority events
+    - name: "cost-threshold-exceeded"
+      eventType: "cost_alert"
+      severity: "medium"
+      condition: "hourly_cost > 500"
+      affectedServices: ["ai-model-pool", "world-simulation"]
+      response:
+        action: "cost_optimization_scale_down"
+        scaleFactor: 0.7
+        minInstances: 2
+        timeout: 300
+      cooldown: 1800
+      notifications:
+        channels: ["email"]
+        message: "Cost threshold exceeded - initiating cost optimization scaling"
+
+    - name: "maintenance-window"
+      eventType: "maintenance_mode"
+      severity: "medium"
+      condition: "maintenance == true"
+      affectedServices: ["api-gateway", "character-portal"]
+      response:
+        action: "maintenance_scaling"
+        minInstances: 2
+        enableReadonlyMode: true
+        timeout: 60
+      cooldown: 3600
+      notifications:
+        channels: ["slack", "email"]
+        message: "Maintenance mode activated - scaling down for maintenance"
+
+    - name: "new-feature-deployment"
+      eventType: "feature_rollout"
+      severity: "medium"
+      condition: "deployment_status == 'in_progress'"
+      affectedServices: ["api-gateway"]
+      response:
+        action: "blue_green_scale_up"
+        additionalInstances: 5
+        enableTrafficSplitting: true
+        trafficSplitRatio: 80/20
+        timeout: 600
+      cooldown: 1800
+      notifications:
+        channels: ["slack"]
+        message: "Feature deployment in progress - blue-green scaling initiated"
+
+    # Low priority events
+    - name: "periodic-cleanup"
+      eventType: "scheduled_task"
+      severity: "low"
+      condition: "task_type == 'cleanup' AND scheduled_time == true"
+      affectedServices: ["world-simulation", "combat-engine"]
+      response:
+        action: "temporary_scale_up"
+        additionalInstances: 2
+        duration: 1800
+        timeout: 60
+      cooldown: 3600
+      notifications:
+        channels: ["email"]
+        message: "Scheduled cleanup task - temporary scaling up"
+
+    - name: "load-testing"
+      eventType: "testing_event"
+      severity: "low"
+      condition: "test_type == 'load_test'"
+      affectedServices: ["api-gateway"]
+      response:
+        action: "test_environment_scale_up"
+        targetInstances: 10
+        duration: 3600
+        isolated: true
+        timeout: 120
+      cooldown: 1800
+      notifications:
+        channels: ["slack"]
+        message: "Load testing initiated - scaling up test environment"
+
+  # Event processing configuration
+  eventProcessing:
+    # Event filtering
+    filtering:
+      enabled: true
+      rules:
+        - name: "ignore_duplicate_events"
+          condition: "event_count > 1 AND time_window < 60"
+          action: "drop"
+
+        - name: "rate_limit_events"
+          condition: "event_rate > 10_per_minute"
+          action: "throttle"
+          limit: 5
+
+        - name: "priority_filtering"
+          condition: "severity == 'low' AND system_load > 80"
+          action: "queue"
+
+    # Event enrichment
+    enrichment:
+      enabled: true
+      sources:
+        - name: "service_metadata"
+          endpoint: "/api/services/{service_id}/metadata"
+        - name: "user_context"
+          endpoint: "/api/users/{user_id}/context"
+        - name: "business_metrics"
+          endpoint: "/api/metrics/business"
+
+    # Event correlation
+    correlation:
+      enabled: true
+      windowSize: 300           # 5 minutes correlation window
+      rules:
+        - name: "cascade_failure"
+          patterns:
+            - "service_failure"
+            - "database_overload"
+          action: "escalate_severity"
+          newSeverity: "critical"
+
+        - name: "traffic_cascade"
+          patterns:
+            - "traffic_spike"
+            - "queue_overflow"
+            - "resource_exhaustion"
+          action: "aggregate_response"
+          scaleFactor: 2.5
+
+  # Scaling policies configuration
+  scalingPolicies:
+    # Immediate scaling policies
+    immediateScaling:
+      maxConcurrentOperations: 3
+      timeout: 120
+      rollbackOnFailure: true
+      healthCheckDelay: 30
+
+    # Gradual scaling policies
+    gradualScaling:
+      stepSize: 1
+      stepDelay: 60
+      maxSteps: 5
+      healthCheckBetweenSteps: true
+      abortOnFailure: true
+
+    # Predictive scaling integration
+    predictiveScaling:
+      enabled: true
+      lookbackWindow: 1800       # 30 minutes
+      confidenceThreshold: 0.75
+      preemptiveScaling: true
+      cooldownReduction: 0.5
+
+  # Event history and analytics
+  eventHistory:
+    retentionPeriod: 30          # days
+    maxEvents: 100000
+    compression: true
+    analytics:
+      enabled: true
+      metrics:
+        - "event_frequency_by_type"
+        - "scaling_success_rate"
+        - "average_response_time"
+        - "correlation_patterns"
+      reporting:
+        schedule: "0 6 * * *"  # Daily at 6 AM
+        recipients: ["platform-team@company.com"]
+
+  # Integration with other systems
+  integrations:
+    # Monitoring integration
+    monitoring:
+      prometheus:
+        enabled: true
+        metricsPrefix: "event_scaling_"
+        labels: ["service", "event_type", "severity"]
+
+      datadog:
+        enabled: true
+        apiKey: "your-datadog-api-key"
+        eventPrefix: "autoscaling"
+
+    # Logging integration
+    logging:
+      elasticsearch:
+        enabled: true
+        endpoint: "http://elasticsearch:9200"
+        indexPattern: "event-scaling-%Y.%m.%d"
+
+      splunk:
+        enabled: true
+        endpoint: "https://splunk.company.com:8088"
+        token: "your-splunk-token"
+
+    # Ticketing integration
+    ticketing:
+      jira:
+        enabled: true
+        apiUrl: "https://company.atlassian.net"
+        projectKey: "AUTO"
+        username: "autoscaling-bot"
+        createTicketsForSeverity: ["critical", "high"]
+
+  # Testing and validation
+  testing:
+    # Event simulation
+    simulation:
+      enabled: true
+      scenarios:
+        - name: "traffic_surge_test"
+          events:
+            - type: "traffic_spike"
+              data: {"requests_per_second": 3000}
+          expectedScaling: {"service": "api-gateway", "instances": 10}
+
+        - name: "failure_cascade_test"
+          events:
+            - type: "service_failure"
+              data: {"error_rate": 60}
+            - type: "database_overload"
+              data: {"connection_pool_usage": 95}
+          expectedScaling: {"emergency": true}
+
+    # Dry run mode
+    dryRun:
+      enabled: false
+      logOnly: true
+      notifications: true
+      metricsCollection: true
+
+  # Fallback and recovery
+  fallback:
+    # Manual override
+    manualOverride:
+      enabled: true
+      requiredRole: "admin"
+      approvalRequired: ["critical", "high"]
+      overrideTimeout: 3600
+
+    # Emergency procedures
+    emergency:
+      safeMode:
+        enabled: true
+        triggerConditions:
+          - "consecutive_failures > 5"
+          - "system_health < 50"
+        actions:
+          - "pause_event_processing"
+          - "scale_to_minimum"
+          - "enable_maintenance_mode"
+
+      disasterRecovery:
+        enabled: true
+        backupRegion: "us-east-2"
+        failoverConditions:
+          - "region_unavailable"
+          - "widespread_failures"
+        actions:
+          - "activate_backup_scaling"
+          - "redirect_traffic"
+          - "notify_stakeholders"
+
+# Status and metrics
+status:
+  phase: "active"
+  observedGeneration: 12
+  lastEventProcessed: "2025-10-23T18:15:00Z"
+  eventsProcessedToday: 145
+  scalingEventsTriggered: 23
+
+  conditions:
+    - type: "EventProcessorHealthy"
+      status: "True"
+      reason: "EventProcessorRunning"
+      lastTransitionTime: "2025-10-23T18:15:00Z"
+
+    - type: "EventQueueHealthy"
+      status: "True"
+      reason: "QueueSizeNormal"
+      lastTransitionTime: "2025-10-23T18:15:00Z"
+
+    - type: "ScalingHealthy"
+      status: "True"
+      reason: "ScalingOperationsSuccessful"
+      lastTransitionTime: "2025-10-23T18:15:00Z"
+
+  metrics:
+    eventProcessing:
+      eventsReceived: 145
+      eventsProcessed: 143
+      eventsQueued: 2
+      averageProcessingTime: 2.3  # seconds
+
+    scalingOperations:
+      totalTriggers: 23
+      successful: 22
+      failed: 1
+      averageTimeToScale: 45.6  # seconds
+
+    queueStatus:
+      currentSize: 2
+      maxSize: 100
+      processingRate: 2.5  # events/second

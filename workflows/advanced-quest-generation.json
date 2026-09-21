@@ -1,0 +1,342 @@
+{
+  "name": "Advanced Quest Generation - Dynamic Quest Creation with AI",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "quest/generate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "quest-generation-webhook",
+      "name": "Quest Generation Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "quest-generate"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process quest generation request\nconst questData = $input.first().json;\nconst { \n  action, // 'generate', 'update', 'complete', 'branch', 'discover', 'abandon'\n  campaignId,\n  questType, // 'main', 'side', 'personal', 'faction', 'discovery', 'emergency'\n  generationMethod, // 'procedural', 'ai', 'template', 'contextual', 'consequence'\n  triggerContext = {},\n  partyData = {},\n  worldContext = {},\n  difficultyPreference, // 'easy', 'normal', 'hard', 'adaptive'\n  questParameters = {}\n} = questData;\n\n// Validate required fields\nif (!action || !campaignId) {\n  throw new Error('Missing required fields: action, campaignId');\n}\n\n// Prepare quest generation context\nconst questContext = {\n  action,\n  campaignId,\n  questType: questType || 'side',\n  generationMethod: generationMethod || 'contextual',\n  triggerContext,\n  partyData,\n  worldContext,\n  difficultyPreference: difficultyPreference || 'adaptive',\n  questParameters,\n  timestamp: new Date().toISOString(),\n  metadata: {\n    processedBy: 'advanced-quest-generation',\n    version: '2.0',\n    requestId: `quest_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`\n  }\n};\n\nreturn { json: questContext };"
+      },
+      "id": "process-quest-request",
+      "name": "Process Quest Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "action-condition",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "generate",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "route-quest-action",
+      "name": "Route Quest Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get campaign and world context for quest generation\nconst questContext = $input.first().json;\nconst { campaignId, worldContext, partyData } = questContext;\n\n// Fetch campaign data from world state system\nlet campaignWorldState = null;\ntry {\n  const worldResponse = await fetch('http://localhost:5678/webhook/world/update', {\n    method: 'POST',\n    headers: {\n      'Content-Type': 'application/json'\n    },\n    body: JSON.stringify({\n      action: 'get',\n      campaignId\n    })\n  });\n  \n  if (worldResponse.ok) {\n    const worldResult = await worldResponse.json();\n    campaignWorldState = worldResult.data;\n  }\n} catch (error) {\n  console.error('Failed to fetch world state:', error);\n}\n\n// Get active quest data\nlet activeQuests = [];\nif (campaignWorldState && campaignWorldState.quests) {\n  activeQuests = campaignWorldState.quests.filter(quest => \n    ['available', 'active', 'in_progress'].includes(quest.status)\n  );\n}\n\n// Analyze party composition and capabilities\nconst partyAnalysis = {\n  level: partyData.averageLevel || 3,\n  size: partyData.partySize || 4,\n  composition: partyData.composition || {\n    tank: 1,\n    healer: 1,\n    damage: 2,\n    support: 0,\n    utility: 0\n  },\n  skills: partyData.partySkills || [],\n  equipment: partyData.equipmentLevel || 'basic',\n  experience: partyData.experienceLevel || 'normal',\n  previousQuests: partyData.completedQuests || [],\n  currentLocation: partyData.currentLocation || 'town',\n  reputation: partyData.factionReputation || {}\n};\n\n// Analyze world state for quest opportunities\nconst worldAnalysis = {\n  availableLocations: campaignWorldState?.locations?.filter(loc => loc.discovered) || [],\n  activeNPCs: campaignWorldState?.npcs?.filter(npc => npc.status === 'alive') || [],\n  factionRelations: campaignWorldState?.factions?.map(fac => ({\n    id: fac.id,\n    name: fac.name,\n    reputation: fac.reputation || 0,\n    alignment: fac.alignment || 'neutral'\n  })) || [],\n  recentEvents: campaignWorldState?.worldEvents?.slice(-10) || [],\n  completedQuests: campaignWorldState?.quests?.filter(q => q.status === 'completed') || [],\n  worldProgress: campaignWorldState?.worldStats || {},\n  currentInGameTime: campaignWorldState?.currentInGameTime || 'Day 1, Morning'\n};\n\n// Calculate difficulty based on party and context\nconst calculateDifficulty = () => {\n  const baseDifficulty = partyAnalysis.level;\n  const partySizeModifier = partyAnalysis.size > 3 ? 0.2 : -0.1;\n  const equipmentModifier = partyAnalysis.equipment === 'advanced' ? -0.2 : \n                          partyAnalysis.equipment === 'basic' ? 0.2 : 0;\n  const experienceModifier = partyAnalysis.experience === 'veteran' ? -0.3 :\n                           partyAnalysis.experience === 'new' ? 0.3 : 0;\n  \n  return Math.max(1, Math.min(20, Math.round(\n    baseDifficulty + partySizeModifier + equipmentModifier + experienceModifier\n  )));\n};\n\nconst contextualData = {\n  campaignId,\n  campaignWorldState,\n  partyAnalysis,\n  worldAnalysis,\n  activeQuests,\n  calculatedDifficulty: calculateDifficulty(),\n  currentContext: {\n    location: partyAnalysis.currentLocation,\n    timeOfDay: worldAnalysis.currentInGameTime,\n    season: extractSeason(worldAnalysis.currentInGameTime),\n    recentMajorEvents: worldAnalysis.recentEvents.filter(e => e.importance === 'major')\n  },\n  questOpportunities: identifyQuestOpportunities(),\n  timestamp: new Date().toISOString()\n};\n\n// Helper functions\nfunction extractSeason(timeString) {\n  if (timeString.toLowerCase().includes('spring')) return 'spring';\n  if (timeString.toLowerCase().includes('summer')) return 'summer';\n  if (timeString.toLowerCase().includes('fall') || timeString.toLowerCase().includes('autumn')) return 'fall';\n  if (timeString.toLowerCase().includes('winter')) return 'winter';\n  return 'spring'; // default\n}\n\nfunction identifyQuestOpportunities() {\n  const opportunities = [];\n  \n  // Location-based opportunities\n  worldAnalysis.availableLocations.forEach(location => {\n    if (location.properties?.dungeon || location.type === 'dungeon') {\n      opportunities.push({\n        type: 'dungeon_explore',\n        location: location.id,\n        priority: location.properties?.danger_level || 'normal'\n      });\n    }\n    if (location.properties?.quests_available) {\n      opportunities.push({\n        type: 'location_quest',\n        location: location.id,\n        availableQuests: location.properties.quests_available\n      });\n    }\n  });\n  \n  // NPC-based opportunities\n  worldAnalysis.activeNPCs.forEach(npc => {\n    if (npc.dialogue?.length > 0 && npc.faction !== 'neutral') {\n      opportunities.push({\n        type: 'npc_quest',\n        npc: npc.id,\n        faction: npc.faction,\n        urgency: npc.properties?.quest_urgency || 'normal'\n      });\n    }\n  });\n  \n  // Faction-based opportunities\n  worldAnalysis.factionRelations.forEach(faction => {\n    if (faction.reputation > 50) {\n      opportunities.push({\n        type: 'faction_favor',\n        faction: faction.id,\n        priority: 'high'\n      });\n    } else if (faction.reputation < -30) {\n      opportunities.push({\n        type: 'faction_repair',\n        faction: faction.id,\n        priority: 'medium'\n      });\n    }\n  });\n  \n  // Recent events opportunities\n  worldAnalysis.recentEvents.forEach(event => {\n    if (event.type === 'disaster' || event.type === 'invasion') {\n      opportunities.push({\n        type: 'emergency_response',\n        event: event.id,\n        urgency: 'urgent'\n      });\n    }\n  });\n  \n  return opportunities;\n}\n\nreturn { \n  json: {\n    ...questContext,\n    contextualData\n  } \n};"
+      },
+      "id": "gather-quest-context",
+      "name": "Gather Quest Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procedural quest generation based on context and templates\nconst questContext = $input.first().json;\nconst { contextualData, questType, questParameters } = questContext;\nconst { partyAnalysis, worldAnalysis, questOpportunities, calculatedDifficulty } = contextualData;\n\n// Quest templates and generation rules\nconst questTemplates = {\n  // Combat-focused quests\n  combat: {\n    monster_hunt: {\n      name: 'Monster Hunt: {target_type}',\n      description: 'A dangerous {target_type} has been terrorizing {location}. Local authorities are offering a reward for its elimination.',\n      objectives: [\n        { type: 'travel', description: 'Travel to {location}' },\n        { type: 'combat', description: 'Defeat the {target_type}' },\n        { type: 'return', description: 'Report back to {giver}' }\n      ],\n      rewards: { experience: '{difficulty}00', gold: '{difficulty}00' },\n      tags: ['combat', 'monster', 'reward']\n    },\n    bandit_trouble: {\n      name: 'Bandit Problems',\n      description: 'Bandits have been attacking travelers on the {road_name} road. The merchants need protection.',\n      objectives: [\n        { type: 'investigate', description: 'Investigate the bandit activity' },\n        { type: 'combat', description: 'Deal with the bandits' },\n        { type: 'escort', description: 'Escort merchant caravan' }\n      ],\n      rewards: { experience: '{difficulty}50', gold: '{difficulty}50', reputation: '{faction_name} +10' },\n      tags: ['combat', 'bandits', 'escort']\n    },\n    arena_challenge: {\n      name: 'Arena Championship',\n      description: 'The local arena is holding a championship tournament. Glory and riches await the victors.',\n      objectives: [\n        { type: 'combat', description: 'Win {rounds} arena matches' },\n        { type: 'combat', description: 'Defeat the champion' }\n      ],\n      rewards: { experience: '{difficulty}00', gold: '{difficulty}00', title: 'Arena Champion' },\n      tags: ['combat', 'arena', 'glory']\n    }\n  },\n  \n  // Exploration quests\n  exploration: {\n    ancient_ruins: {\n      name: 'Explore the {ruin_type} Ruins',\n      description: 'Ancient {ruin_type} ruins have been discovered near {location}. Scholars believe they hold valuable artifacts and knowledge.',\n      objectives: [\n        { type: 'travel', description: 'Reach the ruins' },\n        { type: 'explore', description: 'Explore the ruins completely' },\n        { type: 'puzzle', description: 'Solve the ancient puzzles' },\n        { type: 'recover', description: 'Recover the artifact' }\n      ],\n      rewards: { experience: '{difficulty}00', item: 'ancient_artifact', knowledge: true },\n      tags: ['exploration', 'puzzle', 'ancient']\n    },\n    lost_expedition: {\n      name: 'Find Lost Expedition',\n      description: 'An expedition to {dangerous_location} has gone missing. Their families are desperate for news.',\n      objectives: [\n        { type: 'investigate', description: 'Find clues about the expedition\\'s fate' },\n        { type: 'travel', description: 'Reach {dangerous_location}' },\n        { type: 'rescue', description: 'Rescue survivors or recover remains' }\n      ],\n      rewards: { experience: '{difficulty}00', gold: '{difficulty}00', gratitude: 'expedition_families' },\n      tags: ['exploration', 'rescue', 'mystery']\n    },\n    map_cartography: {\n      name: 'Chart the {region_name}',\n      description: 'The cartographer\\'s guild needs accurate maps of the unexplored {region_name} region.',\n      objectives: [\n        { type: 'explore', description: 'Survey {location_count} key locations' },\n        { type: 'document', description: 'Create detailed maps' },\n        { type: 'return', description: 'Deliver maps to the guild' }\n      ],\n      rewards: { experience: '{difficulty}00', gold: '{difficulty}00', reputation: 'Cartographer\\'s Guild +20' },\n      tags: ['exploration', 'mapping', 'survey']\n    }\n  },\n  \n  // Social and intrigue quests\n  social: {\n    political_intrigue: {\n      name: 'Political Intrigue',\n      description: 'A political crisis is brewing in {city_name}. {noble_name} needs your help to navigate the dangerous waters of court politics.',\n      objectives: [\n        { type: 'investigate', description: 'Gather information about rival factions' },\n        { type: 'social', description: 'Build alliances' },\n        { type: 'diplomacy', description: 'Resolve the political conflict' }\n      ],\n      rewards: { experience: '{difficulty}00', gold: '{difficulty}00', influence: 'political_favor' },\n      tags: ['social', 'politics', 'intrigue']\n    },\n    missing_person: {\n      name: 'Missing Person: {person_name}',\n      description: '{person_name} has gone missing under mysterious circumstances. Their family is offering a substantial reward for their safe return.',\n      objectives: [\n        { type: 'investigate', description: 'Gather clues about the disappearance' },\n        { type: 'social', description: 'Interview witnesses' },\n        { type: 'rescue', description: 'Locate and rescue {person_name}' }\n      ],\n      rewards: { experience: '{difficulty}00', gold: '{difficulty}00', gratitude: 'family_favor' },\n      tags: ['social', 'mystery', 'rescue']\n    },\n    festival_preparations: {\n      name: 'Festival Preparations',\n      description: 'The annual {festival_name} festival is approaching, but there are problems with the preparations.',\n      objectives: [\n        { type: 'social', description: 'Help with festival preparations' },\n        { type: 'problem_solving', description: 'Resolve preparation issues' },\n        { type: 'social', description: 'Ensure the festival runs smoothly' }\n      ],\n      rewards: { experience: '{difficulty}00', reputation: 'town_favor', celebration: true },\n      tags: ['social', 'festival', 'community']\n    }\n  },\n  \n  // Delivery and escort quests\n  delivery: {\n    urgent_package: {\n      name: 'Urgent Delivery',\n      description: 'A urgent package must be delivered to {recipient} in {destination_city} as quickly as possible.',\n      objectives: [\n        { type: 'travel', description: 'Travel to {destination_city}' },\n        { type: 'deliver', description: 'Deliver the package safely' },\n        { type: 'return', description: 'Return with confirmation' }\n      ],\n      rewards: { experience: '{difficulty}00', gold: '{difficulty}00', reputation: 'merchant_guild +10' },\n      tags: ['delivery', 'urgent', 'travel']\n    },\n    merchant_caravan: {\n      name: 'Protect Merchant Caravan',\n      description: 'A merchant caravan needs protection while traveling through {dangerous_route} to {destination}.',\n      objectives: [\n        { type: 'escort', description: 'Escort the merchant caravan' },\n        { type: 'combat', description: 'Protect from bandits/monsters' },\n        { type: 'deliver', description: 'Ensure safe arrival at destination' }\n      ],\n      rewards: { experience: '{difficulty}00', gold: '{difficulty}00', reputation: 'merchant_guild +15' },\n      tags: ['escort', 'merchant', 'protection']\n    }\n  },\n  \n  // Collection and crafting quests\n  collection: {\n    rare_ingredients: {\n      name: 'Collect Rare Ingredients',\n      description: '{alchemist_name} needs rare ingredients from {dangerous_location} for an important potion.',\n      objectives: [\n        { type: 'collect', description: 'Gather {ingredient_count} {ingredient_name}' },\n        { type: 'travel', description: 'Travel to {dangerous_location}' },\n        { type: 'return', description: 'Deliver ingredients to {alchemist_name}' }\n      ],\n      rewards: { experience: '{difficulty}00', gold: '{difficulty}00', item: 'custom_potion' },\n      tags: ['collection', 'ingredients', 'crafting']\n    },\n    ancient_artifacts: {\n      name: 'Ancient Artifact Recovery',\n      description: 'The museum is seeking ancient artifacts from the {ancient_civilization} civilization.',\n      objectives: [\n        { type: 'research', description: 'Research artifact locations' },\n        { type: 'recover', description: 'Recover {artifact_count} artifacts' },\n        { type: 'deliver', description: 'Deliver to the museum' }\n      ],\n      rewards: { experience: '{difficulty}00', gold: '{difficulty}00', reputation: 'museum +20' },\n      tags: ['collection', 'artifacts', 'history']\n    }\n  }\n};\n\n// Quest generation based on opportunities and context\nconst generateQuest = () => {\n  // Select appropriate quest category based on party and context\n  let questCategory = selectQuestCategory();\n  let questTemplate = selectQuestTemplate(questCategory);\n  \n  // Generate quest specifics\n  const questSpecifics = generateQuestSpecifics(questTemplate);\n  \n  // Build complete quest object\n  const quest = {\n    id: `quest_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,\n    name: fillTemplate(questTemplate.name, questSpecifics),\n    description: fillTemplate(questTemplate.description, questSpecifics),\n    type: questType,\n    category: questCategory,\n    difficulty: calculatedDifficulty,\n    recommendedLevel: partyAnalysis.level,\n    estimatedDuration: estimateQuestDuration(questTemplate),\n    \n    // Quest objectives\n    objectives: questTemplate.objectives.map(obj => ({\n      ...obj,\n      id: `obj_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,\n      description: fillTemplate(obj.description, questSpecifics),\n      completed: false,\n      completedAt: null\n    })),\n    \n    // Quest giver and location\n    giver: questSpecifics.giver,\n    giverLocation: questSpecifics.giverLocation,\n    questLocation: questSpecifics.questLocation,\n    \n    // Rewards\n    rewards: processRewards(questTemplate.rewards, questSpecifics),\n    \n    // Quest metadata\n    prerequisites: generatePrerequisites(questTemplate, questSpecifics),\n    failureConditions: generateFailureConditions(questTemplate, questSpecifics),\n    timeLimit: questSpecifics.timeLimit || null,\n    \n    // Quest state\n    status: 'available',\n    progress: 0,\n    startedAt: null,\n    completedAt: null,\n    \n    // Quest tags and metadata\n    tags: questTemplate.tags,\n    importance: calculateQuestImportance(questTemplate, questSpecifics),\n    urgency: questSpecifics.urgency || 'normal',\n    \n    // Quest branching\n    branches: generatePotentialBranches(questTemplate, questSpecifics),\n    consequences: generateConsequences(questTemplate, questSpecifics),\n    \n    // Creation metadata\n    createdAt: new Date().toISOString(),\n    generatedBy: 'procedural_generator',\n    generationContext: {\n      partyLevel: partyAnalysis.level,\n      partySize: partyAnalysis.size,\n      worldEvents: worldAnalysis.recentEvents.slice(-3),\n      triggeredBy: questOpportunities[0]?.type || 'contextual'\n    }\n  };\n  \n  return quest;\n};\n\n// Helper functions for quest generation\nfunction selectQuestCategory() {\n  const categories = Object.keys(questTemplates);\n  \n  // Weight categories based on party composition\n  const weights = {\n    combat: partyAnalysis.combat > 0.7 ? 3 : 1,\n    exploration: partyAnalysis.exploration > 0.5 ? 2 : 1,\n    social: partyAnalysis.social > 0.6 ? 2 : 1,\n    delivery: partyAnalysis.size <= 2 ? 2 : 1,\n    collection: partyAnalysis.crafting > 0.4 ? 2 : 1\n  };\n  \n  // Select weighted random category\n  const weightedCategories = [];\n  categories.forEach(cat => {\n    for (let i = 0; i < (weights[cat] || 1); i++) {\n      weightedCategories.push(cat);\n    }\n  });\n  \n  return weightedCategories[Math.floor(Math.random() * weightedCategories.length)];\n}\n\nfunction selectQuestTemplate(category) {\n  const templates = questTemplates[category];\n  const templateNames = Object.keys(templates);\n  const selectedName = templateNames[Math.floor(Math.random() * templateNames.length)];\n  return templates[selectedName];\n}\n\nfunction generateQuestSpecifics(template) {\n  const specifics = {};\n  \n  // Generate location-specific data\n  if (worldAnalysis.availableLocations.length > 0) {\n    const location = worldAnalysis.availableLocations[Math.floor(Math.random() * worldAnalysis.availableLocations.length)];\n    specifics.questLocation = location.name;\n    specifics.locationId = location.id;\n    specifics.locationType = location.type;\n  }\n  \n  // Generate NPC-specific data\n  if (worldAnalysis.activeNPCs.length > 0) {\n    const npc = worldAnalysis.activeNPCs[Math.floor(Math.random() * worldAnalysis.activeNPCs.length)];\n    specifics.giver = npc.name;\n    specifics.giverId = npc.id;\n    specifics.giverLocation = npc.location;\n    specifics.giverFaction = npc.faction;\n  }\n  \n  // Generate faction-specific data\n  if (worldAnalysis.factionRelations.length > 0) {\n    const faction = worldAnalysis.factionRelations[Math.floor(Math.random() * worldAnalysis.factionRelations.length)];\n    specifics.factionName = faction.name;\n    specifics.factionId = faction.id;\n    specifics.factionReputation = faction.reputation;\n  }\n  \n  // Generate template-specific details\n  specifics.difficulty = calculatedDifficulty;\n  specifics.target_type = generateTargetType();\n  specifics.ruin_type = generateRuinType();\n  specifics.dangerous_location = generateDangerousLocation();\n  specifics.ingredient_name = generateIngredientName();\n  specifics.artifact_name = generateArtifactName();\n  \n  return specifics;\n}\n\nfunction generateTargetType() {\n  const types = ['goblin', 'orc', 'dragon', 'undead', 'beast', 'elemental', 'demon', 'giant'];\n  return types[Math.floor(Math.random() * types.length)];\n}\n\nfunction generateRuinType() {\n  const types = ['elven', 'dwarven', 'ancient', 'magical', 'cursed', 'forgotten', 'sacred'];\n  return types[Math.floor(Math.random() * types.length)];\n}\n\nfunction generateDangerousLocation() {\n  const locations = ['dark forest', 'swamp', 'mountains', 'dungeon', 'cave system', 'ruined castle', 'abandoned mine'];\n  return locations[Math.floor(Math.random() * locations.length)];\n}\n\nfunction generateIngredientName() {\n  const ingredients = ['moonpetal', 'dragon scale', 'phoenix feather', 'unicorn horn', 'crystal shard', 'rare herb'];\n  return ingredients[Math.floor(Math.random() * ingredients.length)];\n}\n\nfunction generateArtifactName() {\n  const artifacts = ['ancient sword', 'magical amulet', 'sacred relic', 'crown of power', 'staff of wisdom'];\n  return artifacts[Math.floor(Math.random() * artifacts.length)];\n}\n\nfunction fillTemplate(template, specifics) {\n  let result = template;\n  Object.keys(specifics).forEach(key => {\n    const placeholder = `{${key}}`;\n    result = result.replace(new RegExp(placeholder, 'g'), specifics[key]);\n  });\n  \n  // Replace difficulty placeholders\n  result = result.replace(/{difficulty}/g, calculatedDifficulty);\n  \n  return result;\n}\n\nfunction estimateQuestDuration(template) {\n  const baseDuration = {\n    combat: '2-4 hours',\n    exploration: '4-6 hours',\n    social: '2-3 hours',\n    delivery: '1-2 hours',\n    collection: '3-5 hours'\n  };\n  \n  const category = Object.keys(questTemplates).find(cat => \n    Object.values(questTemplates[cat]).includes(template)\n  );\n  \n  return baseDuration[category] || '3-4 hours';\n}\n\nfunction processRewards(templateRewards, specifics) {\n  const rewards = { ...templateRewards };\n  \n  // Process numeric rewards based on difficulty\n  if (rewards.experience && typeof rewards.experience === 'string') {\n    rewards.experience = parseInt(rewards.experience.replace('{difficulty}', calculatedDifficulty));\n  }\n  \n  if (rewards.gold && typeof rewards.gold === 'string') {\n    rewards.gold = parseInt(rewards.gold.replace('{difficulty}', calculatedDifficulty)) * 10;\n  }\n  \n  return rewards;\n}\n\nfunction generatePrerequisites(template, specifics) {\n  const prerequisites = [];\n  \n  // Level prerequisite\n  prerequisites.push({\n    type: 'level',\n    value: Math.max(1, calculatedDifficulty - 2),\n    description: `Minimum level ${Math.max(1, calculatedDifficulty - 2)}`\n  });\n  \n  // Context-based prerequisites\n  if (specifics.factionReputation && specifics.factionReputation < -20) {\n    prerequisites.push({\n      type: 'reputation',\n      faction: specifics.factionId,\n      value: -20,\n      description: `Better reputation with ${specifics.factionName} required`\n    });\n  }\n  \n  return prerequisites;\n}\n\nfunction generateFailureConditions(template, specifics) {\n  return [\n    {\n      type: 'time_limit',\n      description: 'Quest time limit exceeded',\n      enabled: !!specifics.timeLimit\n    },\n    {\n      type: 'death',\n      description: 'Party members die',\n      enabled: true\n    },\n    {\n      type: 'abandonment',\n      description: 'Quest is abandoned',\n      enabled: true\n    }\n  ].filter(condition => condition.enabled);\n}\n\nfunction calculateQuestImportance(template, specifics) {\n  let importance = 5; // base importance\n  \n  // Adjust based on urgency\n  if (specifics.urgency === 'urgent') importance += 2;\n  if (specifics.urgency === 'critical') importance += 4;\n  \n  // Adjust based on rewards\n  if (template.rewards.item) importance += 1;\n  if (template.rewards.title) importance += 2;\n  \n  // Adjust based on faction alignment\n  if (specifics.factionReputation > 50) importance += 1;\n  if (specifics.factionReputation < -30) importance += 1;\n  \n  return Math.min(10, importance);\n}\n\nfunction generatePotentialBranches(template, specifics) {\n  const branches = [];\n  \n  // Generate moral choice branches\n  if (template.tags.includes('combat')) {\n    branches.push({\n      id: 'spare_enemies',\n      name: 'Spare the enemies',\n      description: 'Show mercy to defeated foes',\n      consequences: { reputation: 'mercy', rewards: { gold: -50 } }\n    });\n  }\n  \n  if (template.tags.includes('social')) {\n    branches.push({\n      id: 'diplomatic_solution',\n      name: 'Seek diplomatic solution',\n      description: 'Resolve conflict through diplomacy rather than force',\n      consequences: { reputation: 'peace', rewards: { experience: '+20%' } }\n    });\n  }\n  \n  return branches;\n}\n\nfunction generateConsequences(template, specifics) {\n  return {\n    completion: {\n      worldChanges: [\n        `${specifics.questLocation} becomes safer`,\n        `Relationship with ${specifics.factionName || 'locals'} improves`\n      ],\n      factionChanges: specifics.factionId ? {\n        [specifics.factionId]: '+10'\n      } : {},\n      storyProgress: 'Main story advances'\n    },\n    failure: {\n      worldChanges: [\n        `${specifics.questLocation} becomes more dangerous`,\n        `Relationship with ${specifics.factionName || 'locals'} deteriorates`\n      ],\n      factionChanges: specifics.factionId ? {\n        [specifics.factionId]: '-5'\n      } : {}\n    }\n  };\n}\n\n// Generate the quest\nconst generatedQuest = generateQuest();\n\nreturn { json: { quest: generatedQuest, generationMethod: 'procedural', contextualData } };"
+      },
+      "id": "procedural-quest-generation",
+      "name": "Procedural Quest Generation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 200]
+    },
+    {
+      "parameters": {
+        "model": "claude-3-sonnet-20240229",
+        "options": {
+          "temperature": 0.8,
+          "maxTokens": 4000
+        },
+        "prompt": "Generate a detailed D&D quest based on the following context and requirements:\n\nContext:\nCampaign: {{ $json.contextualData.campaignId }}\nParty Level: {{ $json.contextualData.partyAnalysis.level }}\nParty Size: {{ $json.contextualData.partyAnalysis.size }}\nCurrent Location: {{ $json.contextualData.partyAnalysis.currentLocation }}\nQuest Type: {{ $json.questType }}\nDifficulty: {{ $json.difficultyPreference }}\n\nAvailable Locations: {{ $json.contextualData.worldAnalysis.availableLocations.map(l => l.name).join(', ') }}\nActive NPCs: {{ $json.contextualData.worldAnalysis.activeNPCs.map(n => n.name).join(', ') }}\nRecent Events: {{ $json.contextualData.worldAnalysis.recentEvents.slice(-3).map(e => e.description).join('; ') }}\n\nQuest Opportunities: {{ $json.contextualData.questOpportunities.map(o => o.type + ' at ' + (o.location || o.npc || o.faction)).join(', ') }}\n\nGenerate a quest that:\n1. Is appropriate for the party level and composition\n2. Fits the current world context and recent events\n3. Includes 3-5 clear objectives\n4. Has meaningful rewards and consequences\n5. Offers interesting choices and potential branches\n6. Connects to the existing world and NPCs\n\nPlease respond with a JSON object containing the quest details in this format:\n{\n  \"name\": \"Quest Name\",\n  \"description\": \"Detailed description\",\n  \"type\": \"side/main/personal\",\n  \"difficulty\": \"easy/normal/hard\",\n  \"estimatedDuration\": \"X hours\",\n  \"objectives\": [\n    {\"type\": \"investigate/combat/explore/social/deliver\", \"description\": \"Objective description\"}\n  ],\n  \"rewards\": {\"experience\": number, \"gold\": number, \"items\": [], \"reputation\": {}},\n  \"giver\": \"NPC name\",\n  \"location\": \"Location name\",\n  \"consequences\": {\"success\": [], \"failure\": []},\n  \"branches\": [{\"choice\": \"description\", \"outcome\": \"result\"}]\n}"
+      },
+      "id": "ai-quest-generation",
+      "name": "AI Quest Generation",
+      "type": "n8n-nodes-base.anthropic",
+      "typeVersion": 1,
+      "position": [1140, 400],
+      "credentials": {
+        "anthropicApi": {
+          "id": "anthropic-credentials",
+          "name": "Anthropic API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Quest branching and consequence tracking system\nconst questData = $input.first().json;\nconst { quest, contextualData } = questData;\n\n// Create enhanced quest with branching logic and consequence tracking\nconst enhancedQuest = {\n  ...quest,\n  \n  // Quest state management\n  state: {\n    currentPhase: 'available', // available, active, paused, completed, failed, abandoned\n    currentObjective: 0,\n    completedObjectives: [],\n    failedObjectives: [],\n    activeBranches: [],\n    takenChoices: [],\n    \n    // Progress tracking\n    progress: {\n      overall: 0.0, // 0.0-1.0\n      objectives: quest.objectives.map(obj => ({\n        id: obj.id,\n        progress: 0.0,\n        completed: false,\n        failed: false,\n        notes: []\n      })),\n      timeSpent: 0, // in minutes\n      attempts: 0\n    },\n    \n    // Dynamic difficulty adjustment\n    difficultyAdjustment: {\n      currentDifficulty: quest.difficulty,\n      adjustmentHistory: [],\n      recommendedChanges: []\n    }\n  },\n  \n  // Advanced branching system\n  branching: {\n    conditionalBranches: generateConditionalBranches(quest, contextualData),\n    randomEvents: generateRandomEvents(quest, contextualData),\n    environmentalFactors: generateEnvironmentalFactors(quest, contextualData),\n    playerChoiceImpact: generatePlayerChoiceImpact(quest, contextualData)\n  },\n  \n  // Consequence tracking\n  consequences: {\n    immediate: generateImmediateConsequences(quest),\n    shortTerm: generateShortTermConsequences(quest, contextualData),\n    longTerm: generateLongTermConsequences(quest, contextualData),\n    worldImpact: generateWorldImpact(quest, contextualData),\n    \n    // Consequence tracking\n    tracking: {\n      triggeredConsequences: [],\n      avoidedConsequences: [],\n      modifiedConsequences: [],\n      unexpectedConsequences: []\n    }\n  },\n  \n  // Quest discovery mechanics\n  discovery: {\n    discoveryMethod: contextualData.questOpportunities[0]?.type || 'contextual',\n    discoveredBy: [], // party members who discovered this quest\n    hiddenObjectives: generateHiddenObjectives(quest, contextualData),\n    secretRewards: generateSecretRewards(quest, contextualData),\n    \n    // Discovery requirements\n    requirements: {\n      skills: [],\n      items: [],\n      knowledge: [],\n      reputation: {}\n    }\n  },\n  \n  // Quest relationships and dependencies\n  relationships: {\n    prerequisites: generateQuestPrerequisites(quest, contextualData),\n    blocks: [], // quests this quest blocks\n    unlocks: [], // quests this quest unlocks\n    conflicts: [], // quests that conflict with this one\n    \n    // Relationship tracking\n    questLines: determineQuestLines(quest, contextualData),\n    relatedNPCs: identifyRelatedNPCs(quest, contextualData),\n    relatedLocations: identifyRelatedLocations(quest, contextualData)\n  },\n  \n  // Scaling and adaptation\n  scaling: {\n    partySizeScaling: generatePartySizeScaling(quest),\n    levelScaling: generateLevelScaling(quest, contextualData),\n    difficultyScaling: generateDifficultyScaling(quest, contextualData),\n    contentScaling: generateContentScaling(quest, contextualData)\n  },\n  \n  // Quest metadata and analytics\n  analytics: {\n    estimatedPlayTime: calculateEstimatedPlayTime(quest),\n    combatVsRoleplayRatio: calculateCombatRoleplayRatio(quest),\n    riskAssessment: calculateRiskAssessment(quest, contextualData),\n    rewardEfficiency: calculateRewardEfficiency(quest),\n    \n    // Player engagement metrics\n    engagementFactors: calculateEngagementFactors(quest, contextualData),\n    replayability: calculateReplayabilityScore(quest),\n    uniqueness: calculateUniquenessScore(quest, contextualData)\n  }\n};\n\n// Helper functions for advanced quest features\nfunction generateConditionalBranches(quest, context) {\n  const branches = [];\n  \n  // Generate branches based on quest type\n  if (quest.tags.includes('combat')) {\n    branches.push({\n      id: 'combat_outcome',\n      type: 'conditional',\n      trigger: 'combat_result',\n      conditions: [\n        {\n          condition: 'decisive_victory',\n          branch: {\n            name: 'Crushing Victory',\n            description: 'The enemies were defeated with overwhelming force',\n            consequences: {\n              reputation: 'fear',\n              rewards: { experience: '+20%' },\n              newObjectives: ['Investigate rumors of your strength']\n            }\n          }\n        },\n        {\n          condition: 'costly_victory',\n          branch: {\n            name: 'Hard-Won Victory',\n            description: 'Victory came at a great cost',\n            consequences: {\n              reputation: 'respect',\n              rewards: { experience: '+10%' },\n              newObjectives: ['Recover and tend to the wounded']\n            }\n          }\n        }\n      ]\n    });\n  }\n  \n  if (quest.tags.includes('social')) {\n    branches.push({\n      id: 'social_approach',\n      type: 'conditional',\n      trigger: 'social_interaction',\n      conditions: [\n        {\n          condition: 'diplomatic_success',\n          branch: {\n            name: 'Peaceful Resolution',\n            description: 'The conflict was resolved through diplomacy',\n            consequences: {\n              reputation: 'peacekeeper',\n              rewards: { experience: '+15%' },\n              newAlliances: ['conflicting_faction']\n            }\n          }\n        },\n        {\n          condition: 'intimidation_success',\n          branch: {\n            name: 'Forced Compliance',\n            description: 'The conflict was resolved through threats',\n            consequences: {\n              reputation: 'intimidator',\n              rewards: { gold: '+20%' },\n              resentment: ['target_faction']\n            }\n          }\n        }\n      ]\n    });\n  }\n  \n  return branches;\n}\n\nfunction generateRandomEvents(quest, context) {\n  const events = [];\n  \n  // Environmental events\n  if (quest.tags.includes('exploration')) {\n    events.push({\n      id: 'weather_change',\n      type: 'environmental',\n      probability: 0.3,\n      description: 'Sudden storm complicates travel',\n      effects: {\n        movement_speed: '-50%',\n        visibility: 'poor',\n        new_challenge: 'navigation'\n      }\n    });\n  }\n  \n  // Combat events\n  if (quest.tags.includes('combat')) {\n    events.push({\n      id: 'reinforcements',\n      type: 'combat',\n      probability: 0.2,\n      description: 'Enemy reinforcements arrive',\n      effects: {\n        enemy_count: '+50%',\n        difficulty: '+1',\n        time_limit: 'reduced'\n      }\n    });\n  }\n  \n  return events;\n}\n\nfunction generateEnvironmentalFactors(quest, context) {\n  const factors = [];\n  \n  // Time of day effects\n  factors.push({\n    type: 'time_of_day',\n    day_effects: {\n      visibility: 'normal',\n      npc_activity: 'high',\n      combat_advantage: 'neutral'\n    },\n    night_effects: {\n      visibility: 'poor',\n      npc_activity: 'low',\n      combat_advantage: 'stealth'\n    }\n  });\n  \n  // Weather effects\n  factors.push({\n    type: 'weather',\n    clear_effects: {\n      travel_speed: 'normal',\n      morale: 'normal',\n      visibility: 'excellent'\n    },\n    rain_effects: {\n      travel_speed: '-25%',\n      morale: 'reduced',\n      visibility: 'poor'\n    }\n  });\n  \n  return factors;\n}\n\nfunction generatePlayerChoiceImpact(quest, context) {\n  return {\n    moralChoices: [\n      {\n        choice: 'spare vs kill',\n        impact: {\n          spare: {\n            reputation: 'mercy',\n            future_encounters: 'allies_possible',\n            rewards: {experience: '-20%', gratitude: 'potential_ally'}\n          },\n          kill: {\n            reputation: 'ruthless',\n            future_encounters: 'no_allies',\n            rewards: {experience: '+20%', gratitude: 'fear'}\n          }\n        }\n      }\n    ],\n    strategicChoices: [\n      {\n        choice: 'stealth vs direct',\n        impact: {\n          stealth: {\n            risk: 'low',\n            rewards: {experience: '+10%', surprise: 'advantage'},\n            detection_consequences: 'alarm_raised'\n          },\n          direct: {\n            risk: 'high',\n            rewards: {experience: '+25%', glory: 'courageous'},\n            consequences: 'preparation_lost'\n          }\n        }\n      }\n    ]\n  };\n}\n\nfunction generateImmediateConsequences(quest) {\n  return {\n    success: [\n      'Quest giver rewards party',\n      'Local reputation improves',\n      'Experience gained'\n    ],\n    failure: [\n      'Quest giver disappointed',\n      'Local reputation suffers',\n      'Potential penalties'\n    ]\n  };\n}\n\nfunction generateShortTermConsequences(quest, context) {\n  return {\n    success: [\n      'New opportunities become available',\n      'Related factions notice your success',\n      'World changes in quest location'\n    ],\n    failure: [\n      'Related quests become unavailable',\n      'Faction relationships deteriorate',\n      'World situation worsens'\n    ]\n  };\n}\n\nfunction generateLongTermConsequences(quest, context) {\n  return {\n    success: [\n      'Party becomes known for this type of work',\n      'Major storylines may be affected',\n      'World history records your actions'\n    ],\n    failure: [\n      'Party develops negative reputation',\n      'Major storylines may be blocked',\n      'World remembers your failure'\n    ]\n  };\n}\n\nfunction generateWorldImpact(quest, context) {\n  return {\n    location_changes: {\n      [quest.questLocation]: {\n        safety: quest.tags.includes('combat') ? 'improved' : 'unchanged',\n        economy: quest.tags.includes('delivery') ? 'improved' : 'unchanged',\n        knowledge: quest.tags.includes('exploration') ? 'improved' : 'unchanged'\n      }\n    },\n    faction_changes: {\n      [quest.giverFaction]: {\n        relationship: '+15',\n        influence: '+5',\n        power: 'unchanged'\n      }\n    },\n    global_changes: []\n  };\n}\n\nfunction generateHiddenObjectives(quest, context) {\n  const hidden = [];\n  \n  if (quest.tags.includes('exploration')) {\n    hidden.push({\n      id: 'hidden_treasure',\n      description: 'Find the hidden treasure chamber',\n      requirement: 'perception_check DC 20',\n      reward: { gold: 'double', item: 'magical_item' },\n      discovered: false\n    });\n  }\n  \n  return hidden;\n}\n\nfunction generateSecretRewards(quest, context) {\n  return [\n    {\n      type: 'hidden_achievement',\n      name: 'Secret Success',\n      description: 'Completed quest with optimal outcome',\n      requirement: 'all_objectives_perfect',\n      reward: { title: 'Master Adventurer', reputation: 'all_factions +10' }\n    }\n  ];\n}\n\nfunction calculateEstimatedPlayTime(quest) {\n  const baseTime = {\n    combat: 60, // minutes per combat encounter\n    exploration: 45, // minutes per exploration area\n    social: 30, // minutes per social encounter\n    travel: 15, // minutes per travel segment\n    puzzle: 40 // minutes per puzzle\n  };\n  \n  let totalTime = 0;\n  quest.objectives.forEach(obj => {\n    const type = obj.type;\n    totalTime += baseTime[type] || 30;\n  });\n  \n  return totalTime;\n}\n\nfunction calculateCombatRoleplayRatio(quest) {\n  const combatObjectives = quest.objectives.filter(obj => \n    ['combat', 'escort', 'protect'].includes(obj.type)\n  ).length;\n  \n  const roleplayObjectives = quest.objectives.filter(obj => \n    ['social', 'diplomacy', 'investigate'].includes(obj.type)\n  ).length;\n  \n  const total = quest.objectives.length;\n  \n  return {\n    combat: Math.round((combatObjectives / total) * 100),\n    roleplay: Math.round((roleplayObjectives / total) * 100),\n    mixed: Math.round(((total - combatObjectives - roleplayObjectives) / total) * 100)\n  };\n}\n\n// Add all the helper functions\nfunction generatePartySizeScaling(quest) {\n  return {\n    solo: {\n      health_modifier: 0.5,\n      damage_modifier: 0.7,\n      reward_modifier: 1.5\n    },\n    duo: {\n      health_modifier: 0.7,\n      damage_modifier: 0.8,\n      reward_modifier: 1.2\n    },\n    full_party: {\n      health_modifier: 1.0,\n      damage_modifier: 1.0,\n      reward_modifier: 1.0\n    },\n    large_party: {\n      health_modifier: 1.3,\n      damage_modifier: 1.2,\n      reward_modifier: 0.8\n    }\n  };\n}\n\nfunction generateLevelScaling(quest, context) {\n  const baseLevel = context.partyAnalysis.level;\n  return {\n    current_level: baseLevel,\n    scaling_range: {\n      min: baseLevel - 3,\n      max: baseLevel + 3\n    },\n    adjustments: {\n      enemy_count: 'linear',\n      enemy_difficulty: 'scaled',\n      puzzle_complexity: 'moderate',\n      reward_quality: 'level_appropriate'\n    }\n  };\n}\n\nfunction generateDifficultyScaling(quest, context) {\n  return {\n    adaptive: true,\n    metrics: [\n      'party_performance',\n      'time_spent',\n      'resource_usage',\n      'success_rate'\n    ],\n    adjustment_triggers: {\n      struggling: 'reduce_difficulty',\n      dominating: 'increase_difficulty',\n      balanced: 'maintain_difficulty'\n    }\n  };\n}\n\nfunction generateContentScaling(quest, context) {\n  return {\n    optional_content: generateOptionalContent(quest, context),\n    bonus_objectives: generateBonusObjectives(quest, context),\n    challenge_modes: generateChallengeModes(quest, context)\n  };\n}\n\nfunction generateOptionalContent(quest, context) {\n  return [\n    {\n      id: 'side_dungeon',\n      name: 'Bonus Dungeon',\n      description: 'Optional dungeon with extra rewards',\n      difficulty: quest.difficulty + 1,\n      estimated_time: 60,\n      rewards: { experience: 500, gold: 1000 }\n    }\n  ];\n}\n\nfunction generateBonusObjectives(quest, context) {\n  return [\n    {\n      id: 'speed_run',\n      name: 'Speed Run',\n      description: 'Complete quest within time limit',\n      time_limit: '50% of estimated time',\n      reward: { experience: '+25%', title: 'Swift Adventurer' }\n    }\n  ];\n}\n\nfunction generateChallengeModes(quest, context) {\n  return [\n    {\n      id: 'hardcore',\n      name: 'Hardcore Mode',\n      description: 'Increased difficulty with better rewards',\n      modifiers: {\n        enemy_health: '+50%',\n        enemy_damage: '+25%',\n        death_penalty: 'permanent'\n      },\n      rewards: { experience: '+50%', gold: '+75%', unique_items: 1 }\n    }\n  ];\n}\n\nfunction calculateRiskAssessment(quest, context) {\n  const riskFactors = {\n    combat_risk: quest.tags.includes('combat') ? 0.7 : 0.3,\n    death_risk: quest.difficulty > 10 ? 0.4 : 0.2,\n    failure_risk: quest.objectives.length > 5 ? 0.3 : 0.2,\n    resource_risk: quest.estimatedDuration > 180 ? 0.4 : 0.2\n  };\n  \n  const totalRisk = Object.values(riskFactors).reduce((sum, risk) => sum + risk, 0) / Object.keys(riskFactors).length;\n  \n  return {\n    overall_risk: Math.round(totalRisk * 100),\n    risk_factors: riskFactors,\n    mitigation_strategies: generateMitigationStrategies(riskFactors)\n  };\n}\n\nfunction generateMitigationStrategies(riskFactors) {\n  const strategies = [];\n  \n  if (riskFactors.combat_risk > 0.5) {\n    strategies.push('Bring healing supplies and consider tactical retreat options');\n  }\n  \n  if (riskFactors.death_risk > 0.3) {\n    strategies.push('Ensure party has resurrection capabilities or backup plans');\n  }\n  \n  return strategies;\n}\n\nfunction calculateRewardEfficiency(quest) {\n  const estimatedTime = calculateEstimatedPlayTime(quest);\n  const totalRewards = (quest.rewards.experience || 0) + ((quest.rewards.gold || 0) / 10);\n  \n  return {\n    rewards_per_hour: Math.round(totalRewards / (estimatedTime / 60)),\n    time_efficiency: estimatedTime < 120 ? 'high' : estimatedTime < 240 ? 'medium' : 'low',\n    reward_quality: quest.rewards.item ? 'high' : quest.rewards.gold > 1000 ? 'medium' : 'low'\n  };\n}\n\nfunction calculateEngagementFactors(quest, context) {\n  return {\n    variety: quest.objectives.length > 3 ? 'high' : 'medium',\n    player_agency: quest.branches.length > 2 ? 'high' : 'medium',\n    story_integration: quest.consequences.worldImpact.length > 0 ? 'high' : 'medium',\n    challenge_appropriateness: Math.abs(quest.difficulty - context.partyAnalysis.level) <= 2 ? 'high' : 'medium'\n  };\n}\n\nfunction calculateReplayabilityScore(quest) {\n  let score = 5; // base score\n  \n  if (quest.branching.conditionalBranches.length > 2) score += 2;\n  if (quest.branching.randomEvents.length > 1) score += 1;\n  if (quest.scaling.challenge_modes.length > 0) score += 1;\n  if (quest.discovery.hiddenObjectives.length > 0) score += 1;\n  \n  return Math.min(10, score);\n}\n\nfunction calculateUniquenessScore(quest, context) {\n  // Check against existing quests\n  const existingQuests = context.activeQuests || [];\n  const similarQuests = existingQuests.filter(existingQuest => {\n    const tagOverlap = quest.tags.filter(tag => existingQuest.tags?.includes(tag)).length;\n    const typeMatch = quest.type === existingQuest.type;\n    return tagOverlap > 1 || typeMatch;\n  });\n  \n  const uniquenessScore = Math.max(1, 10 - (similarQuests.length * 2));\n  \n  return uniquenessScore;\n}\n\nfunction generateQuestPrerequisites(quest, context) {\n  const prerequisites = [];\n  \n  // Level prerequisites\n  prerequisites.push({\n    type: 'level',\n    value: Math.max(1, quest.difficulty - 2),\n    description: `Minimum level ${Math.max(1, quest.difficulty - 2)}`\n  });\n  \n  // Skill prerequisites based on quest type\n  if (quest.tags.includes('social')) {\n    prerequisites.push({\n      type: 'skill',\n      skill: 'persuasion',\n      minimum: 3,\n      description: 'Persuasion skill level 3 recommended'\n    });\n  }\n  \n  return prerequisites;\n}\n\nfunction determineQuestLines(quest, context) {\n  return [\n    {\n      name: 'Main Story',\n      importance: quest.type === 'main' ? 'primary' : 'secondary',\n      position: quest.type === 'main' ? 1 : Math.floor(Math.random() * 5) + 2\n    }\n  ];\n}\n\nfunction identifyRelatedNPCs(quest, context) {\n  const relatedNPCs = [quest.giver];\n  \n  // Add NPCs from world context that might be related\n  if (context.worldAnalysis.activeNPCs) {\n    const factionNPCs = context.worldAnalysis.activeNPCs.filter(npc => \n      npc.faction === quest.giverFaction\n    );\n    relatedNPCs.push(...factionNPCs.slice(0, 2).map(npc => npc.name));\n  }\n  \n  return relatedNPCs;\n}\n\nfunction identifyRelatedLocations(quest, context) {\n  const locations = [quest.questLocation];\n  \n  // Add nearby locations from world context\n  if (context.worldAnalysis.availableLocations) {\n    const nearbyLocations = context.worldAnalysis.availableLocations.filter(loc => \n      loc.id !== quest.questLocation && Math.random() > 0.5\n    );\n    locations.push(...nearbyLocations.slice(0, 2).map(loc => loc.name));\n  }\n  \n  return locations;\n}\n\nreturn { json: { enhancedQuest, originalQuest: quest, contextualData } };"
+      },
+      "id": "enhance-quest-with-branching",
+      "name": "Enhance Quest with Branching",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 300]
+    },
+    {
+      "parameters": {
+        "operation": "lookup",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_QUEST_SHEET_ID }}",
+        "range": "Quests!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-check-existing-quest",
+      "name": "Google Sheets - Check Existing Quest",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1580, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_QUEST_SHEET_ID }}",
+        "range": "Quests!A:Z",
+        "options": {}
+      },
+      "id": "google-sheets-create-quest",
+      "name": "Google Sheets - Create Quest",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1800, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format quest data for Google Sheets storage\nconst questData = $input.first().json;\nconst { enhancedQuest } = questData;\n\n// Prepare row data in the correct order for Google Sheets\nconst rowData = [\n  enhancedQuest.id,\n  enhancedQuest.name,\n  enhancedQuest.description,\n  enhancedQuest.type,\n  enhancedQuest.category,\n  enhancedQuest.difficulty,\n  enhancedQuest.recommendedLevel,\n  enhancedQuest.estimatedDuration,\n  enhancedQuest.status,\n  enhancedQuest.giver,\n  enhancedQuest.giverLocation,\n  enhancedQuest.questLocation,\n  JSON.stringify(enhancedQuest.objectives),\n  JSON.stringify(enhancedQuest.rewards),\n  JSON.stringify(enhancedQuest.prerequisites),\n  JSON.stringify(enhancedQuest.consequences),\n  JSON.stringify(enhancedQuest.branching),\n  JSON.stringify(enhancedQuest.state),\n  JSON.stringify(enhancedQuest.discovery),\n  JSON.stringify(enhancedQuest.relationships),\n  JSON.stringify(enhancedQuest.scaling),\n  enhancedQuest.importance,\n  enhancedQuest.urgency,\n  enhancedQuest.createdAt,\n  enhancedQuest.generatedBy,\n  JSON.stringify(enhancedQuest.tags),\n  JSON.stringify(enhancedQuest.analytics)\n];\n\nreturn {\n  json: {\n    range: 'Quests!A:Z',\n    values: [rowData]\n  }\n};"
+      },
+      "id": "format-quest-for-sheets",
+      "name": "Format Quest for Sheets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1800, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Update world state with new quest\nconst questData = $input.first().json;\nconst { enhancedQuest, contextualData } = questData;\nconst { campaignId } = contextualData;\n\n// Prepare world state update\nconst worldUpdate = {\n  action: 'update',\n  campaignId,\n  questChanges: [\n    {\n      questId: enhancedQuest.id,\n      action: 'add',\n      data: {\n        id: enhancedQuest.id,\n        name: enhancedQuest.name,\n        description: enhancedQuest.description,\n        type: enhancedQuest.type,\n        status: enhancedQuest.status,\n        difficulty: enhancedQuest.difficulty,\n        objectives: enhancedQuest.objectives,\n        rewards: enhancedQuest.rewards,\n        giver: enhancedQuest.giver,\n        location: enhancedQuest.questLocation,\n        tags: enhancedQuest.tags,\n        importance: enhancedQuest.importance,\n        urgency: enhancedQuest.urgency,\n        prerequisites: enhancedQuest.prerequisites,\n        consequences: enhancedQuest.consequences,\n        branching: enhancedQuest.branching,\n        createdAt: enhancedQuest.createdAt,\n        generatedBy: enhancedQuest.generatedBy\n      }\n    }\n  ],\n  worldEvents: [\n    {\n      id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,\n      type: 'quest_generated',\n      description: `New quest \"${enhancedQuest.name}\" became available`,\n      location: enhancedQuest.questLocation,\n      importance: enhancedQuest.importance > 7 ? 'major' : 'minor',\n      relatedNPCs: [enhancedQuest.giver],\n      relatedQuests: [enhancedQuest.id],\n      timestamp: new Date().toISOString()\n    }\n  ],\n  metadata: {\n    questGeneration: {\n      questId: enhancedQuest.id,\n      generationMethod: enhancedQuest.generatedBy,\n      questType: enhancedQuest.type,\n      difficulty: enhancedQuest.difficulty,\n      partyLevel: contextualData.partyAnalysis.level\n    }\n  }\n};\n\n// Update world state\nlet worldUpdateResult = null;\ntry {\n  const worldResponse = await fetch('http://localhost:5678/webhook/world/update', {\n    method: 'POST',\n    headers: {\n      'Content-Type': 'application/json'\n    },\n    body: JSON.stringify(worldUpdate)\n  });\n  \n  if (worldResponse.ok) {\n    worldUpdateResult = await worldResponse.json();\n  }\n} catch (error) {\n  console.error('Failed to update world state:', error);\n}\n\nreturn { \n  json: {\n    quest: enhancedQuest,\n    worldUpdateResult,\n    contextualData\n  } \n};"
+      },
+      "id": "update-world-state",
+      "name": "Update World State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1580, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Send quest notifications to relevant systems\nconst questData = $input.first().json;\nconst { quest, contextualData } = questData;\n\n// Prepare WebSocket broadcast payload\nconst broadcastPayload = {\n  type: 'quest_generated',\n  data: {\n    questId: quest.id,\n    questName: quest.name,\n    questType: quest.type,\n    difficulty: quest.difficulty,\n    giver: quest.giver,\n    location: quest.questLocation,\n    importance: quest.importance,\n    urgency: quest.urgency,\n    estimatedDuration: quest.estimatedDuration,\n    campaignId: contextualData.campaignId,\n    tags: quest.tags\n  },\n  channels: [\n    `campaign_${contextualData.campaignId}`,\n    'quest_updates',\n    'dm_updates'\n  ],\n  timestamp: new Date().toISOString()\n};\n\n// Send to WebSocket system\nfetch('http://localhost:5678/webhook/websocket/broadcast', {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json'\n  },\n  body: JSON.stringify(broadcastPayload)\n}).catch(error => {\n  console.error('Failed to broadcast quest generation:', error);\n});\n\n// Send notification to quest giver NPC system\nif (quest.giver) {\n  const npcNotificationPayload = {\n    type: 'npc_quest_update',\n    data: {\n      npcId: quest.giver,\n      questId: quest.id,\n      action: 'quest_available',\n      questDetails: {\n        name: quest.name,\n        type: quest.type,\n        difficulty: quest.difficulty,\n        urgency: quest.urgency\n      }\n    },\n    channels: [`npc_${quest.giver}`, 'npc_updates'],\n    timestamp: new Date().toISOString()\n  };\n  \n  fetch('http://localhost:5678/webhook/websocket/broadcast', {\n    method: 'POST',\n    headers: {\n      'Content-Type': 'application/json'\n    },\n    body: JSON.stringify(npcNotificationPayload)\n  }).catch(error => {\n    console.error('Failed to send NPC notification:', error);\n  });\n}\n\n// Send location-specific notifications\nif (quest.questLocation) {\n  const locationNotificationPayload = {\n    type: 'location_quest_update',\n    data: {\n      locationId: quest.questLocation,\n      questId: quest.id,\n      questName: quest.name,\n      questType: quest.type,\n      newActivity: true\n    },\n    channels: [`location_${quest.questLocation}`, 'location_updates'],\n    timestamp: new Date().toISOString()\n  };\n  \n  fetch('http://localhost:5678/webhook/websocket/broadcast', {\n    method: 'POST',\n    headers: {\n      'Content-Type': 'application/json'\n    },\n    body: JSON.stringify(locationNotificationPayload)\n  }).catch(error => {\n    console.error('Failed to send location notification:', error);\n  });\n}\n\nreturn { json: { broadcast: 'sent', questId: quest.id, notifications: ['general', 'npc', 'location'] } };"
+      },
+      "id": "broadcast-quest-notifications",
+      "name": "Broadcast Quest Notifications",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1800, 700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: true,\n  quest: {\n    id: $json.enhancedQuest.id,\n    name: $json.enhancedQuest.name,\n    type: $json.enhancedQuest.type,\n    difficulty: $json.enhancedQuest.difficulty,\n    estimatedDuration: $json.enhancedQuest.estimatedDuration,\n    giver: $json.enhancedQuest.giver,\n    location: $json.enhancedQuest.questLocation,\n    importance: $json.enhancedQuest.importance,\n    urgency: $json.enhancedQuest.urgency,\n    objectives: $json.enhancedQuest.objectives.length,\n    rewards: $json.enhancedQuest.rewards,\n    tags: $json.enhancedQuest.tags,\n    createdAt: $json.enhancedQuest.createdAt,\n    generatedBy: $json.enhancedQuest.generatedBy\n  },\n  analytics: $json.enhancedQuest.analytics,\n  contextualData: {\n    partyLevel: $json.contextualData.partyAnalysis.level,\n    partySize: $json.contextualData.partyAnalysis.size,\n    calculatedDifficulty: $json.contextualData.calculatedDifficulty\n  }\n} }}"
+      },
+      "id": "quest-generation-response",
+      "name": "Quest Generation Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2020, 400]
+    }
+  ],
+  "connections": {
+    "Quest Generation Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Quest Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Quest Request": {
+      "main": [
+        [
+          {
+            "node": "Route Quest Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Quest Action": {
+      "main": [
+        [
+          {
+            "node": "Gather Quest Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Quest Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gather Quest Context": {
+      "main": [
+        [
+          {
+            "node": "Procedural Quest Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procedural Quest Generation": {
+      "main": [
+        [
+          {
+            "node": "Enhance Quest with Branching",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Quest Generation": {
+      "main": [
+        [
+          {
+            "node": "Enhance Quest with Branching",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enhance Quest with Branching": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Check Existing Quest",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update World State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Check Existing Quest": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Create Quest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Create Quest": {
+      "main": [
+        [
+          {
+            "node": "Format Quest for Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update World State": {
+      "main": [
+        [
+          {
+            "node": "Broadcast Quest Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Quest for Sheets": {
+      "main": [
+        [
+          {
+            "node": "Quest Generation Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Broadcast Quest Notifications": {
+      "main": [
+        [
+          {
+            "node": "Quest Generation Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-23T11:30:00.000Z",
+  "versionId": "1.0.0"
+}

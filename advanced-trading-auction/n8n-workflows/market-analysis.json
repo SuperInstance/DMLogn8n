@@ -1,0 +1,204 @@
+{
+  "name": "Advanced Trading - Market Analysis & Insights",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "analysis-trigger",
+      "name": "Market Analysis Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Fetch market data for comprehensive analysis\nconst analysisConfig = {\n  regions: ['global', 'north', 'south', 'east', 'west'],\n  timeRanges: [1, 7, 30], // days\n  categories: await fetchCategories(),\n  metrics: [\n    'volume', 'volatility', 'price_trends', 'supply_demand', \n    'market_sentiment', 'liquidity', 'participation'\n  ]\n};\n\nconsole.log('Starting comprehensive market analysis...');\n\nconst analysisTasks = [];\n\n// Generate analysis tasks for each region and time range\nfor (const region of analysisConfig.regions) {\n  for (const timeRange of analysisConfig.timeRanges) {\n    analysisTasks.push({\n      region: region,\n      timeRange: timeRange,\n      categories: analysisConfig.categories,\n      metrics: analysisConfig.metrics,\n      timestamp: new Date().toISOString()\n    });\n  }\n}\n\nreturn analysisTasks.map(task => ({ json: task }));\n\nasync function fetchCategories() {\n  // Fetch categories from DMlogn8n API\n  return [\n    { id: 1, name: 'Weapons', rarity: 'common' },\n    { id: 2, name: 'Armor', rarity: 'common' },\n    { id: 3, name: 'Consumables', rarity: 'common' },\n    { id: 4, name: 'Materials', rarity: 'uncommon' },\n    { id: 5, name: 'Rare Items', rarity: 'rare' },\n    { id: 6, name: 'Epic Items', rarity: 'epic' },\n    { id: 7, name: 'Legendary Items', rarity: 'legendary' }\n  ];\n}"
+      },
+      "id": "prepare-analysis-tasks",
+      "name": "Prepare Analysis Tasks",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Perform comprehensive market analysis for a specific region and time range\nconst task = $input.first().json;\n\nconsole.log(`Analyzing market for ${task.region} over ${task.timeRange} days`);\n\n// Collect market data\nconst marketData = await collectMarketData(task.region, task.timeRange);\n\n// Perform various analyses\nconst analysisResults = {\n  task: task,\n  overview: await analyzeMarketOverview(marketData, task),\n  trendAnalysis: await analyzeTrends(marketData, task),\n  opportunityAnalysis: await identifyOpportunities(marketData, task),\n  riskAssessment: await assessRisks(marketData, task),\n  predictiveAnalysis: await generatePredictions(marketData, task),\n  sentimentAnalysis: await analyzeSentiment(marketData, task),\n  performanceMetrics: await calculatePerformanceMetrics(marketData, task)\n};\n\n// Generate insights and recommendations\nconst insights = generateInsights(analysisResults);\nconst recommendations = generateRecommendations(analysisResults);\n\nconst finalAnalysis = {\n  ...analysisResults,\n  insights: insights,\n  recommendations: recommendations,\n  analysisTimestamp: new Date().toISOString()\n};\n\nreturn [{ json: finalAnalysis }];\n\nasync function collectMarketData(region, timeRange) {\n  // Collect comprehensive market data\n  const endDate = new Date();\n  const startDate = new Date(endDate.getTime() - (timeRange * 24 * 60 * 60 * 1000));\n  \n  return {\n    transactions: await fetchTransactions(region, startDate, endDate),\n    listings: await fetchListings(region, startDate, endDate),\n    auctions: await fetchAuctions(region, startDate, endDate),\n    prices: await fetchPriceHistory(region, startDate, endDate),\n    items: await fetchItemsData(),\n    players: await fetchPlayerActivity(region, startDate, endDate),\n    events: await fetchMarketEvents(region, startDate, endDate)\n  };\n}\n\nasync function analyzeMarketOverview(marketData, task) {\n  const transactions = marketData.transactions || [];\n  const listings = marketData.listings || [];\n  const auctions = marketData.auctions || [];\n  \n  const totalVolume = transactions.reduce((sum, tx) => sum + (tx.total_price || 0), 0);\n  const totalTransactions = transactions.length;\n  const uniqueItems = new Set(transactions.map(tx => tx.item_id)).size;\n  const activeListings = listings.filter(l => l.status === 'active').length;\n  \n  // Calculate market health indicators\n  const marketHealth = {\n    liquidity: calculateLiquidityScore(transactions, listings),\n    volatility: calculateMarketVolatility(marketData.prices),\n    efficiency: calculateMarketEfficiency(transactions, listings),\n    participation: calculateParticipationScore(marketData.players)\n  };\n  \n  return {\n    totalVolume: totalVolume,\n    totalTransactions: totalTransactions,\n    uniqueItems: uniqueItems,\n    activeListings: activeListings,\n    averageTransactionValue: totalTransactions > 0 ? totalVolume / totalTransactions : 0,\n    marketHealth: marketHealth,\n    topCategories: await identifyTopCategories(marketData),\n    region: task.region,\n    timeRange: task.timeRange\n  };\n}\n\nasync function analyzeTrends(marketData, task) {\n  const priceHistory = marketData.prices || [];\n  const transactions = marketData.transactions || [];\n  \n  return {\n    priceTrends: analyzePriceTrends(priceHistory),\n    volumeTrends: analyzeVolumeTrends(transactions),\n    categoryTrends: await analyzeCategoryTrends(marketData),\n    seasonalPatterns: identifySeasonalPatterns(transactions),\n    emergingTrends: identifyEmergingTrends(marketData),\n    momentumIndicators: calculateMomentumIndicators(priceHistory)\n  };\n}\n\nasync function identifyOpportunities(marketData, task) {\n  const opportunities = [];\n  \n  // Find undervalued items\n  const undervaluedItems = await findUndervaluedItems(marketData);\n  opportunities.push(...undervaluedItems.map(item => ({\n    type: 'undervalued',\n    ...item,\n    confidence: calculateOpportunityConfidence(item),\n    potentialROI: calculatePotentialROI(item)\n  })));\n  \n  // Find arbitrage opportunities\n  const arbitrageOpportunities = await findArbitrageOpportunities(marketData);\n  opportunities.push(...arbitrageOpportunities);\n  \n  // Find high-growth items\n  const growthOpportunities = await findGrowthOpportunities(marketData);\n  opportunities.push(...growthOpportunities);\n  \n  return opportunities.sort((a, b) => b.confidence - a.confidence).slice(0, 20);\n}\n\nasync function assessRisks(marketData, task) {\n  const risks = [];\n  \n  // Market manipulation risks\n  const manipulationRisks = detectManipulationRisks(marketData);\n  risks.push(...manipulationRisks);\n  \n  // Volatility risks\n  const volatilityRisks = assessVolatilityRisks(marketData);\n  risks.push(...volatilityRisks);\n  \n  // Supply chain risks\n  const supplyRisks = assessSupplyRisks(marketData);\n  risks.push(...supplyRisks);\n  \n  // Economic bubble risks\n  const bubbleRisks = assessBubbleRisks(marketData);\n  risks.push(...bubbleRisks);\n  \n  return risks.sort((a, b) => b.severity - a.severity).slice(0, 10);\n}\n\nasync function generatePredictions(marketData, task) {\n  return {\n    shortTerm: await generateShortTermPredictions(marketData),\n    mediumTerm: await generateMediumTermPredictions(marketData),\n    longTerm: await generateLongTermPredictions(marketData),\n    categoryPredictions: await generateCategoryPredictions(marketData),\n    riskPredictions: await generateRiskPredictions(marketData),\n    confidenceLevels: calculatePredictionConfidence(marketData)\n  };\n}\n\nasync function analyzeSentiment(marketData, task) {\n  const transactions = marketData.transactions || [];\n  const events = marketData.events || [];\n  \n  return {\n    overallSentiment: calculateOverallSentiment(transactions, events),\n    sentimentTrends: analyzeSentimentTrends(transactions),\n    sentimentByCategory: await analyzeSentimentByCategory(marketData),\n    sentimentIndicators: calculateSentimentIndicators(marketData),\n    newsSentiment: await analyzeNewsAndEvents(events)\n  };\n}\n\nasync function calculatePerformanceMetrics(marketData, task) {\n  return {\n    marketEfficiency: calculateMarketEfficiency(marketData.transactions, marketData.listings),\n    priceDiscovery: calculatePriceDiscoveryEfficiency(marketData.prices),\n    liquidityMetrics: calculateLiquidityMetrics(marketData),\n    volatilityMetrics: calculateVolatilityMetrics(marketData.prices),\n    participationMetrics: calculateParticipationMetrics(marketData.players)\n  };\n}\n\n// Helper functions (simplified implementations)\nfunction generateInsights(analysisResults) {\n  const insights = [];\n  \n  // Market health insights\n  if (analysisResults.overview.marketHealth.liquidity < 0.5) {\n    insights.push({\n      type: 'market_health',\n      severity: 'warning',\n      message: 'Low market liquidity detected',\n      recommendation: 'Consider incentives to increase trading activity'\n    });\n  }\n  \n  // Trend insights\n  if (analysisResults.trendAnalysis.priceTrends.overallTrend < -0.1) {\n    insights.push({\n      type: 'price_trend',\n      severity: 'info',\n      message: 'Market experiencing downward price pressure',\n      recommendation: 'Monitor for potential buying opportunities'\n    });\n  }\n  \n  return insights;\n}\n\nfunction generateRecommendations(analysisResults) {\n  const recommendations = [];\n  \n  // Based on opportunities\n  analysisResults.opportunityAnalysis.slice(0, 5).forEach(opportunity => {\n    recommendations.push({\n      type: 'investment',\n      action: 'consider_buying',\n      target: opportunity.itemId,\n      reason: opportunity.type,\n      confidence: opportunity.confidence,\n      expectedReturn: opportunity.potentialROI\n    });\n  });\n  \n  // Risk mitigation recommendations\n  analysisResults.riskAssessment.forEach(risk => {\n    if (risk.severity > 0.7) {\n      recommendations.push({\n        type: 'risk_mitigation',\n        action: 'monitor_closely',\n        target: risk.itemId || 'market',\n        reason: risk.type,\n        urgency: 'high'\n      });\n    }\n  });\n  \n  return recommendations;\n}\n\n// Mock data fetching functions\nasync function fetchTransactions(region, startDate, endDate) {\n  return Array.from({ length: 100 }, (_, i) => ({\n    id: `tx_${i}`,\n    item_id: `item_${Math.floor(Math.random() * 50)}`,\n    total_price: Math.random() * 10000,\n    quantity: Math.floor(Math.random() * 10) + 1,\n    timestamp: new Date(startDate.getTime() + Math.random() * (endDate.getTime() - startDate.getTime()))\n  }));\n}\n\nasync function fetchListings(region, startDate, endDate) {\n  return Array.from({ length: 50 }, (_, i) => ({\n    id: `listing_${i}`,\n    item_id: `item_${Math.floor(Math.random() * 50)}`,\n    price: Math.random() * 5000,\n    quantity: Math.floor(Math.random() * 20) + 1,\n    status: Math.random() > 0.3 ? 'active' : 'sold'\n  }));\n}\n\nasync function fetchAuctions(region, startDate, endDate) {\n  return Array.from({ length: 30 }, (_, i) => ({\n    id: `auction_${i}`,\n    item_id: `item_${Math.floor(Math.random() * 50)}`,\n    starting_price: Math.random() * 3000,\n    current_bid: Math.random() * 5000,\n    status: Math.random() > 0.4 ? 'active' : 'sold'\n  }));\n}\n\nasync function fetchPriceHistory(region, startDate, endDate) {\n  return Array.from({ length: 168 }, (_, i) => ({\n    item_id: `item_${Math.floor(Math.random() * 50)}`,\n    price: Math.random() * 5000 + 500,\n    timestamp: new Date(startDate.getTime() + (i * (endDate.getTime() - startDate.getTime()) / 168))\n  }));\n}\n\nasync function fetchItemsData() {\n  return Array.from({ length: 50 }, (_, i) => ({\n    id: `item_${i}`,\n    name: `Item ${i}`,\n    category_id: Math.floor(Math.random() * 7) + 1,\n    rarity: ['common', 'uncommon', 'rare', 'epic', 'legendary'][Math.floor(Math.random() * 5)]\n  }));\n}\n\nasync function fetchPlayerActivity(region, startDate, endDate) {\n  return {\n    activePlayers: Math.floor(Math.random() * 1000) + 100,\n    newPlayers: Math.floor(Math.random() * 50) + 10,\n    returningPlayers: Math.floor(Math.random() * 200) + 20\n  };\n}\n\nasync function fetchMarketEvents(region, startDate, endDate) {\n  return [];\n}\n\n// Additional helper functions would be implemented here\nfunction calculateLiquidityScore(transactions, listings) { return Math.random(); }\nfunction calculateMarketVolatility(prices) { return Math.random() * 0.5; }\nfunction calculateMarketEfficiency(transactions, listings) { return Math.random(); }\nfunction calculateParticipationScore(players) { return Math.random(); }\nasync function identifyTopCategories(marketData) { return []; }\nfunction analyzePriceTrends(prices) { return { overallTrend: (Math.random() - 0.5) * 0.2 }; }\nfunction analyzeVolumeTrends(transactions) { return { trend: (Math.random() - 0.5) * 0.3 }; }\nasync function analyzeCategoryTrends(marketData) { return {}; }\nfunction identifySeasonalPatterns(transactions) { return {}; }\nfunction identifyEmergingTrends(marketData) { return []; }\nfunction calculateMomentumIndicators(prices) { return {}; }\nasync function findUndervaluedItems(marketData) { return []; }\nfunction calculateOpportunityConfidence(item) { return Math.random(); }\nfunction calculatePotentialROI(item) { return Math.random() * 50; }\nasync function findArbitrageOpportunities(marketData) { return []; }\nasync function findGrowthOpportunities(marketData) { return []; }\nfunction detectManipulationRisks(marketData) { return []; }\nfunction assessVolatilityRisks(marketData) { return []; }\nfunction assessSupplyRisks(marketData) { return []; }\nfunction assessBubbleRisks(marketData) { return []; }\nasync function generateShortTermPredictions(marketData) { return {}; }\nasync function generateMediumTermPredictions(marketData) { return {}; }\nasync function generateLongTermPredictions(marketData) { return {}; }\nasync function generateCategoryPredictions(marketData) { return {}; }\nasync function generateRiskPredictions(marketData) { return {}; }\nfunction calculatePredictionConfidence(marketData) { return Math.random(); }\nfunction calculateOverallSentiment(transactions, events) { return (Math.random() - 0.5) * 2; }\nfunction analyzeSentimentTrends(transactions) { return {}; }\nasync function analyzeSentimentByCategory(marketData) { return {}; }\nfunction calculateSentimentIndicators(marketData) { return {}; }\nasync function analyzeNewsAndEvents(events) { return {}; }\nfunction calculateLiquidityMetrics(marketData) { return {}; }\nfunction calculateVolatilityMetrics(prices) { return {}; }\nfunction calculateParticipationMetrics(players) { return {}; }\nfunction calculatePriceDiscoveryEfficiency(prices) { return Math.random(); }"
+      },
+      "id": "perform-analysis",
+      "name": "Perform Market Analysis",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Consolidate all analysis results into comprehensive report\nconst allAnalyses = $input.all().map(item => item.json);\n\nconsole.log(`Consolidating ${allAnalyses.length} market analyses`);\n\n// Create comprehensive market report\nconst marketReport = {\n  reportMetadata: {\n    generatedAt: new Date().toISOString(),\n    reportPeriod: '6_hours',\n    regionsAnalyzed: [...new Set(allAnalyses.map(analysis => analysis.task.region))],\n    timeRanges: [...new Set(allAnalyses.map(analysis => analysis.task.timeRange))],\n    totalAnalyses: allAnalyses.length\n  },\n  \n  executiveSummary: generateExecutiveSummary(allAnalyses),\n  \n  regionalAnalyses: allAnalyses.reduce((acc, analysis) => {\n    const region = analysis.task.region;\n    if (!acc[region]) acc[region] = [];\n    acc[region].push(analysis);\n    return acc;\n  }, {}),\n  \n  crossRegionalInsights: generateCrossRegionalInsights(allAnalyses),\n  \n  marketHealthDashboard: generateMarketHealthDashboard(allAnalyses),\n  \n  topOpportunities: extractTopOpportunities(allAnalyses),\n  \n  criticalRisks: extractCriticalRisks(allAnalyses),\n  \n  predictiveInsights: consolidatePredictions(allAnalyses),\n  \n  actionableRecommendations: consolidateRecommendations(allAnalyses),\n  \n  dataQualityMetrics: assessDataQuality(allAnalyses)\n};\n\n// Generate summary statistics\nconst summaryStats = calculateSummaryStatistics(allAnalyses);\nmarketReport.summaryStatistics = summaryStats;\n\nreturn [{ json: marketReport }];\n\nfunction generateExecutiveSummary(analyses) {\n  const totalVolume = analyses.reduce((sum, analysis) => \n    sum + (analysis.overview?.totalVolume || 0), 0\n  );\n  \n  const avgMarketHealth = analyses.reduce((sum, analysis) => {\n    const health = analysis.overview?.marketHealth || {};\n    const healthScore = (health.liquidity + health.efficiency + health.participation) / 3;\n    return sum + healthScore;\n  }, 0) / analyses.length;\n  \n  const totalOpportunities = analyses.reduce((sum, analysis) => \n    sum + (analysis.opportunityAnalysis?.length || 0), 0\n  );\n  \n  const highRiskCount = analyses.reduce((sum, analysis) => \n    sum + (analysis.riskAssessment?.filter(r => r.severity > 0.7)?.length || 0), 0\n  );\n  \n  return {\n    totalMarketVolume: totalVolume,\n    averageMarketHealth: avgMarketHealth,\n    opportunitiesIdentified: totalOpportunities,\n    highRiskItems: highRiskCount,\n    marketSentiment: avgMarketHealth > 0.7 ? 'positive' : avgMarketHealth > 0.4 ? 'neutral' : 'negative',\n    keyInsights: extractKeyInsights(analyses)\n  };\n}\n\nfunction generateCrossRegionalInsights(analyses) {\n  const regionalData = analyses.reduce((acc, analysis) => {\n    const region = analysis.task.region;\n    acc[region] = {\n      volume: analysis.overview?.totalVolume || 0,\n      transactions: analysis.overview?.totalTransactions || 0,\n      health: analysis.overview?.marketHealth || {}\n    };\n    return acc;\n  }, {});\n  \n  return {\n    volumeDistribution: Object.entries(regionalData).map(([region, data]) => ({\n      region,\n      volume: data.volume,\n      percentage: (data.volume / Object.values(regionalData).reduce((sum, d) => sum + d.volume, 0)) * 100\n    })),\n    \n    healthComparison: Object.entries(regionalData).map(([region, data]) => ({\n      region,\n      healthScore: ((data.health.liquidity || 0) + (data.health.efficiency || 0) + (data.health.participation || 0)) / 3\n    })),\n    \n    arbitrageOpportunities: identifyRegionalArbitrageOpportunities(regionalData)\n  };\n}\n\nfunction generateMarketHealthDashboard(analyses) {\n  const healthMetrics = analyses.map(analysis => ({\n    region: analysis.task.region,\n    timeRange: analysis.task.timeRange,\n    ...analysis.overview?.marketHealth\n  }));\n  \n  return {\n    overallHealthScore: healthMetrics.reduce((sum, metric) => {\n      const score = (metric.liquidity + metric.efficiency + metric.participation) / 3;\n      return sum + score;\n    }, 0) / healthMetrics.length,\n    \n    healthTrends: calculateHealthTrends(healthMetrics),\n    \n    healthByRegion: healthMetrics.reduce((acc, metric) => {\n      if (!acc[metric.region]) acc[metric.region] = [];\n      acc[metric.region].push(metric);\n      return acc;\n    }, {}),\n    \n    healthFactors: {\n      liquidity: { average: healthMetrics.reduce((sum, m) => sum + (m.liquidity || 0), 0) / healthMetrics.length },\n      efficiency: { average: healthMetrics.reduce((sum, m) => sum + (m.efficiency || 0), 0) / healthMetrics.length },\n      participation: { average: healthMetrics.reduce((sum, m) => sum + (m.participation || 0), 0) / healthMetrics.length }\n    }\n  };\n}\n\nfunction extractTopOpportunities(analyses) {\n  const allOpportunities = analyses.flatMap(analysis => analysis.opportunityAnalysis || []);\n  \n  return allOpportunities\n    .sort((a, b) => (b.confidence || 0) - (a.confidence || 0))\n    .slice(0, 15)\n    .map(opportunity => ({\n      ...opportunity,\n      sourceRegion: analyses.find(a => a.opportunityAnalysis?.includes(opportunity))?.task.region\n    }));\n}\n\nfunction extractCriticalRisks(analyses) {\n  const allRisks = analyses.flatMap(analysis => analysis.riskAssessment || []);\n  \n  return allRisks\n    .filter(risk => risk.severity > 0.6)\n    .sort((a, b) => b.severity - a.severity)\n    .slice(0, 10)\n    .map(risk => ({\n      ...risk,\n      sourceRegion: analyses.find(a => a.riskAssessment?.includes(risk))?.task.region\n    }));\n}\n\nfunction consolidatePredictions(analyses) {\n  return {\n    shortTerm: consolidatePredictionType(analyses, 'shortTerm'),\n    mediumTerm: consolidatePredictionType(analyses, 'mediumTerm'),\n    longTerm: consolidatePredictionType(analyses, 'longTerm'),\n    consensusForecast: generateConsensusForecast(analyses)\n  };\n}\n\nfunction consolidateRecommendations(analyses) {\n  const allRecommendations = analyses.flatMap(analysis => analysis.recommendations || []);\n  \n  // Group by type and prioritize\n  const groupedRecommendations = allRecommendations.reduce((acc, rec) => {\n    if (!acc[rec.type]) acc[rec.type] = [];\n    acc[rec.type].push(rec);\n    return acc;\n  }, {});\n  \n  return {\n    immediate: extractImmediateRecommendations(allRecommendations),\n    shortTerm: extractShortTermRecommendations(allRecommendations),\n    longTerm: extractLongTermRecommendations(allRecommendations),\n    byType: groupedRecommendations\n  };\n}\n\nfunction assessDataQuality(analyses) {\n  return {\n    completeness: calculateDataCompleteness(analyses),\n    accuracy: calculateDataAccuracy(analyses),\n    timeliness: calculateDataTimeliness(analyses),\n    consistency: calculateDataConsistency(analyses)\n  };\n}\n\nfunction calculateSummaryStatistics(analyses) {\n  return {\n    totalAnalysesGenerated: analyses.length,\n    regionsCovered: [...new Set(analyses.map(a => a.task.region))].length,\n    timeRangesAnalyzed: [...new Set(analyses.map(a => a.task.timeRange))],\n    averageAnalysisTime: '2.5_minutes', // Would be calculated from actual processing times\n    dataPointsProcessed: analyses.reduce((sum, analysis) => \n      sum + ((analysis.overview?.totalTransactions || 0) + \n             (analysis.overview?.activeListings || 0)), 0\n    )\n  };\n}\n\n// Additional helper functions\nfunction extractKeyInsights(analyses) {\n  const insights = [];\n  \n  analyses.forEach(analysis => {\n    if (analysis.insights) {\n      insights.push(...analysis.insights);\n    }\n  });\n  \n  // Return top 5 most significant insights\n  return insights\n    .sort((a, b) => {\n      const severityOrder = { 'critical': 4, 'high': 3, 'warning': 2, 'info': 1 };\n      return (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0);\n    })\n    .slice(0, 5);\n}\n\nfunction identifyRegionalArbitrageOpportunities(regionalData) {\n  // Simplified arbitrage detection\n  return [\n    {\n      type: 'price_discrepancy',\n      regions: ['north', 'south'],\n      potentialGain: '12%',\n      confidence: 0.75\n    }\n  ];\n}\n\nfunction calculateHealthTrends(healthMetrics) {\n  // Simplified trend calculation\n  return {\n    liquidity: 'stable',\n    efficiency: 'improving',\n    participation: 'declining'\n  };\n}\n\nfunction consolidatePredictionType(analyses, predictionType) {\n  const predictions = analyses.map(analysis => analysis.predictiveAnalysis?.[predictionType]).filter(Boolean);\n  return { aggregated: predictions, consensus: 'moderately_positive' };\n}\n\nfunction generateConsensusForecast(analyses) {\n  return {\n    direction: 'positive',\n    confidence: 0.68,\n    keyDrivers: ['increased_participation', 'seasonal_demand'],\n    timeHorizon: '30_days'\n  };\n}\n\nfunction extractImmediateRecommendations(recommendations) {\n  return recommendations.filter(rec => rec.urgency === 'high').slice(0, 5);\n}\n\nfunction extractShortTermRecommendations(recommendations) {\n  return recommendations.filter(rec => rec.type === 'investment' && rec.confidence > 0.7).slice(0, 10);\n}\n\nfunction extractLongTermRecommendations(recommendations) {\n  return recommendations.filter(rec => rec.type === 'strategy').slice(0, 5);\n}\n\nfunction calculateDataCompleteness(analyses) { return 0.92; }\nfunction calculateDataAccuracy(analyses) { return 0.88; }\nfunction calculateDataTimeliness(analyses) { return 0.95; }\nfunction calculateDataConsistency(analyses) { return 0.90; }"
+      },
+      "id": "consolidate-results",
+      "name": "Consolidate Analysis Results",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.DMLOGN8N_API_URL}}/analytics/market-reports",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "report",
+              "value": "={{$json}}"
+            }
+          ]
+        }
+      },
+      "id": "store-report",
+      "name": "Store Market Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Generate targeted notifications based on analysis results\nconst marketReport = $input.first().json;\nconst notifications = [];\n\n// High-priority alerts for critical risks\nmarketReport.criticalRisks.forEach(risk => {\n  if (risk.severity > 0.8) {\n    notifications.push({\n      type: 'critical_risk_alert',\n      recipients: ['admin_team', 'market_mods'],\n      priority: 'high',\n      subject: `Critical Market Risk: ${risk.type}`,\n      message: `High severity ${risk.type} detected in ${risk.sourceRegion} region. Immediate attention required.`,\n      data: risk,\n      actionRequired: true\n    });\n  }\n});\n\n// Opportunity notifications for VIP players\nconst topOpportunities = marketReport.topOpportunities.slice(0, 5);\nif (topOpportunities.length > 0) {\n  notifications.push({\n    type: 'investment_opportunities',\n    recipients: ['vip_players', 'guild_leaders'],\n    priority: 'medium',\n    subject: 'New Investment Opportunities Available',\n    message: `${topOpportunities.length} high-confidence investment opportunities identified in the market.`,\n    data: topOpportunities,\n    actionRequired: false\n  });\n}\n\n// Market health summary for all players\nnotifications.push({\n  type: 'market_health_update',\n  recipients: ['all_players'],\n  priority: 'low',\n  subject: 'Market Health Update',\n  message: `Market health score: ${(marketReport.marketHealthDashboard.overallHealthScore * 100).toFixed(1)}%. ${marketReport.executiveSummary.marketSentiment} market sentiment.`,\n  data: {\n    healthScore: marketReport.marketHealthDashboard.overallHealthScore,\n    sentiment: marketReport.executiveSummary.marketSentiment,\n    topOpportunities: topOpportunities.length,\n    totalVolume: marketReport.executiveSummary.totalMarketVolume\n  },\n  actionRequired: false\n});\n\n// Regional insights for regional managers\nObject.entries(marketReport.regionalAnalyses).forEach(([region, analyses]) => {\n  const regionHealth = analyses[0]?.overview?.marketHealth || {};\n  notifications.push({\n    type: 'regional_insights',\n    recipients: [`region_manager_${region}`],\n    priority: 'medium',\n    subject: `Regional Market Insights - ${region.toUpperCase()}`,\n    message: `Regional analysis complete for ${region}. Market health: ${((regionHealth.liquidity + regionHealth.efficiency + regionHealth.participation) / 3 * 100).toFixed(1)}%.`,\n    data: {\n      region: region,\n      health: regionHealth,\n      volume: analyses[0]?.overview?.totalVolume || 0,\n      transactions: analyses[0]?.overview?.totalTransactions || 0\n    },\n    actionRequired: false\n  });\n});\n\nconsole.log(`Generated ${notifications.length} notifications from market analysis`);\n\nreturn notifications.map(notification => ({ json: notification }));"
+      },
+      "id": "generate-notifications",
+      "name": "Generate Notifications",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.DMLOGN8N_API_URL}}/notifications/send-batch",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "notifications",
+              "value": "={{$json}}"
+            }
+          ]
+        }
+      },
+      "id": "send-notifications",
+      "name": "Send Notifications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Clean up and prepare for next analysis cycle\nconst marketReport = $input.first().json;\n\nconsole.log('Market analysis workflow completed successfully');\n\n// Log summary statistics\nconsole.log('Analysis Summary:', {\n  totalVolume: marketReport.executiveSummary.totalMarketVolume,\n  regionsAnalyzed: marketReport.reportMetadata.regionsAnalyzed.length,\n  opportunitiesIdentified: marketReport.executiveSummary.opportunitiesIdentified,\n  highRiskItems: marketReport.executiveSummary.highRiskItems,\n  marketSentiment: marketReport.executiveSummary.marketSentiment\n});\n\n// Prepare next run configuration\nconst nextRunConfig = {\n  scheduledFor: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(), // 6 hours from now\n  focusAreas: identifyFocusAreasForNextRun(marketReport),\n  regionsToMonitor: marketReport.reportMetadata.regionsAnalyzed,\n  priorityItems: extractPriorityItems(marketReport)\n};\n\n// Update analysis schedule if needed\nawait updateAnalysisSchedule(nextRunConfig);\n\n// Archive this analysis\nawait archiveAnalysis(marketReport);\n\nreturn [{ \n  json: {\n    status: 'completed',\n    completedAt: new Date().toISOString(),\n    nextRun: nextRunConfig,\n    summary: {\n      totalAnalyses: marketReport.reportMetadata.totalAnalyses,\n      notificationsSent: 'processed',\n      reportStored: true\n    }\n  }\n}];\n\nfunction identifyFocusAreasForNextRun(report) {\n  const focusAreas = [];\n  \n  // Focus on regions with poor market health\n  Object.entries(report.marketHealthDashboard.healthByRegion).forEach(([region, healthData]) => {\n    const avgHealth = healthData.reduce((sum, h) => sum + ((h.liquidity + h.efficiency + h.participation) / 3), 0) / healthData.length;\n    if (avgHealth < 0.5) {\n      focusAreas.push({\n        type: 'region_health_improvement',\n        target: region,\n        priority: 'high'\n      });\n    }\n  });\n  \n  // Focus on high-risk items\n  if (report.criticalRisks.length > 0) {\n    focusAreas.push({\n      type: 'risk_monitoring',\n      target: 'high_risk_items',\n      priority: 'high'\n    });\n  }\n  \n  // Focus on high-opportunity areas\n  if (report.topOpportunities.length > 10) {\n    focusAreas.push({\n      type: 'opportunity_tracking',\n      target: 'top_opportunities',\n      priority: 'medium'\n    });\n  }\n  \n  return focusAreas;\n}\n\nfunction extractPriorityItems(report) {\n  return report.topOpportunities.slice(0, 10).map(opp => opp.itemId);\n}\n\nasync function updateAnalysisSchedule(config) {\n  console.log('Updated analysis schedule:', config.focusAreas);\n}\n\nasync function archiveAnalysis(report) {\n  console.log(`Archived analysis report from ${report.reportMetadata.generatedAt}`);\n}"
+      },
+      "id": "cleanup-and-prepare",
+      "name": "Cleanup and Prepare Next Run",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "analysis-trigger": {
+      "main": [
+        [
+          {
+            "node": "prepare-analysis-tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prepare-analysis-tasks": {
+      "main": [
+        [
+          {
+            "node": "perform-analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "perform-analysis": {
+      "main": [
+        [
+          {
+            "node": "consolidate-results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consolidate-results": {
+      "main": [
+        [
+          {
+            "node": "store-report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "generate-notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "store-report": {
+      "main": [
+        [
+          {
+            "node": "cleanup-and-prepare",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "generate-notifications": {
+      "main": [
+        [
+          {
+            "node": "send-notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "send-notifications": {
+      "main": [
+        [
+          {
+            "node": "cleanup-and-prepare",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "createdAt": "2024-01-15T10:00:00.000Z",
+  "updatedAt": "2024-01-15T10:00:00.000Z"
+}

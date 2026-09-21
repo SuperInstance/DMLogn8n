@@ -1,0 +1,443 @@
+{
+  "name": "Dynamic Voice Synthesis Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voice-synthesize",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "voice-webhook",
+      "name": "Webhook - Voice Synthesis Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "voice-synthesis-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse voice synthesis request\nconst requestData = JSON.parse($input.first().json.body);\n\n// Validate required fields\nif (!requestData.text || !requestData.voiceConfig) {\n  throw new Error('Missing required fields: text and voiceConfig');\n}\n\n// Prepare voice synthesis data\nconst synthesisData = {\n  text: requestData.text,\n  voiceConfig: {\n    race: requestData.voiceConfig.race || 'human',\n    gender: requestData.voiceConfig.gender || 'neutral',\n    age: requestData.voiceConfig.age || 'adult',\n    socialClass: requestData.voiceConfig.socialClass || 'common',\n    accent: requestData.voiceConfig.accent || 'standard',\n    characteristics: requestData.voiceConfig.characteristics || [],\n    environment: requestData.voiceConfig.environment || 'neutral'\n  },\n  emotionalState: requestData.emotionalState || {},\n  options: {\n    provider: requestData.provider || 'elevenlabs',\n    quality: requestData.quality || 'high',\n    realtime: requestData.realtime || false,\n    language: requestData.language || 'en'\n  },\n  metadata: {\n    requestId: generateRequestId(),\n    timestamp: new Date().toISOString(),\n    source: 'dialogue-system',\n    priority: requestData.priority || 'normal'\n  }\n};\n\nfunction generateRequestId() {\n  return 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);\n}\n\n// Add context information\nsynthesisData.context = {\n  conversationId: requestData.conversationId,\n  speakerId: requestData.speakerId,\n  previousMessages: requestData.previousMessages || [],\n  campaign: requestData.campaign || {},\n  environment: requestData.environment || {}\n};\n\nreturn { json: synthesisData };"
+      },
+      "id": "parse-voice-request",
+      "name": "Parse Voice Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.options.realtime}}",
+              "operation": "equal",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "id": "realtime-check",
+      "name": "Real-time Processing Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/voice/synthesize-realtime",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{$json.text}}"
+            },
+            {
+              "name": "voiceConfig",
+              "value": "={{$json.voiceConfig}}"
+            },
+            {
+              "name": "emotionalState",
+              "value": "={{$json.emotionalState}}"
+            },
+            {
+              "name": "options",
+              "value": "={{$json.options}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 500
+        }
+      },
+      "id": "realtime-synthesis",
+      "name": "Real-time Voice Synthesis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/voice/synthesize",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{$json.text}}"
+            },
+            {
+              "name": "voiceConfig",
+              "value": "={{$json.voiceConfig}}"
+            },
+            {
+              "name": "emotionalState",
+              "value": "={{$json.emotionalState}}"
+            },
+            {
+              "name": "options",
+              "value": "={{$json.options}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "standard-synthesis",
+      "name": "Standard Voice Synthesis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process voice synthesis results\nconst synthesisResult = $input.first().json;\nconst originalRequest = items[0].json; // Get original request data\n\n// Prepare response data\nconst voiceResponse = {\n  requestId: originalRequest.metadata.requestId,\n  audioData: synthesisResult.audioBuffer || synthesisResult.audioData,\n  format: synthesisResult.format || 'mp3',\n  duration: synthesisResult.duration || 0,\n  voiceConfig: originalRequest.voiceConfig,\n  emotionalState: originalRequest.emotionalState,\n  synthesis: {\n    provider: synthesisResult.provider || originalRequest.options.provider,\n    processingTime: synthesisResult.processingTime || 0,\n    quality: synthesisResult.quality || originalRequest.options.quality,\n    realtime: originalRequest.options.realtime,\n    success: synthesisResult.success !== false,\n    cacheHit: synthesisResult.cached || false\n  },\n  metadata: {\n    synthesizedAt: new Date().toISOString(),\n    textLength: originalRequest.text.length,\n    sampleRate: synthesisResult.sampleRate || 22050,\n    channels: synthesisResult.channels || 1,\n    bitrate: synthesisResult.bitrate || 128000\n  }\n};\n\n// Add audio processing information if available\nif (synthesisResult.postProcessing) {\n  voiceResponse.postProcessing = {\n    ageCharacteristics: synthesisResult.postProcessing.ageApplied || false,\n    environmentalEffects: synthesisResult.postProcessing.environmentApplied || false,\n    vocalCharacteristics: synthesisResult.postProcessing.characteristicsApplied || false\n  };\n}\n\n// Add voice profile information\nvoiceResponse.voiceProfile = {\n  baseVoice: synthesisResult.voiceProfile?.baseVoice || 'standard',\n  pitch: synthesisResult.voiceProfile?.pitch || 1.0,\n  speed: synthesisResult.voiceProfile?.speed || 1.0,\n  tone: synthesisResult.voiceProfile?.tone || 'neutral',\n  accent: synthesisResult.voiceProfile?.accent || 'standard'\n};\n\n// Add emotional tone information\nif (originalRequest.emotionalState && Object.keys(originalRequest.emotionalState).length > 0) {\n  const dominantEmotion = Object.entries(originalRequest.emotionalState)\n    .sort((a, b) => b[1] - a[1])[0]?.[0] || 'neutral';\n  \n  voiceResponse.emotionalTone = {\n    dominant: dominantEmotion,\n    intensity: originalRequest.emotionalState[dominantEmotion] || 0.5,\n    applied: synthesisResult.emotionalModulationApplied || false\n  };\n}\n\nreturn { json: voiceResponse };"
+      },
+      "id": "process-voice-results",
+      "name": "Process Voice Synthesis Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.synthesis.realtime}}",
+              "operation": "equal",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "id": "realtime-audio-check",
+      "name": "Real-time Audio Processing",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process real-time audio streaming\nconst voiceResponse = $input.first().json;\n\n// Prepare streaming response for real-time applications\nconst streamingData = {\n  type: 'audio_stream',\n  requestId: voiceResponse.requestId,\n  streamData: {\n    audioData: voiceResponse.audioData,\n    format: voiceResponse.format,\n    chunkSize: 1024, // bytes\n    sampleRate: voiceResponse.metadata.sampleRate,\n    channels: voiceResponse.metadata.channels\n  },\n  streaming: {\n    protocol: 'websocket',\n    endpoint: `/ws/audio-stream/${voiceResponse.requestId}`,\n    bufferSize: 8192,\n    lowLatency: true\n  },\n  metadata: {\n    timestamp: new Date().toISOString(),\n    latency: voiceResponse.synthesis.processingTime,\n    estimatedTotalTime: voiceResponse.duration\n  }\n};\n\n// Generate stream initialization packet\nconst initPacket = {\n  type: 'stream_init',\n  requestId: voiceResponse.requestId,\n  config: {\n    format: voiceResponse.format,\n    sampleRate: voiceResponse.metadata.sampleRate,\n    channels: voiceResponse.metadata.channels,\n    bitrate: voiceResponse.metadata.bitrate\n  },\n  estimatedDuration: voiceResponse.duration\n};\n\nreturn { \n  json: {\n    ...voiceResponse,\n    streamingData,\n    initPacket\n  }\n};"
+      },
+      "id": "prepare-streaming",
+      "name": "Prepare Audio Streaming",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare standard audio file response\nconst voiceResponse = $input.first().json;\n\n// Generate download URL for audio file\nconst downloadUrl = `/api/voice/download/${voiceResponse.requestId}`;\nconst previewUrl = `/api/voice/preview/${voiceResponse.requestId}`;\n\n// Prepare file response data\nconst fileResponse = {\n  ...voiceResponse,\n  delivery: {\n    type: 'file_download',\n    downloadUrl,\n    previewUrl,\n    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours\n    maxDownloads: 5\n  },\n  file: {\n    name: `voice_${voiceResponse.requestId}.${voiceResponse.format}`,\n    size: voiceResponse.audioData ? voiceResponse.audioData.length : 0,\n    mimeType: `audio/${voiceResponse.format}`,\n    encoding: 'base64'\n  }\n};\n\n// Add quality metrics\nfileResponse.qualityMetrics = {\n  clarity: calculateAudioQuality(voiceResponse),\n  naturalness: calculateNaturalness(voiceResponse),\n  emotionalAccuracy: calculateEmotionalAccuracy(voiceResponse),\n  overallScore: calculateOverallScore(voiceResponse)\n};\n\nfunction calculateAudioQuality(response) {\n  // Placeholder for audio quality calculation\n  return Math.min(1.0, 0.8 + Math.random() * 0.2);\n}\n\nfunction calculateNaturalness(response) {\n  // Placeholder for naturalness calculation\n  const providerBonus = response.synthesis.provider === 'elevenlabs' ? 0.1 : 0;\n  const qualityBonus = response.synthesis.quality === 'high' ? 0.1 : 0;\n  return Math.min(1.0, 0.7 + providerBonus + qualityBonus + Math.random() * 0.2);\n}\n\nfunction calculateEmotionalAccuracy(response) {\n  // Calculate emotional tone accuracy\n  if (!response.emotionalTone) return 0.5;\n  \n  const intensity = response.emotionalTone.intensity;\n  const applied = response.emotionalTone.applied;\n  const baseScore = 0.6;\n  const intensityBonus = intensity * 0.3;\n  const applicationBonus = applied ? 0.1 : 0;\n  \n  return Math.min(1.0, baseScore + intensityBonus + applicationBonus);\n}\n\nfunction calculateOverallScore(response) {\n  const clarity = calculateAudioQuality(response);\n  const naturalness = calculateNaturalness(response);\n  const emotionalAccuracy = calculateEmotionalAccuracy(response);\n  \n  return (clarity * 0.4 + naturalness * 0.4 + emotionalAccuracy * 0.2);\n}\n\nreturn { json: fileResponse };"
+      },
+      "id": "prepare-file-response",
+      "name": "Prepare File Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/analytics/voice-track",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "requestId",
+              "value": "={{$json.requestId}}"
+            },
+            {
+              "name": "synthesisData",
+              "value": "={{$json.synthesis}}"
+            },
+            {
+              "name": "voiceConfig",
+              "value": "={{$json.voiceConfig}}"
+            },
+            {
+              "name": "qualityMetrics",
+              "value": "={{$json.qualityMetrics}}"
+            }
+          ]
+        }
+      },
+      "id": "track-voice-analytics",
+      "name": "Track Voice Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}"
+      },
+      "id": "voice-response",
+      "name": "Return Voice Synthesis Results",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.synthesis.success}}",
+              "operation": "equal",
+              "value2": "false"
+            }
+          ]
+        }
+      },
+      "id": "synthesis-failed-check",
+      "name": "Synthesis Failed Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1120, 480]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/voice/fallback-synthesize",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{$json.text}}"
+            },
+            {
+              "name": "voiceConfig",
+              "value": "={{$json.voiceConfig}}"
+            },
+            {
+              "name": "originalError",
+              "value": "={{$json.error}}"
+            }
+          ]
+        }
+      },
+      "id": "fallback-synthesis",
+      "name": "Fallback Voice Synthesis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 480]
+    }
+  ],
+  "connections": {
+    "Webhook - Voice Synthesis Request": {
+      "main": [
+        [
+          {
+            "node": "Parse Voice Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Voice Request": {
+      "main": [
+        [
+          {
+            "node": "Real-time Processing Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Real-time Processing Check": {
+      "main": [
+        [
+          {
+            "node": "Real-time Voice Synthesis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Standard Voice Synthesis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Real-time Voice Synthesis": {
+      "main": [
+        [
+          {
+            "node": "Process Voice Synthesis Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Standard Voice Synthesis": {
+      "main": [
+        [
+          {
+            "node": "Process Voice Synthesis Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Voice Synthesis Results": {
+      "main": [
+        [
+          {
+            "node": "Real-time Audio Processing",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Synthesis Failed Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Real-time Audio Processing": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audio Streaming",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare File Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audio Streaming": {
+      "main": [
+        [
+          {
+            "node": "Track Voice Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare File Response": {
+      "main": [
+        [
+          {
+            "node": "Track Voice Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Voice Analytics": {
+      "main": [
+        [
+          {
+            "node": "Return Voice Synthesis Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Synthesis Failed Check": {
+      "main": [
+        [
+          {
+            "node": "Fallback Voice Synthesis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Track Voice Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback Voice Synthesis": {
+      "main": [
+        [
+          {
+            "node": "Track Voice Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicyDefaultOption": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "voice-synthesis",
+      "name": "Voice Synthesis"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "audio-processing",
+      "name": "Audio Processing"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1.0"
+}

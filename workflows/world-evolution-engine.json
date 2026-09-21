@@ -1,0 +1,424 @@
+{
+  "name": "World Evolution Engine - Autonomous World Simulation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 4
+            }
+          ]
+        }
+      },
+      "id": "world-evolution-trigger",
+      "name": "World Evolution Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize world evolution cycle\nconst evolutionConfig = {\n  cycleTime: new Date().toISOString(),\n  evolutionType: 'scheduled',\n  worldEffects: {\n    natural_processes: true,\n    npc_autonomy: true,\n    faction_dynamics: true,\n    economic_changes: true,\n    environmental_effects: true\n  },\n  intensity: 'normal', // low, normal, high\n  focus_areas: ['locations', 'npcs', 'factions', 'economy', 'environment']\n};\n\n// Get all active campaigns\nconst activeCampaigns = await $this.helpers.httpRequestWithAuthentication.call(\n  this.getNode('campaign-database'),\n  'get',\n  '/api/campaigns/active'\n);\n\nreturn [{\n  json: {\n    ...evolutionConfig,\n    campaigns: activeCampaigns.data || [],\n    totalCampaigns: activeCampaigns.data?.length || 0\n  }\n}];"
+      },
+      "id": "initialize-evolution-cycle",
+      "name": "Initialize Evolution Cycle",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.NEO4J_URI }}",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.NEO4J_PASSWORD }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "=MATCH (c:Campaign {status: 'active'}) RETURN c.id as campaignId, c.worldState as worldState, c.lastEvolution as lastEvolution"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-active-campaigns",
+      "name": "Neo4j - Fetch Active Campaigns",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process campaign data and prepare for evolution\nconst campaigns = $input.first().json.results || [];\nconst evolutionConfig = $input.first().json;\n\nconst processedCampaigns = campaigns.map(campaign => {\n  const { campaignId, worldState, lastEvolution } = campaign;\n  \n  // Calculate evolution factors based on time since last evolution\n  const now = new Date();\n  const lastEvolutionDate = lastEvolution ? new Date(lastEvolution) : new Date(now.getTime() - 24 * 60 * 60 * 1000);\n  const hoursSinceEvolution = (now - lastEvolutionDate) / (1000 * 60 * 60);\n  \n  const evolutionFactors = {\n    time_multiplier: Math.min(hoursSinceEvolution / 4, 3), // Cap at 3x\n    natural_decay: hoursSinceEvolution > 8,\n    growth_opportunity: hoursSinceEvolution > 12,\n    major_event_chance: Math.min(hoursSinceEvolution / 48, 0.3)\n  };\n  \n  return {\n    campaignId,\n    currentWorldState: worldState || {},\n    lastEvolution,\n    evolutionFactors,\n    evolutionPriority: calculateEvolutionPriority(worldState, evolutionFactors)\n  };\n});\n\n// Sort by evolution priority\nprocessedCampaigns.sort((a, b) => b.evolutionPriority - a.evolutionPriority);\n\nfunction calculateEvolutionPriority(worldState, factors) {\n  let priority = factors.time_multiplier * 10;\n  \n  // Add priority based on world state complexity\n  if (worldState.locations?.length > 10) priority += 5;\n  if (worldState.npcs?.length > 20) priority += 5;\n  if (worldState.factions?.length > 5) priority += 3;\n  if (worldState.activeQuests?.length > 0) priority += 8;\n  \n  // Add priority for dynamic worlds\n  if (worldState.worldEvents?.length > 5) priority += 4;\n  if (factors.major_event_chance > 0.2) priority += 6;\n  \n  return priority;\n}\n\nreturn [{\n  json: {\n    ...evolutionConfig,\n    campaigns: processedCampaigns,\n    totalCampaigns: processedCampaigns.length,\n    evolution_cycle_id: `evolution_${Date.now()}`\n  }\n}];"
+      },
+      "id": "process-campaign-data",
+      "name": "Process Campaign Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "process-campaigns-individually",
+      "name": "Process Campaigns Individually",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate natural world evolution events\nconst campaign = $input.first().json;\nconst { campaignId, currentWorldState, evolutionFactors } = campaign;\n\nconst evolutionEvents = [];\n\n// 1. Natural Environment Changes\nif (evolutionFactors.natural_decay || Math.random() < 0.3) {\n  evolutionEvents.push(generateEnvironmentChange(currentWorldState));\n}\n\n// 2. NPC Autonomous Actions\nif (currentWorldState.npcs && currentWorldState.npcs.length > 0) {\n  const activeNPCs = currentWorldState.npcs.filter(npc => \n    npc.status === 'alive' && Math.random() < 0.2\n  );\n  \n  activeNPCs.forEach(npc => {\n    evolutionEvents.push(generateNPCAutonomousAction(npc, currentWorldState));\n  });\n}\n\n// 3. Faction Dynamics\nif (currentWorldState.factions && currentWorldState.factions.length > 1) {\n  currentWorldState.factions.forEach(faction => {\n    if (Math.random() < 0.15) {\n      evolutionEvents.push(generateFactionAction(faction, currentWorldState));\n    }\n  });\n}\n\n// 4. Economic Fluctuations\nif (Math.random() < 0.25) {\n  evolutionEvents.push(generateEconomicChange(currentWorldState));\n}\n\n// 5. Random World Events\nif (Math.random() < evolutionFactors.major_event_chance) {\n  evolutionEvents.push(generateMajorWorldEvent(currentWorldState));\n}\n\nfunction generateEnvironmentChange(worldState) {\n  const environments = ['forest', 'mountain', 'desert', 'ocean', 'city', 'dungeon', 'ruins'];\n  const changes = ['weather_shift', 'growth', 'decay', 'discovery', 'natural_disaster'];\n  const weather_types = ['clear', 'rain', 'storm', 'fog', 'snow', 'heatwave'];\n  \n  const environment = environments[Math.floor(Math.random() * environments.length)];\n  const change = changes[Math.floor(Math.random() * changes.length)];\n  const weather = weather_types[Math.floor(Math.random() * weather_types.length)];\n  \n  return {\n    type: 'environment_change',\n    subtype: change,\n    environment,\n    weather: weather,\n    impact: calculateEnvironmentalImpact(change, environment),\n    description: `The ${environment} experiences ${change} with ${weather} conditions`,\n    affected_locations: worldState.locations?.filter(loc => \n      loc.type?.includes(environment) || loc.properties?.environment === environment\n    ).map(loc => loc.id) || [],\n    duration: generateDuration(change),\n    timestamp: new Date().toISOString()\n  };\n}\n\nfunction generateNPCAutonomousAction(npc, worldState) {\n  const actions = ['movement', 'interaction', 'skill_use', 'resource_gathering', 'resting'];\n  const action = actions[Math.floor(Math.random() * actions.length)];\n  \n  return {\n    type: 'npc_action',\n    subtype: action,\n    npc_id: npc.id,\n    npc_name: npc.name,\n    current_location: npc.location,\n    action_details: generateActionDetails(action, npc, worldState),\n    impact: calculateNPCActionImpact(action, npc),\n    timestamp: new Date().toISOString()\n  };\n}\n\nfunction generateFactionAction(faction, worldState) {\n  const actions = ['recruitment', 'resource_acquisition', 'territory_expansion', 'diplomacy', 'conflict'];\n  const action = actions[Math.floor(Math.random() * actions.length)];\n  \n  return {\n    type: 'faction_action',\n    subtype: action,\n    faction_id: faction.id,\n    faction_name: faction.name,\n    action_details: generateFactionActionDetails(action, faction, worldState),\n    impact: calculateFactionActionImpact(action, faction),\n    affected_factions: determineAffectedFactions(faction, worldState.factions),\n    timestamp: new Date().toISOString()\n  };\n}\n\nfunction generateEconomicChange(worldState) {\n  const changes = ['price_fluctuation', 'supply_shortage', 'demand_increase', 'trade_route_change'];\n  const change = changes[Math.floor(Math.random() * changes.length)];\n  \n  return {\n    type: 'economic_change',\n    subtype: change,\n    market_impact: calculateMarketImpact(change, worldState),\n    affected_goods: generateAffectedGoods(change),\n    description: generateEconomicDescription(change),\n    duration: generateDuration(change),\n    timestamp: new Date().toISOString()\n  };\n}\n\nfunction generateMajorWorldEvent(worldState) {\n  const events = ['monster_migration', 'trade_caravan_arrival', 'political_shift', 'magical_phenomenon', 'discovery'];\n  const event = events[Math.floor(Math.random() * events.length)];\n  \n  return {\n    type: 'major_world_event',\n    subtype: event,\n    description: generateMajorEventDescription(event, worldState),\n    impact_level: 'high',\n    affected_areas: determineAffectedAreas(event, worldState),\n    duration: generateDuration(event),\n    consequences: generateEventConsequences(event),\n    timestamp: new Date().toISOString()\n  };\n}\n\n// Helper functions\nfunction calculateEnvironmentalImpact(change, environment) {\n  const impacts = {\n    weather_shift: 'minor',\n    growth: 'minor',\n    decay: 'moderate',\n    discovery: 'moderate',\n    natural_disaster: 'major'\n  };\n  return impacts[change] || 'minor';\n}\n\nfunction generateDuration(changeType) {\n  const durations = {\n    weather_shift: '1-6 hours',\n    growth: 'permanent',\n    decay: '1-3 days',\n    discovery: 'permanent',\n    natural_disaster: '1-7 days',\n    recruitment: 'instant',\n    resource_acquisition: 'instant',\n    territory_expansion: 'permanent',\n    diplomacy: '1-3 days',\n    conflict: '1-7 days',\n    price_fluctuation: '3-7 days',\n    supply_shortage: '1-2 weeks',\n    demand_increase: '1-2 weeks',\n    trade_route_change: 'permanent',\n    monster_migration: '1-2 weeks',\n    trade_caravan_arrival: '3-5 days',\n    political_shift: 'permanent',\n    magical_phenomenon: '1-3 days',\n    discovery: 'permanent'\n  };\n  return durations[changeType] || '1 day';\n}\n\nfunction generateActionDetails(action, npc, worldState) {\n  switch (action) {\n    case 'movement':\n      const possibleLocations = worldState.locations?.map(loc => loc.id) || [];\n      return {\n        destination: possibleLocations[Math.floor(Math.random() * possibleLocations.length)],\n        purpose: ['patrol', 'travel', 'exploration', 'fleeing'][Math.floor(Math.random() * 4)]\n      };\n    case 'interaction':\n      return {\n        target_type: ['npc', 'player', 'environment'][Math.floor(Math.random() * 3)],\n        interaction_type: ['dialogue', 'trade', 'conflict', 'cooperation'][Math.floor(Math.random() * 4)]\n      };\n    default:\n      return { complexity: 'simple' };\n  }\n}\n\nfunction calculateNPCActionImpact(action, npc) {\n  const impacts = {\n    movement: 'minor',\n    interaction: 'minor',\n    skill_use: 'minor',\n    resource_gathering: 'moderate',\n    resting: 'minor'\n  };\n  return impacts[action] || 'minor';\n}\n\nfunction generateFactionActionDetails(action, faction, worldState) {\n  return {\n    scope: ['local', 'regional', 'global'][Math.floor(Math.random() * 3)],\n    resources_committed: Math.floor(Math.random() * 100) + 10,\n    success_chance: 0.3 + Math.random() * 0.6\n  };\n}\n\nfunction calculateFactionActionImpact(action, faction) {\n  const impacts = {\n    recruitment: 'minor',\n    resource_acquisition: 'moderate',\n    territory_expansion: 'major',\n    diplomacy: 'moderate',\n    conflict: 'major'\n  };\n  return impacts[action] || 'minor';\n}\n\nfunction determineAffectedFactions(faction, allFactions) {\n  return allFactions\n    .filter(f => f.id !== faction.id && Math.random() < 0.6)\n    .map(f => f.id);\n}\n\nfunction calculateMarketImpact(change, worldState) {\n  return {\n    price_change_percent: Math.floor(Math.random() * 40) - 20, // -20% to +20%\n    volatility: Math.random(),\n    affected_regions: ['all', 'local', 'regional'][Math.floor(Math.random() * 3)]\n  };\n}\n\nfunction generateAffectedGoods(change) {\n  const goods = ['food', 'weapons', 'armor', 'potions', 'materials', 'magic_items'];\n  const count = Math.floor(Math.random() * 3) + 1;\n  return goods.slice(0, count);\n}\n\nfunction generateEconomicDescription(change) {\n  const descriptions = {\n    price_fluctuation: 'Market prices shift due to changing supply and demand',\n    supply_shortage: 'Resource shortage affects availability of goods',\n    demand_increase: 'Increased demand drives market activity',\n    trade_route_change: 'New trade opportunities emerge'\n  };\n  return descriptions[change] || 'Economic conditions change';\n}\n\nfunction generateMajorEventDescription(event, worldState) {\n  const descriptions = {\n    monster_migration: 'Monsters migrate to new territories',\n    trade_caravan_arrival: 'A major trade caravan arrives in the region',\n    political_shift: 'Political landscape undergoes significant changes',\n    magical_phenomenon: 'Unusual magical events occur',\n    discovery: 'New discoveries reshape understanding of the world'\n  };\n  return descriptions[event] || 'A major world event occurs';\n}\n\nfunction determineAffectedAreas(event, worldState) {\n  const locationCount = Math.floor(Math.random() * 3) + 1;\n  return worldState.locations?.slice(0, locationCount).map(loc => loc.id) || [];\n}\n\nfunction generateEventConsequences(event) {\n  return {\n    immediate: ['changed_world_state'],\n    short_term: ['npc_reactions', 'faction_responses'],\n    long_term: ['economic_impact', 'territory_changes']\n  };\n}\n\nreturn [{\n  json: {\n    campaignId,\n    evolutionEvents,\n    eventCount: evolutionEvents.length,\n    evolutionFactors,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "generate-evolution-events",
+      "name": "Generate Evolution Events",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.DEEPSEEK_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "deepseek-chat"
+            },
+            {
+              "name": "messages",
+              "value": "={{[{\n  \"role\": \"system\",\n  \"content\": \"You are a world simulation AI for a D&D campaign. Generate rich, immersive narrative descriptions for world evolution events. Focus on creating living, breathing world dynamics that feel natural and consequential.\\n\\nFor each event, provide:\\n1. A vivid narrative description (2-3 sentences)\\n2. Potential player hook or opportunity\\n3. Likely consequences or follow-up effects\\n4. DM notes for implementation\\n\\nFormat as JSON with keys: narrative_description, player_hook, consequences, dm_notes\"\n}], [\n  {\n    \"role\": \"user\",\n    \"content\": \"Generate narrative details for these world evolution events in campaign {{ $json.campaignId }}:\\n\\nEvents: {{ JSON.stringify($json.evolutionEvents, null, 2) }}\\n\\nCurrent world state: {{ JSON.stringify($json.currentWorldState, null, 2) }}\"\n  }\n])}}"
+            },
+            {
+              "name": "temperature",
+              "value": "0.8"
+            },
+            {
+              "name": "max_tokens",
+              "value": "2000"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "deepseek-narrative-generation",
+      "name": "DeepSeek - Generate Narratives",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process DeepSeek narrative response and prepare world state updates\nconst eventData = $input.first().json;\nconst deepseekResponse = $input.last().json;\n\nlet narrativeData = {};\ntry {\n  const content = deepseekResponse.choices[0].message.content;\n  narrativeData = JSON.parse(content);\n} catch (error) {\n  console.error('Failed to parse DeepSeek response:', error);\n  narrativeData = {\n    narrative_description: 'The world continues to evolve with subtle changes.',\n    player_hook: 'Opportunities for adventure may arise from these changes.',\n    consequences: 'The world state will be affected in various ways.',\n    dm_notes: 'Remember to integrate these changes into the ongoing narrative.'\n  };\n}\n\n// Combine events with narratives\nconst enrichedEvents = eventData.evolutionEvents.map((event, index) => {\n  const narrative = narrativeData.events?.[index] || narrativeData;\n  \n  return {\n    ...event,\n    narrative_description: narrative.narrative_description || `The world undergoes ${event.type}: ${event.subtype}`,\n    player_hook: narrative.player_hook || 'This may present new opportunities for the party.',\n    consequences: narrative.consequences || ['world_state_change'],\n    dm_notes: narrative.dm_notes || 'Consider how this affects player stories.',\n    processed: true\n  };\n});\n\n// Calculate world state updates\nconst worldStateUpdates = calculateWorldStateUpdates(enrichedEvents, eventData.currentWorldState);\n\nfunction calculateWorldStateUpdates(events, currentWorldState) {\n  const updates = {\n    locations: [],\n    npcs: [],\n    factions: [],\n    economy: {},\n    environment: {},\n    new_events: events\n  };\n  \n  events.forEach(event => {\n    switch (event.type) {\n      case 'environment_change':\n        updates.environment = {\n          current_weather: event.weather,\n          active_phenomena: [event.subtype],\n          affected_regions: event.affected_locations\n        };\n        break;\n        \n      case 'npc_action':\n        updates.npcs.push({\n          id: event.npc_id,\n          action: event.subtype,\n          new_location: event.action_details?.destination,\n          status: 'active'\n        });\n        break;\n        \n      case 'faction_action':\n        updates.factions.push({\n          id: event.faction_id,\n          action: event.subtype,\n          affected_relationships: event.affected_factions,\n          resources_change: event.action_details?.resources_committed\n        });\n        break;\n        \n      case 'economic_change':\n        updates.economy = {\n          market_conditions: event.subtype,\n          price_changes: event.market_impact,\n          affected_goods: event.affected_goods\n        };\n        break;\n        \n      case 'major_world_event':\n        updates.new_events.push({\n          ...event,\n          priority: 'high',\n          requires_player_attention: true\n        });\n        break;\n    }\n  });\n  \n  return updates;\n}\n\nreturn [{\n  json: {\n    campaignId: eventData.campaignId,\n    evolution_cycle_id: `evolution_${Date.now()}`,\n    original_events: eventData.evolutionEvents,\n    enriched_events: enrichedEvents,\n    world_state_updates: worldStateUpdates,\n    narrative_summary: narrativeData.narrative_description || 'World evolution cycle completed',\n    evolution_factors: eventData.evolutionFactors,\n    timestamp: new Date().toISOString(),\n    processed_by: 'world-evolution-engine'\n  }\n}];"
+      },
+      "id": "process-narratives-and-updates",
+      "name": "Process Narratives and Updates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.NEO4J_URI }}",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.NEO4J_PASSWORD }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "=MATCH (c:Campaign {id: '{{ $json.campaignId }}' }) SET c.worldState = c.worldState + {{ JSON.stringify($json.world_state_updates) }}, c.lastEvolution = '{{ $json.timestamp }}', c.evolutionHistory = COALESCE(c.evolutionHistory, []) + [{{ JSON.stringify($json) }}] RETURN c"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-world-state-neo4j",
+      "name": "Neo4j - Update World State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $vars.CAMPAIGN_API_URL }}/api/campaigns/{{ $json.campaignId }}/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.CAMPAIGN_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "events",
+              "value": "={{ $json.enriched_events }}"
+            },
+            {
+              "name": "evolution_summary",
+              "value": "={{ $json.narrative_summary }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $json.timestamp }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "notify-campaign-system",
+      "name": "Notify Campaign System",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate evolution summary report\nconst evolutionData = $input.first().json;\n\nconst summary = {\n  evolution_cycle_id: evolutionData.evolution_cycle_id,\n  campaign_id: evolutionData.campaignId,\n  processing_time: new Date().toISOString(),\n  statistics: {\n    total_events_generated: evolutionData.original_events.length,\n    events_with_narratives: evolutionData.enriched_events.length,\n    event_types: [...new Set(evolutionData.enriched_events.map(e => e.type))],\n    high_impact_events: evolutionData.enriched_events.filter(e => e.impact_level === 'high').length,\n    player_hooks_generated: evolutionData.enriched_events.filter(e => e.player_hook).length\n  },\n  world_changes: {\n    locations_affected: evolutionData.world_state_updates.locations.length,\n    npcs_affected: evolutionData.world_state_updates.npcs.length,\n    factions_affected: evolutionData.world_state_updates.factions.length,\n    economic_changes: Object.keys(evolutionData.world_state_updates.economy).length,\n    environmental_effects: Object.keys(evolutionData.world_state_updates.environment).length\n  },\n  narrative_summary: evolutionData.narrative_summary,\n  next_evolution_factors: {\n    time_multiplier: Math.max(evolutionData.evolution_factors.time_multiplier * 0.8, 1),\n    major_event_chance: Math.min(evolutionData.evolution_factors.major_event_chance * 1.1, 0.5)\n  }\n};\n\nreturn [{ json: summary }];"
+      },
+      "id": "generate-evolution-summary",
+      "name": "Generate Evolution Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2440, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "={{ $vars.GOOGLE_SHEETS_WORLD_SHEET_ID }}",
+        "range": "Evolution_Log!A:G",
+        "options": {}
+      },
+      "id": "log-evolution-activity",
+      "name": "Log Evolution Activity",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2660, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, evolution_cycle_id: $json.evolution_cycle_id, events_processed: $json.statistics.total_events_generated, narrative_summary: $json.narrative_summary, next_evolution: $json.next_evolution_factors } }}"
+      },
+      "id": "final-response",
+      "name": "Final Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2880, 300]
+    }
+  ],
+  "connections": {
+    "World Evolution Trigger": {
+      "main": [
+        [
+          {
+            "node": "Initialize Evolution Cycle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Evolution Cycle": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Fetch Active Campaigns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j - Fetch Active Campaigns": {
+      "main": [
+        [
+          {
+            "node": "Process Campaign Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Campaign Data": {
+      "main": [
+        [
+          {
+            "node": "Process Campaigns Individually",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Campaigns Individually": {
+      "main": [
+        [
+          {
+            "node": "Generate Evolution Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Evolution Events": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek - Generate Narratives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek - Generate Narratives": {
+      "main": [
+        [
+          {
+            "node": "Process Narratives and Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Narratives and Updates": {
+      "main": [
+        [
+          {
+            "node": "Neo4j - Update World State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j - Update World State": {
+      "main": [
+        [
+          {
+            "node": "Notify Campaign System",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Campaign System": {
+      "main": [
+        [
+          {
+            "node": "Generate Evolution Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Evolution Summary": {
+      "main": [
+        [
+          {
+            "node": "Log Evolution Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Evolution Activity": {
+      "main": [
+        [
+          {
+            "node": "Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T13:00:00.000Z",
+      "updatedAt": "2024-10-23T13:00:00.000Z",
+      "id": "world-simulation",
+      "name": "World Simulation"
+    },
+    {
+      "createdAt": "2024-10-23T13:00:00.000Z",
+      "updatedAt": "2024-10-23T13:00:00.000Z",
+      "id": "autonomous",
+      "name": "Autonomous"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T13:00:00.000Z",
+  "versionId": "1.0.0"
+}

@@ -1,0 +1,383 @@
+{
+  "name": "DM Command Center - Central Campaign Management",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dm-command-center",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "dm-command-center"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.action }}",
+              "operation": "equal",
+              "value2": "dashboard"
+            }
+          ]
+        }
+      },
+      "id": "dashboard-router",
+      "name": "Route to Dashboard",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.action }}",
+              "operation": "equal",
+              "value2": "player-management"
+            }
+          ]
+        }
+      },
+      "id": "player-router",
+      "name": "Route to Player Management",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.action }}",
+              "operation": "equal",
+              "value2": "scene-control"
+            }
+          ]
+        }
+      },
+      "id": "scene-router",
+      "name": "Route to Scene Control",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 700]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.action }}",
+              "operation": "equal",
+              "value2": "combat-management"
+            }
+          ]
+        }
+      },
+      "id": "combat-router",
+      "name": "Route to Combat Management",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 900]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.action }}",
+              "operation": "equal",
+              "value2": "loot-distribution"
+            }
+          ]
+        }
+      },
+      "id": "loot-router",
+      "name": "Route to Loot Distribution",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 1100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// DM Dashboard Data Aggregation\nconst campaignId = $input.first().json.campaignId || 'default';\n\n// Fetch campaign overview data\nconst campaignData = {\n  campaignId,\n  sessionCount: Math.floor(Math.random() * 20) + 1,\n  averageSessionLength: '4.5 hours',\n  playerCount: 4,\n  currentLevel: 7,\n  nextMilestone: 'Dragon\'s Lair',\n  storyProgress: 65,\n  worldState: {\n    currentLocation: 'Stormwind Harbor',\n    timeOfDay: 'Evening',\n    weather: 'Stormy',\n    activeQuests: 3,\n    completedQuests: 12\n  },\n  partyStatus: {\n    healthStatus: 'Good',\n    resourceStatus: 'Well-stocked',\n    moraleStatus: 'High',\n    cohesionLevel: 8\n  },\n  recentActivity: [\n    {\n      type: 'combat',\n      description: 'Defeated bandit ambush',\n      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()\n    },\n    {\n      type: 'story',\n      description: 'Discovered ancient prophecy',\n      timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString()\n    },\n    {\n      type: 'social',\n      description: 'Allied with merchant guild',\n      timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()\n    }\n  ],\n  upcomingEvents: [\n    {\n      type: 'planned',\n      title: 'Royal audience',\n      timeframe: 'Next session',\n      importance: 'High'\n    },\n    {\n      type: 'conditional',\n      title: 'Dragon awakening',\n      timeframe: 'When players reach level 8',\n      importance: 'Critical'\n    }\n  ],\n  dmNotes: {\n    plotHooks: ['Mysterious stranger in tavern', 'Strange lights in forest', 'Merchant guild politics'],\n    playerBackstories: ['Seeking lost sister', 'Avenging fallen mentor', 'Proving worth to family', 'Escaping dark past'],\n    secretInformation: ['One player is secretly royalty', 'Ancient artifact is cursed', 'BBG is player\'s uncle']\n  },\n  campaignMetrics: {\n    combatBalance: 75,\n    storyPacing: 80,\n    playerEngagement: 90,\n    worldConsistency: 85,\n    challengeRating: 'Medium',\n    overallHealth: 82\n  }\n};\n\nreturn [{ json: campaignData }];"
+      },
+      "id": "dashboard-data",
+      "name": "Generate Dashboard Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "dashboard-response",
+      "name": "Dashboard Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Player Management System\nconst { action, playerId, characterData, campaignId } = $input.first().json.body;\n\nconst players = [\n  {\n    id: 'player-1',\n    name: 'Aria Starweaver',\n    class: 'Wizard',\n    level: 7,\n    race: 'High Elf',\n    stats: {\n      strength: 8,\n      dexterity: 14,\n      constitution: 12,\n      intelligence: 18,\n      wisdom: 16,\n      charisma: 14\n    },\n    health: {\n      current: 42,\n      maximum: 52,\n      tempHp: 0\n    },\n    resources: {\n      spellSlots: {\n        level1: 4,\n        level2: 3,\n        level3: 3,\n        level4: 2\n      },\n      arcaneRecovery: true,\n      spellPoints: 27\n    },\n    equipment: [\n      { name: 'Staff of Fire', type: 'weapon', rarity: 'rare' },\n      { name: 'Robe of the Archmagi', type: 'armor', rarity: 'very rare' },\n      { name: 'Amulet of Proof Against Detection', type: 'wondrous', rarity: 'uncommon' }\n    ],\n    backstory: 'Seeking knowledge of ancient magic to save her homeland',\n    goals: ['Master ancient spells', 'Find lost spellbook', 'Defeat dark wizard'],\n    relationships: {\n      allies: ['Theron Ironforge', 'Luna Shadowstep'],\n      rivals: ['Silas Darkmere'],\n      family: ['Missing mentor - Elara Moonwhisper']\n    },\n    status: {\n      conditions: [],\n      exhaustion: 0,\n      inspiration: true,\n      deathSaves: {\n        successes: 0,\n        failures: 0\n      }\n    },\n    achievements: [\n      'Defeated the Shadow Dragon',\n      'Saved the Royal Library',\n      'Mastered time magic'\n    ],\n    notes: 'Very interested in ancient artifacts and forbidden knowledge'\n  },\n  {\n    id: 'player-2',\n    name: 'Theron Ironforge',\n    class: 'Fighter',\n    level: 7,\n    race: 'Mountain Dwarf',\n    stats: {\n      strength: 18,\n      dexterity: 12,\n      constitution: 16,\n      intelligence: 10,\n      wisdom: 14,\n      charisma: 12\n    },\n    health: {\n      current: 68,\n      maximum: 78,\n      tempHp: 5\n    },\n    resources: {\n      actionSurge: 1,\n      secondWind: true,\n      superiorityDice: {\n        d8: 4,\n        current: 4\n      }\n    },\n    equipment: [\n      { name: 'Dragonslayer Greataxe', type: 'weapon', rarity: 'rare' },\n      { name: 'Plate Armor of Resistance', type: 'armor', rarity: 'rare' },\n      { name: 'Ring of Protection', type: 'ring', rarity: 'rare' }\n    ],\n    backstory: 'Former royal guard seeking redemption for past failure',\n    goals: ['Protect the innocent', 'Redeem his honor', 'Find the Crown Prince'],\n    relationships: {\n      allies: ['Aria Starweaver'],\n      rivals: ['Captain Valerius'],\n      family: ['Disowned by noble family']\n    },\n    status: {\n      conditions: ['Blessed'],\n      exhaustion: 0,\n      inspiration: false,\n      deathSaves: {\n        successes: 0,\n        failures: 0\n      }\n    },\n    achievements: [\n      'Held the line against orc horde',\n      'Rescued the kidnapped prince',\n      'Became champion of the arena'\n    ],\n    notes: 'Very protective of the party, especially Aria'\n  }\n];\n\nlet response;\n\nswitch (action) {\n  case 'list':\n    response = { players, total: players.length };\n    break;\n  case 'get':\n    const player = players.find(p => p.id === playerId);\n    response = player || { error: 'Player not found' };\n    break;\n  case 'update':\n    // Update player logic would go here\n    response = { success: true, message: 'Player updated successfully' };\n    break;\n  case 'add':\n    // Add new player logic would go here\n    response = { success: true, message: 'Player added successfully' };\n    break;\n  default:\n    response = { error: 'Invalid action' };\n}\n\nreturn [{ json: response }];"
+      },
+      "id": "player-management",
+      "name": "Player Management Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "player-response",
+      "name": "Player Management Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Scene Control and Environment Management\nconst { action, sceneData, campaignId } = $input.first().json.body;\n\nconst scenes = {\n  current: {\n    id: 'scene-001',\n    name: 'The Smoldering Dragon Inn',\n    type: 'social',\n    location: 'Stormwind Harbor District',\n    description: 'A bustling inn filled with sailors, merchants, and adventurers. The air smells of ale, sea salt, and something vaguely like charcoal. A large, imposing figure tends the bar, while shadowy figures occupy the corner booths.',\n    atmosphere: {\n      lighting: 'Warm fireplace glow and candlelight',\n      sounds: 'Drunken singing, maritime chatter, crackling fire',\n      smells: 'Ale, sea salt, roasted meat, smoke',\n      temperature: 'Cozy warm',\n      weather: 'Storm raging outside'\n    },\n    npcs: [\n      {\n        id: 'npc-001',\n        name: 'Morgan Blackmane',\n        role: 'Innkeeper',\n        appearance: '7ft tall, muscular, black beard, missing left eye',\n        personality: 'Gruff but fair, protective of regulars',\n        secrets: ['Former pirate captain', 'Knows players\\' identities'],\n        dialogueOptions: {\n          friendly: 'Welcome, travelers. What can I get you?',\n          suspicious: 'I don\\'t like strangers asking questions.',\n          helpful: 'Heard about the trouble up at the old tower?'\n        }\n      },\n      {\n        id: 'npc-002',\n        name: 'Silas Darkmere',\n        role: 'Mysterious patron',\n        appearance: 'Tall, slender, dark cloak, silver ring on left hand',\n        personality: 'Observant, calculating, dangerous',\n        secrets: ['Secretly working for BBG', 'Has players\\' description'],\n        dialogueOptions: {\n          friendly: 'Mind if I join you? I have information you might find valuable.',\n          threatening: 'You\\'re in over your heads, adventurers.',\n          mysterious: 'Some doors, once opened, can never be closed again.'\n        }\n      }\n    ],\n    interactiveObjects: [\n      {\n        name: 'The Quest Board',\n        description: 'A weathered wooden board covered in various notices and posters',\n        interactions: ['Read notices', 'Post quest', 'Leave message'],\n        hiddenContent: 'One notice has a coded message on the back'\n      },\n      {\n        name: 'Behind the Bar',\n        description: 'A well-stocked bar with various bottles and containers',\n        interactions: ['Order drinks', 'Ask for information', 'Search for clues'],\n        hiddenContent: 'Secret compartment with illegal goods'\n      }\n    ],\n    exits: [\n      { direction: 'North', destination: 'Harbor docks', description: 'Heavy oak door', locked: false },\n      { direction: 'East', destination: 'Market street', description: 'Wooden door', locked: false },\n      { direction: 'Upstairs', destination: 'Inn rooms', description: 'Wooden staircase', locked: false }\n    ],\n    events: [\n      {\n        trigger: 'players arrive',\n        description: 'All conversation stops as patrons turn to look at newcomers',\n        consequence: 'Players notice Silas watching them intently'\n      },\n      {\n        trigger: 'mention of dragons',\n        description: 'Morgan stiffens and his hand goes to his weapon',\n        consequence: 'Morgan reveals he fought a dragon years ago'\n      }\n    ],\n    lighting: {\n      level: 'Dim',\n      sources: ['Fireplace', 'Candles', 'Magical lanterns'],\n      shadows: 'Heavy shadows in corners and booths'\n    },\n    terrain: {\n      type: 'Indoor',\n      surface: 'Wooden floor',\n      obstacles: ['Tables', 'Chairs', 'Bar counter'],\n      cover: 'Full cover behind bar, partial cover behind tables'\n    },\n    audioAtmosphere: {\n      backgroundMusic: 'TavernAmbience.mp3',\n      soundEffects: ['Fire crackling', 'Glasses clinking', 'Distant thunder'],\n      ambientNoise: 'Medium crowd chatter'\n    },\n    visualEffects: {\n      lighting: 'Warm orange glow from fireplace',\n      particles: 'Steam from hot drinks',\n      weather: 'Rain streaking down windows'\n    }\n  },\n  transitions: [\n    {\n      from: 'scene-001',\n      to: 'scene-002',\n      trigger: 'players decide to investigate tower',\n      method: 'Travel montage',\n      duration: '30 minutes'\n    }\n  ]\n};\n\nlet response;\n\nswitch (action) {\n  case 'getCurrent':\n    response = scenes.current;\n    break;\n  case 'update':\n    response = { success: true, message: 'Scene updated successfully', scene: sceneData };\n    break;\n  case 'transition':\n    response = { success: true, message: 'Scene transition initiated', transition: scenes.transitions[0] };\n    break;\n  case 'addEvent':\n    response = { success: true, message: 'Event added to scene' };\n    break;\n  default:\n    response = { error: 'Invalid action' };\n}\n\nreturn [{ json: response }];"
+      },
+      "id": "scene-control",
+      "name": "Scene Control Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "scene-response",
+      "name": "Scene Control Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 700]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combat Encounter Management\nconst { action, combatData, campaignId } = $input.first().json.body;\n\nconst combatState = {\n  encounter: {\n    id: 'combat-001',\n    name: 'Inn Brawl with Dark Assassins',\n    difficulty: 'Medium',\n    cr: 6,\n    participants: {\n      party: [\n        {\n          id: 'player-1',\n          name: 'Aria Starweaver',\n          initiative: 16,\n          position: { x: 10, y: 15 },\n          status: 'active',\n          conditions: [],\n          reactions: 1,\n          legendaryActions: 0\n        },\n        {\n          id: 'player-2',\n          name: 'Theron Ironforge',\n          initiative: 12,\n          position: { x: 8, y: 12 },\n          status: 'active',\n          conditions: [],\n          reactions: 1,\n          legendaryActions: 0\n        }\n      ],\n      enemies: [\n        {\n          id: 'enemy-1',\n          name: 'Shadow Assassin',\n          type: 'assassin',\n          cr: 5,\n          hp: { current: 45, maximum: 66 },\n          ac: 17,\n          initiative: 18,\n          position: { x: 15, y: 20 },\n          status: 'active',\n          conditions: [],\n          reactions: 1,\n          abilities: {\n            actions: ['Multiattack', 'Sneak Attack', 'Dagger Throw'],\n            bonusActions: ['Hide', 'Disengage'],\n            reactions: ['Uncanny Dodge'],\n            specialAbilities: ['Assassinate', 'Evasion']\n          }\n        },\n        {\n          id: 'enemy-2',\n          name: 'Shadow Assassin',\n          type: 'assassin',\n          cr: 5,\n          hp: { current: 52, maximum: 66 },\n          ac: 17,\n          initiative: 14,\n          position: { x: 12, y: 18 },\n          status: 'active',\n          conditions: [],\n          reactions: 1,\n          abilities: {\n            actions: ['Multiattack', 'Sneak Attack', 'Dagger Throw'],\n            bonusActions: ['Hide', 'Disengage'],\n            reactions: ['Uncanny Dodge'],\n            specialAbilities: ['Assassinate', 'Evasion']\n          }\n        }\n      ]\n    },\n    turnOrder: ['enemy-1', 'player-1', 'enemy-2', 'player-2'],\n    currentTurn: 'enemy-1',\n    round: 1,\n    environment: {\n      lighting: 'Dim',\n      terrain: 'Indoor - Tavern',\n      cover: {\n        'player-1': 'Partial (table)',\n        'player-2': 'Full (bar)',\n        'enemy-1': 'Partial (shadow)',\n        'enemy-2': 'Full (pillar)'\n      },\n      hazards: ['Spilled ale (difficult terrain)', 'Broken bottles (damage 1 piercing)'],\n      interactiveObjects: ['Tables (can be flipped for cover)', 'Chairs (can be thrown)', 'Bar (full cover)']\n    },\n    objectives: {\n      party: ['Defeat assassins', 'Protect innocent patrons', 'Capture one for questioning'],\n      enemies: ['Eliminate targets', 'Escape if overwhelmed', 'Retrieve artifact']\n    },\n    victoryConditions: ['All enemies defeated', 'Enemies flee', 'Objectives completed'],\n    defeatConditions: ['All party members unconscious', 'Party flees', 'Critical NPC killed']\n  },\n  combatLog: [\n    {\n      round: 1,\n      turn: 'enemy-1',\n      action: 'Shadow Assassin attacks Aria with daggers',\n      result: 'Hit! 12 piercing damage',\n      timestamp: new Date().toISOString()\n    }\n  ]\n};\n\nlet response;\n\nswitch (action) {\n  case 'getState':\n    response = combatState;\n    break;\n  case 'rollInitiative':\n    response = { success: true, message: 'Initiative rolled for all participants' };\n    break;\n  case 'nextTurn':\n    response = { success: true, message: 'Turn advanced', nextTurn: 'player-1' };\n    break;\n  case 'applyDamage':\n    response = { success: true, message: 'Damage applied', target: combatData.targetId, damage: combatData.damage };\n    break;\n  case 'addCondition':\n    response = { success: true, message: 'Condition added', target: combatData.targetId, condition: combatData.condition };\n    break;\n  case 'useAbility':\n    response = { success: true, message: 'Ability used', character: combatData.characterId, ability: combatData.ability };\n    break;\n  case 'endCombat':\n    response = { success: true, message: 'Combat ended', result: combatData.result || 'victory' };\n    break;\n  default:\n    response = { error: 'Invalid action' };\n}\n\nreturn [{ json: response }];"
+      },
+      "id": "combat-management",
+      "name": "Combat Management Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 900]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "combat-response",
+      "name": "Combat Management Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 900]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loot and Reward Distribution System\nconst { action, lootData, campaignId } = $input.first().json.body;\n\nconst lootSystem = {\n  encounter: {\n    id: 'loot-001',\n    source: 'Shadow Assassins',\n    sourceType: 'humanoid',\n    cr: 5,\n    partySize: 4,\n    partyLevel: 7,\n    totalValue: 850,\n    distributionMethod: 'balanced',\n    items: [\n      {\n        id: 'item-001',\n        name: 'Shadow-Infused Dagger',\n        type: 'weapon',\n        rarity: 'rare',\n        value: 250,\n        properties: ['Finesse', 'Light', 'Thrown'],\n        magicalProperties: {\n          bonus: 2,\n          effects: ['+2d6 necrotic damage against creatures in darkness', 'Advantage on Stealth checks'],\n          attunement: false\n        },\n        description: 'A dark dagger that seems to absorb light. The hilt is wrapped in shadowy material that never quite settles.',\n        identified: false,\n        cursed: false,\n        intelligent: false,\n        sentience: null\n      },\n      {\n        id: 'item-002',\n        name: 'Assassin\'s Mask',\n        type: 'wondrous',\n        rarity: 'uncommon',\n        value: 150,\n        slot: 'head',\n        properties: ['Stealth enhancement'],\n        magicalProperties: {\n          bonus: 0,\n          effects: ['Advantage on Dexterity (Stealth) checks', 'Cannot be recognized while worn'],\n          attunement: false\n        },\n        description: 'A featureless black mask that seems to shift and change when not looked at directly.',\n        identified: false,\n        cursed: false,\n        intelligent: false,\n        sentience: null\n      },\n      {\n        id: 'item-003',\n        name: 'Pouch of Platinum',\n        type: 'currency',\n        rarity: 'common',\n        value: 200,\n        properties: ['Container'],\n        contents: {\n          platinum: 4,\n          gold: 20,\n          silver: 50,\n          copper: 100\n        },\n        description: 'A leather pouch containing various coins.',\n        identified: true,\n        cursed: false,\n        intelligent: false,\n        sentience: null\n      },\n      {\n        id: 'item-004',\n        name: 'Mysterious Note',\n        type: 'document',\n        rarity: 'common',\n        value: 50,\n        properties: ['Plot hook', 'Information'],\n        content: 'The target stays at the Smoldering Dragon. Eliminate before dawn. Payment upon confirmation. - S',\n        description: 'A coded message written in elegant script on expensive parchment.',\n        identified: true,\n        cursed: false,\n        intelligent: false,\n        sentience: null\n      },\n      {\n        id: 'item-005',\n        name: 'Potion of Invisibility',\n        type: 'potion',\n        rarity: 'uncommon',\n        value: 200,\n        properties: ['Consumable', 'Magical'],\n        effects: ['Invisible for 1 hour'],\n        duration: '1 hour',\n        description: 'A clear liquid that shimmers slightly when shaken.',\n        identified: false,\n        cursed: false,\n        intelligent: false,\n        sentience: null\n      }\n    ]\n  },\n  distribution: {\n    method: 'balanced',\n    criteria: ['class suitability', 'player needs', 'fairness', 'story relevance'],\n    recommendations: [\n      {\n        playerId: 'player-1',\n        playerName: 'Aria Starweaver',\n        class: 'Wizard',\n        recommendedItems: ['item-005', 'item-002'],\n        reasoning: 'Wizard benefits from stealth and infiltration tools, potion provides tactical advantage'\n      },\n      {\n        playerId: 'player-2',\n        playerName: 'Theron Ironforge',\n        class: 'Fighter',\n        recommendedItems: ['item-001'],\n        reasoning: 'Fighter can use magical weapon effectively, shadow damage synergizes with stealth tactics'\n      }\n    ],\n    splitMethod: 'group',\n    currencySplit: {\n      platinum: 1,\n      gold: 5,\n      silver: 12,\n      copper: 25\n    }\n  },\n  identification: {\n    required: ['item-001', 'item-002', 'item-005'],\n    skills: {\n      'item-001': { skill: 'Arcana', dc: 15, character: 'Aria Starweaver' },\n      'item-002': { skill: 'Investigation', dc: 13, character: 'Theron Ironforge' },\n      'item-005': { skill: 'Nature', dc: 14, character: 'Aria Starweaver' }\n    },\n    services: {\n      available: true,\n      cost: 100,\n      location: 'Local wizard tower',\n      timeRequired: '1 day'\n    }\n  },\n  selling: {\n    values: {\n      'item-001': { sell: 150, buy: 300 },\n      'item-002': { sell: 90, buy: 180 },\n      'item-005': { sell: 120, buy: 240 }\n    },\n    merchants: [\n      {\n        name: 'Elara Moonwhisper',\n        type: 'Magic Shop',\n        location: 'Wizard Tower',\n        discount: 10,\n        reputation: 'trustworthy'\n      },\n      {\n        name: 'Grimlock',\n        type: 'Fence',\n        location: 'Underground Market',\n        discount: 0,\n        reputation: 'dangerous but fair'\n      }\n    ]\n  }\n};\n\nlet response;\n\nswitch (action) {\n  case 'getLoot':\n    response = lootSystem;\n    break;\n  case 'distribute':\n    response = { success: true, message: 'Loot distributed according to recommendations', distribution: lootSystem.distribution };\n    break;\n  case 'identify':\n    response = { success: true, message: 'Item identification initiated', requirements: lootSystem.identification };\n    break;\n  case 'sell':\n    response = { success: true, message: 'Item sold', value: lootData.value, merchant: lootData.merchant };\n    break;\n  case 'custom':\n    response = { success: true, message: 'Custom loot distribution applied', customDistribution: lootData.customDistribution };\n    break;\n  default:\n    response = { error: 'Invalid action' };\n}\n\nreturn [{ json: response }];"
+      },
+      "id": "loot-distribution",
+      "name": "Loot Distribution Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 1100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "loot-response",
+      "name": "Loot Distribution Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 1100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\": \"Invalid action specified\"}"
+      },
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 1300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Route to Dashboard",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route to Player Management",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route to Scene Control",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route to Combat Management",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route to Loot Distribution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Generate Dashboard Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Dashboard Data": {
+      "main": [
+        [
+          {
+            "node": "Dashboard Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to Player Management": {
+      "main": [
+        [
+          {
+            "node": "Player Management Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Player Management Handler": {
+      "main": [
+        [
+          {
+            "node": "Player Management Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to Scene Control": {
+      "main": [
+        [
+          {
+            "node": "Scene Control Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scene Control Handler": {
+      "main": [
+        [
+          {
+            "node": "Scene Control Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to Combat Management": {
+      "main": [
+        [
+          {
+            "node": "Combat Management Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combat Management Handler": {
+      "main": [
+        [
+          {
+            "node": "Combat Management Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to Loot Distribution": {
+      "main": [
+        [
+          {
+            "node": "Loot Distribution Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loot Distribution Handler": {
+      "main": [
+        [
+          {
+            "node": "Loot Distribution Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "tag-dm-tools",
+      "name": "DM Tools"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

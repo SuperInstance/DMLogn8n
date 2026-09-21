@@ -1,0 +1,290 @@
+{
+  "name": "Solution Architecture Generator - Complete Automation Packages",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "solution-architecture",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-solution-architecture",
+      "name": "Solution Architecture Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "solution-architecture-generator"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse solution architecture request\nconst request = $input.first().json;\n\n// Required fields validation\nif (!request.automation_request) {\n  return [{\n    json: {\n      error: 'Missing required field: automation_request',\n      status: 'invalid_request'\n    }\n  }];\n}\n\n// Build comprehensive architecture context\nconst context = {\n  request_id: generateRequestId(),\n  timestamp: new Date().toISOString(),\n  automation_request: request.automation_request,\n  character_context: {\n    character_id: request.character_context?.character_id || 'unknown',\n    character_class: request.character_context?.character_class || 'unknown',\n    character_level: request.character_context?.character_level || 1,\n    party_role: request.character_context?.party_role || 'member',\n    play_style: request.character_context?.play_style || 'balanced'\n  },\n  business_logic: request.business_logic_result || {},\n  technical_requirements: request.technical_requirements || {},\n  architecture_options: {\n    complexity_level: request.complexity_level || 'medium',\n    integration_scope: request.integration_scope || 'standard',\n    performance_requirements: request.performance_requirements || 'standard',\n    error_handling_level: request.error_handling_level || 'comprehensive',\n    testing_level: request.testing_level || 'standard',\n    documentation_level: request.documentation_level || 'comprehensive'\n  },\n  delivery_preferences: {\n    include_explanations: request.include_explanations !== false,\n    include_setup_instructions: request.include_setup_instructions !== false,\n    include_usage_examples: request.include_usage_examples !== false,\n    include_troubleshooting: request.include_troubleshooting !== false,\n    format_preference: request.format_preference || 'character_friendly'\n  }\n};\n\nfunction generateRequestId() {\n  return 'sar_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);\n}\n\nreturn [{\n  json: context\n}];"
+      },
+      "id": "code-parse-architecture-request",
+      "name": "Parse Architecture Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create architecture blueprint and component mapping\nconst context = $input.first().json;\n\n// Architecture component templates\nconst architectureTemplates = {\n  protection_system: {\n    components: [\n      {\n        name: 'Threat Monitoring Service',\n        purpose: 'Continuously monitor for threats to party members',\n        type: 'monitoring',\n        dependencies: ['party_state_tracker', 'threat_detector'],\n        complexity: 'medium'\n      },\n      {\n        name: 'Protection Decision Engine',\n        purpose: 'Determine optimal protection strategies',\n        type: 'decision_engine',\n        dependencies: ['threat_monitoring', 'character_capabilities'],\n        complexity: 'high'\n      },\n      {\n        name: 'Protection Execution Service',\n        purpose: 'Execute protection abilities and spells',\n        type: 'execution',\n        dependencies: ['protection_decision_engine', 'action_coordinator'],\n        complexity: 'medium'\n      },\n      {\n        name: 'Resource Management Module',\n        purpose: 'Manage spell slots, action economy, and resources',\n        type: 'resource_management',\n        dependencies: ['protection_execution', 'character_state'],\n        complexity: 'low'\n      }\n    ],\n    data_flow: 'threat_monitoring → protection_decision → protection_execution → resource_management',\n    integration_points: ['combat_engine', 'health_tracker', 'party_communicator']\n  },\n  combat_system: {\n    components: [\n      {\n        name: 'Combat Analysis Service',\n        purpose: 'Analyze combat situation and identify opportunities',\n        type: 'analysis',\n        dependencies: ['combat_state_tracker', 'enemy_analyzer'],\n        complexity: 'medium'\n      },\n      {\n        name: 'Target Prioritization Engine',\n        purpose: 'Determine optimal targets for attacks',\n        type: 'decision_engine',\n        dependencies: ['combat_analysis', 'threat_assessment'],\n        complexity: 'high'\n      },\n      {\n        name: 'Attack Coordination Service',\n        purpose: 'Execute attacks and coordinate with party',\n        type: 'execution',\n        dependencies: ['target_prioritization', 'ability_manager'],\n        complexity: 'medium'\n      },\n      {\n        name: 'Combat Resource Optimizer',\n        purpose: 'Optimize use of abilities and resources',\n        type: 'optimization',\n        dependencies: ['attack_coordination', 'resource_tracker'],\n        complexity: 'high'\n      }\n    ],\n    data_flow: 'combat_analysis → target_prioritization → attack_coordination → resource_optimization',\n    integration_points: ['threat_monitoring', 'buff_manager', 'position_tracker']\n  },\n  healing_system: {\n    components: [\n      {\n        name: 'Health Monitoring Service',\n        purpose: 'Monitor party health and detect injuries',\n        type: 'monitoring',\n        dependencies: ['health_tracker', 'condition_detector'],\n        complexity: 'low'\n      },\n      {\n        name: 'Triage Decision Engine',\n        purpose: 'Prioritize healing based on urgency and importance',\n        type: 'decision_engine',\n        dependencies: ['health_monitoring', 'role_analyzer'],\n        complexity: 'high'\n      },\n      {\n        name: 'Healing Execution Service',\n        purpose: 'Cast healing spells and provide medical aid',\n        type: 'execution',\n        dependencies: ['triage_decision', 'spell_manager'],\n        complexity: 'medium'\n      },\n      {\n        name: 'Prevention Planning Service',\n        purpose: 'Anticipate damage and provide preventive healing',\n        type: 'prediction',\n        dependencies: ['threat_analyzer', 'damage_predictor'],\n        complexity: 'high'\n      }\n    ],\n    data_flow: 'health_monitoring → triage_decision → healing_execution → prevention_planning',\n    integration_points: ['protection_system', 'condition_remover', 'buff_manager']\n  },\n  utility_system: {\n    components: [\n      {\n        name: 'Situation Analyzer',\n        purpose: 'Analyze current situation for utility opportunities',\n        type: 'analysis',\n        dependencies: ['environment_tracker', 'opportunity_detector'],\n        complexity: 'medium'\n      },\n      {\n        name: 'Utility Selection Engine',\n        purpose: 'Select optimal utility actions for situations',\n        type: 'decision_engine',\n        dependencies: ['situation_analyzer', 'tool_inventory'],\n        complexity: 'medium'\n      },\n      {\n        name: 'Utility Execution Service',\n        purpose: 'Execute utility skills and abilities',\n        type: 'execution',\n        dependencies: ['utility_selection', 'skill_manager'],\n        complexity: 'low'\n      },\n      {\n        name: 'Problem Solving Coordinator',\n        purpose: 'Coordinate multi-step problem resolution',\n        type: 'coordination',\n        dependencies: ['utility_execution', 'planning_engine'],\n        complexity: 'high'\n      }\n    ],\n    data_flow: 'situation_analyzer → utility_selection → utility_execution → problem_solving',\n    integration_points: ['exploration_system', 'puzzle_solver', 'crafting_system']\n  }\n};\n\n// Determine automation type and select appropriate template\nconst automationType = determineAutomationType(context.automation_request);\nconst selectedTemplate = architectureTemplates[automationType] || architectureTemplates.utility_system;\n\nfunction determineAutomationType(request) {\n  const description = (request.description || request.goal || '').toLowerCase();\n  \n  if (description.includes('protect') || description.includes('defend') || description.includes('shield')) {\n    return 'protection_system';\n  }\n  if (description.includes('attack') || description.includes('damage') || description.includes('combat')) {\n    return 'combat_system';\n  }\n  if (description.includes('heal') || description.includes('restore') || description.includes('aid')) {\n    return 'healing_system';\n  }\n  \n  return 'utility_system';\n}\n\n// Create architecture blueprint\nconst architectureBlueprint = {\n  automation_type: automationType,\n  architecture_pattern: 'microservices_with_shared_data',\n  components: selectedTemplate.components.map(component => ({\n    ...component,\n    implementation_priority: calculateImplementationPriority(component),\n    estimated_development_time: estimateDevelopmentTime(component, context.architecture_options.complexity_level),\n    testing_requirements: determineTestingRequirements(component, context.architecture_options.testing_level)\n  })),\n  data_flow: selectedTemplate.data_flow,\n  integration_points: selectedTemplate.integration_points,\n  architecture_decisions: {\n    communication_pattern: 'event_driven',\n    data_storage: 'distributed_with_caching',\n    error_handling: context.architecture_options.error_handling_level,\n    scaling_approach: 'horizontal_with_load_balancing',\n    monitoring_approach: 'comprehensive_with_alerting'\n  },\n  technology_stack: {\n    primary_language: 'python',\n    framework: 'n8n_workflow',\n    ai_integration: 'deepseek_api',\n    data_storage: 'sqlite_with_redis_cache',\n    communication: 'webhook_and_event_bus'\n  }\n};\n\nfunction calculateImplementationPriority(component) {\n  if (component.type === 'monitoring' || component.type === 'decision_engine') return 'high';\n  if (component.type === 'execution') return 'high';\n  if (component.type === 'resource_management') return 'medium';\n  return 'low';\n}\n\nfunction estimateDevelopmentTime(component, complexityLevel) {\n  const baseTime = {\n    monitoring: 2,\n    analysis: 3,\n    decision_engine: 5,\n    execution: 4,\n    resource_management: 2,\n    optimization: 4,\n    prediction: 6,\n    coordination: 5\n  };\n  \n  const complexityMultipliers = {\n    simple: 0.8,\n    medium: 1.0,\n    complex: 1.5,\n    enterprise: 2.0\n  };\n  \n  return Math.ceil(baseTime[component.type] * complexityMultipliers[complexityLevel]);\n}\n\nfunction determineTestingRequirements(component, testingLevel) {\n  const requirements = ['unit_tests'];\n  \n  if (testingLevel === 'comprehensive' || testingLevel === 'advanced') {\n    requirements.push('integration_tests', 'performance_tests');\n  }\n  \n  if (component.type === 'decision_engine' || component.type === 'execution') {\n    requirements.push('scenario_tests', 'edge_case_tests');\n  }\n  \n  if (testingLevel === 'advanced') {\n    requirements.push('load_tests', 'security_tests');\n  }\n  \n  return requirements;\n}\n\nreturn [{\n  json: {\n    ...context,\n    architecture_blueprint: architectureBlueprint,\n    implementation_strategy: 'phased_deployment_with_rollback'\n  }\n}];"
+      },
+      "id": "code-create-architecture-blueprint",
+      "name": "Create Architecture Blueprint",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate comprehensive solution architecture prompt\nconst context = $input.first().json;\n\nconst architecturePrompt = `\nYou are an expert Solution Architecture AI that designs complete automation systems for D&D characters. Your role is to create comprehensive, production-ready solutions that are both technically sound and character-friendly.\n\n## Request Details:\n- Request ID: ${context.request_id}\n- Character Class: ${context.character_context.character_class}\n- Character Level: ${context.character_context.character_level}\n- Party Role: ${context.character_context.party_role}\n- Play Style: ${context.character_context.play_style}\n\n## Automation Request:\n${JSON.stringify(context.automation_request, null, 2)}\n\n## Architecture Blueprint:\n- Automation Type: ${context.architecture_blueprint.automation_type}\n- Architecture Pattern: ${context.architecture_blueprint.architecture_pattern}\n- Components: ${context.architecture_blueprint.components.length}\n- Data Flow: ${context.architecture_blueprint.data_flow}\n- Integration Points: ${context.architecture_blueprint.integration_points.join(', ')}\n\n## Architecture Components:\n${context.architecture_blueprint.components.map((comp, idx) => \n  `\\n### Component ${idx + 1}: ${comp.name}\\n- Purpose: ${comp.purpose}\\n- Type: ${comp.type}\\n- Priority: ${comp.implementation_priority}\\n- Complexity: ${comp.complexity}\\n- Development Time: ${comp.estimated_development_time} units\\n- Dependencies: ${comp.dependencies.join(', ')}`).join('\\n')}\n\n## Technology Stack:\n- Primary Language: ${context.architecture_blueprint.technology_stack.primary_language}\n- Framework: ${context.architecture_blueprint.technology_stack.framework}\n- AI Integration: ${context.architecture_blueprint.technology_stack.ai_integration}\n- Data Storage: ${context.architecture_blueprint.technology_stack.data_storage}\n\n## Architecture Decisions:\n${Object.entries(context.architecture_blueprint.architecture_decisions).map(([key, value]) => \n  `- ${key.replace(/_/g, ' ')}: ${value}`).join('\\n')}\n\n## Your Task:\nCreate a comprehensive solution architecture that includes:\n\n1. **Detailed Architecture Design**: Complete technical specifications\n2. **Implementation Roadmap**: Step-by-step development plan\n3. **Integration Specifications**: How components work together\n4. **Code Generation**: Actual working code implementation\n5. **Documentation**: Character-friendly explanations\n6. **Testing Strategy**: Comprehensive testing approach\n7. **Deployment Plan**: How to deploy and maintain the solution\n8. **Character Interface**: How the character interacts with the system\n\n## Response Format (JSON):\n{\n  \"architecture_design\": {\n    \"system_overview\": \"high-level system description\",\n    \"component_details\": [\n      {\n        \"component_name\": \"component identifier\",\n        \"technical_specifications\": {\n          \"purpose\": \"detailed purpose description\",\n          \"functionality\": [\"list of specific functions\"],\n          \"interfaces\": [\"API endpoints and interfaces\"],\n          \"data_structures\": [\"key data structures\"],\n          \"algorithms\": [\"important algorithms used\"]\n        },\n        \"implementation_details\": {\n          \"code_structure\": \"organization of code\",\n          \"key_functions\": [\"important functions to implement\"],\n          \"data_flow\": \"how data flows through component\",\n          \"error_handling\": \"error handling strategies\",\n          \"performance_considerations\": \"performance optimization strategies\"\n        }\n      }\n    ],\n    \"integration_architecture\": {\n      \"communication_patterns\": [\"how components communicate\"],\n      \"data_exchange_formats\": [\"data formats for communication\"],\n      \"event_driven_architecture\": \"event system design\",\n      \"service_discovery\": \"how services find each other\"\n    }\n  },\n  \"implementation_roadmap\": {\n    \"development_phases\": [\n      {\n        \"phase_name\": \"phase identifier\",\n        \"objectives\": [\"phase objectives\"],\n        \"components_to_build\": [\"components in this phase\"],\n        \"deliverables\": [\"what will be delivered\"],\n        \"testing_approach\": \"how to test this phase\",\n        \"estimated_duration\": \"time estimate\",\n        \"dependencies\": [\"what this phase depends on\"]\n      }\n    ],\n    \"milestone_definitions\": [\"key project milestones\"],\n    \"risk_mitigation\": [\"how to handle project risks\"]\n  },\n  \"code_generation\": {\n    \"complete_codebase\": {\n      \"main_entry_point\": \"main script or workflow\",\n      \"component_implementations\": [\n        {\n          \"component_name\": \"component identifier\",\n          \"code\": \"complete working code\",\n          \"dependencies\": [\"required dependencies\"],\n          \"configuration\": \"configuration needed\"\n        }\n      ],\n      \"integration_code\": \"code that connects components\",\n      \"configuration_files\": \"configuration and setup files\"\n    },\n    \"character_interface\": {\n      \"interaction_methods\": [\"how character interacts with system\"],\n      \"command_structure\": \"commands and syntax\",\n      \"feedback_systems\": \"how system provides feedback\",\n      \"customization_options\": [\"what character can customize\"]\n    }\n  },\n  \"documentation_package\": {\n    \"character_friendly_guide\": {\n      \"what_this_does\": \"simple explanation for character\",\n      \"how_to_use_it\": \"step-by-step usage instructions\",\n      \"when_it_activates\": \"clear activation conditions\",\n      \"what_to_expect\": \"what character should expect\",\n      \"troubleshooting\": \"simple troubleshooting steps\"\n    },\n    \"technical_documentation\": {\n      \"architecture_overview\": \"technical architecture description\",\n      \"api_documentation\": \"API and interface documentation\",\n      \"deployment_guide\": \"how to deploy the system\",\n      \"maintenance_guide\": \"how to maintain and update\"\n    },\n    \"setup_instructions\": {\n      \"installation_steps\": [\"step-by-step installation\"],\n      \"configuration_steps\": [\"configuration requirements\"],\n      \"testing_procedures\": [\"how to test installation\"],\n      \"validation_checklist\": [\"checklist to verify setup\"]\n    }\n  },\n  \"testing_strategy\": {\n    \"testing_levels\": {\n      \"unit_tests\": \"unit testing approach\",\n      \"integration_tests\": \"integration testing approach\",\n      \"system_tests\": \"system testing approach\",\n      \"performance_tests\": \"performance testing approach\"\n    },\n    \"test_scenarios\": [\"important test scenarios\"],\n    \"automation_testing\": \"how testing is automated\",\n    \"quality_assurance\": \"quality assurance procedures\"\n  },\n  \"deployment_plan\": {\n    \"deployment_strategy\": \"overall deployment approach\",\n    \"environment_setup\": \"how to set up deployment environment\",\n    \"deployment_steps\": [\"step-by-step deployment process\"],\n    \"rollback_procedures\": \"how to rollback if needed\",\n    \"monitoring_setup\": \"how to set up monitoring\",\n    \"maintenance_procedures\": \"ongoing maintenance procedures\"\n  },\n  \"success_metrics\": {\n    \"performance_metrics\": [\"how to measure performance\"],\n    \"reliability_metrics\": [\"how to measure reliability\"],\n    \"user_satisfaction_metrics\": [\"how to measure character satisfaction\"],\n    \"business_value_metrics\": [\"how to measure business value\"]\n  }\n}\n\nFocus on creating a complete, production-ready solution that characters can actually use to improve their gameplay experience. The code should be functional and the documentation should be clear for both technical and non-technical users.`;\n\nreturn [{\n  json: {\n    ...context,\n    deepseek_prompt: architecturePrompt,\n    analysis_type: 'solution_architecture_generation'\n  }\n}];"
+      },
+      "id": "code-architecture-prompt",
+      "name": "Create Architecture Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer sk-3b0251d9943549a2b475eb9e57e46ee6"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "deepseek-chat"
+            },
+            {
+              "name": "messages",
+              "value": "=[{\"role\": \"user\", \"content\": \"{{ $json.deepseek_prompt }}\"}]"
+            },
+            {
+              "name": "max_tokens",
+              "value": "=4000"
+            },
+            {
+              "name": "temperature",
+              "value": "=0.6"
+            },
+            {
+              "name": "response_format",
+              "value": "={\"type\": \"json_object\"}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-solution-generation",
+      "name": "Generate Solution Architecture",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process and validate solution architecture generation\nconst aiResponse = $input.first().json;\nconst originalContext = items.find(item => item.json.deepseek_prompt)?.json;\n\nif (!aiResponse.choices || !aiResponse.choices[0]?.message?.content) {\n  return [{\n    json: {\n      error: 'Invalid AI response from solution architecture generation',\n      status: 'ai_error'\n    }\n  }];\n}\n\ntry {\n  const solutionResult = JSON.parse(aiResponse.choices[0].message.content);\n  \n  // Validate and enhance the solution\n  const enhancedSolution = {\n    solution_id: generateSolutionId(),\n    request_id: originalContext.request_id,\n    character_id: originalContext.character_context.character_id,\n    session_id: originalContext.character_context.character_id + '_' + Date.now(),\n    timestamp: new Date().toISOString(),\n    automation_type: originalContext.architecture_blueprint.automation_type,\n    solution_architecture: solutionResult,\n    implementation_plan: createImplementationPlan(solutionResult, originalContext),\n    quality_assurance: performQualityAssurance(solutionResult),\n    deployment_package: createDeploymentPackage(solutionResult, originalContext),\n    character_experience: designCharacterExperience(solutionResult, originalContext),\n    success_metrics: defineSuccessMetrics(solutionResult, originalContext),\n    next_actions: generateNextActions(solutionResult, originalContext),\n    metadata: {\n      ai_provider: 'deepseek',\n      model: 'deepseek-chat',\n      tokens_used: aiResponse.usage?.total_tokens || 0,\n      generation_time: Date.now() - new Date(originalContext.timestamp).getTime(),\n      architecture_complexity: originalContext.architecture_blueprint.components.length,\n      documentation_level: originalContext.delivery_preferences.documentation_level\n    }\n  };\n  \n  function generateSolutionId() {\n    return 'sol_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);\n  }\n  \n  function createImplementationPlan(solution, context) {\n    const phases = solution.implementation_roadmap?.development_phases || [];\n    return {\n      total_phases: phases.length,\n      estimated_total_time: phases.reduce((sum, phase) => {\n        const duration = parseInt(phase.estimated_duration) || 0;\n        return sum + duration;\n      }, 0),\n      critical_path: identifyCriticalPath(phases),\n      resource_requirements: calculateResourceRequirements(solution, context),\n      risk_assessment: assessImplementationRisks(phases),\n      quality_gates: defineQualityGates(phases)\n    };\n  }\n  \n  function performQualityAssurance(solution) {\n    return {\n      code_quality_checks: [\n        'syntax_validation',\n        'dependency_analysis',\n        'security_review',\n        'performance_analysis'\n      ],\n      architecture_validation: [\n        'component_integrity',\n        'integration_completeness',\n        'scalability_assessment',\n        'error_handling_coverage'\n      ],\n      documentation_review: [\n        'completeness_check',\n        'clarity_assessment',\n        'accuracy_verification',\n        'usability_evaluation'\n      ],\n      test_coverage: calculateTestCoverage(solution),\n      overall_quality_score: calculateOverallQualityScore(solution)\n    };\n  }\n  \n  function createDeploymentPackage(solution, context) {\n    return {\n      package_contents: [\n        'source_code',\n        'configuration_files',\n        'documentation',\n        'testing_suite',\n        'deployment_scripts',\n        'monitoring_setup'\n      ],\n      deployment_strategy: solution.deployment_plan?.deployment_strategy || 'phased',\n      environment_requirements: {\n        'n8n_version': '>=1.0.0',\n        'python_version': '>=3.8',\n        'memory_requirement': '>=512MB',\n        'storage_requirement': '>=100MB'\n      },\n      installation_complexity: assessInstallationComplexity(solution),\n      rollback_procedures: solution.deployment_plan?.rollback_procedures || [],\n      monitoring_setup: solution.deployment_plan?.monitoring_setup || []\n    };\n  }\n  \n  function designCharacterExperience(solution, context) {\n    const interface = solution.code_generation?.character_interface || {};\n    return {\n      interaction_methods: interface.interaction_methods || ['voice_commands', 'menu_interface'],\n      learning_curve: 'gentle_with_guidance',\n      customization_options: interface.customization_options || [],\n      feedback_systems: interface.feedback_systems || ['visual_notifications', 'status_messages'],\n      help_system: {\n        'in_context_help': true,\n        'tutorial_mode': true,\n        'troubleshooting_guide': true,\n        'community_support': true\n      },\n      accessibility_features: [\n        'simple_language',\n        'visual_indicators',\n        'audio_feedback',\n        'keyboard_navigation'\n      ]\n    };\n  }\n  \n  function defineSuccessMetrics(solution, context) {\n    const metrics = solution.success_metrics || {};\n    return {\n      performance_metrics: metrics.performance_metrics || [\n        'response_time < 2 seconds',\n        'automation_accuracy > 90%',\n        'resource_efficiency > 80%'\n      ],\n      reliability_metrics: metrics.reliability_metrics || [\n        'uptime > 99%',\n        'error_rate < 1%',\n        'recovery_time < 30 seconds'\n      ],\n      user_satisfaction_metrics: metrics.user_satisfaction_metrics || [\n        'ease_of_use_score > 4/5',\n        'effectiveness_rating > 4/5',\n        'recommendation_score > 80%'\n      ],\n      business_value_metrics: metrics.business_value_metrics || [\n        'time_saved_per_session',\n        'success_rate_improvement',\n        'character_satisfaction_increase'\n      ]\n    };\n  }\n  \n  function generateNextActions(solution, context) {\n    const actions = [\n      'Review and approve solution architecture',\n      'Set up development environment',\n      'Begin Phase 1 implementation according to roadmap'\n    ];\n    \n    if (context.delivery_preferences.include_setup_instructions) {\n      actions.push('Prepare setup and configuration documentation');\n    }\n    \n    if (context.delivery_preferences.include_usage_examples) {\n      actions.push('Create usage examples and tutorials');\n    }\n    \n    actions.push('Schedule implementation review session');\n    \n    return actions;\n  }\n  \n  // Helper functions\n  function identifyCriticalPath(phases) {\n    return phases.map(phase => phase.phase_name).filter(name => \n      name.includes('core') || name.includes('essential') || name.includes('foundation')\n    );\n  }\n  \n  function calculateResourceRequirements(solution, context) {\n    const components = solution.architecture_design?.component_details?.length || 0;\n    return {\n      development_time: components * 3, // 3 days per component average\n      testing_time: components * 1.5, // 1.5 days testing per component\n      review_time: components * 0.5, // 0.5 days review per component\n      total_estimated_time: components * 5\n    };\n  }\n  \n  function assessImplementationRisks(phases) {\n    return [\n      'Integration complexity between components',\n      'API availability and compatibility',\n      'Performance under load conditions',\n      'Character adoption and learning curve'\n    ];\n  }\n  \n  function defineQualityGates(phases) {\n    return phases.map((phase, index) => ({\n      gate_name: `Phase ${index + 1} Completion Gate`,\n      criteria: [\n        'All components implemented according to specifications',\n        'Integration tests passing',\n        'Documentation complete',\n        'Performance requirements met'\n      ]\n    }));\n  }\n  \n  function calculateTestCoverage(solution) {\n    const components = solution.architecture_design?.component_details?.length || 0;\n    return Math.min(85 + (components * 2), 95); // 85% base + 2% per component\n  }\n  \n  function calculateOverallQualityScore(solution) {\n    let score = 70; // Base score\n    \n    if (solution.architecture_design?.component_details?.length > 0) score += 10;\n    if (solution.code_generation?.complete_codebase) score += 10;\n    if (solution.documentation_package?.character_friendly_guide) score += 5;\n    if (solution.testing_strategy?.test_scenarios?.length > 0) score += 5;\n    \n    return Math.min(score, 100);\n  }\n  \n  function assessInstallationComplexity(solution) {\n    const components = solution.architecture_design?.component_details?.length || 0;\n    if (components <= 2) return 'simple';\n    if (components <= 4) return 'moderate';\n    return 'complex';\n  }\n  \n  return [{\n    json: enhancedSolution\n  }];\n  \n} catch (error) {\n  return [{\n    json: {\n      error: 'Failed to process solution architecture generation',\n      details: error.message,\n      raw_response: aiResponse.choices[0].message.content,\n      status: 'processing_error'\n    }\n  }];\n}"
+      },
+      "id": "code-process-solution",
+      "name": "Process Solution Architecture",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create deployment artifacts and documentation\nconst solution = $input.first().json;\n\n// Create comprehensive deployment package\nconst deploymentArtifacts = {\n  solution_package: {\n    package_id: solution.solution_id,\n    package_name: `${solution.automation_type}_automation_package`,\n    version: '1.0.0',\n    created_at: solution.timestamp,\n    character_id: solution.character_id,\n    package_contents: {\n      source_code: extractSourceCode(solution.solution_architecture),\n      configuration_files: extractConfigurationFiles(solution.solution_architecture),\n      documentation: extractDocumentation(solution.solution_architecture),\n      testing_suite: extractTestingSuite(solution.solution_architecture),\n      deployment_scripts: generateDeploymentScripts(solution),\n      setup_instructions: solution.solution_architecture.documentation_package?.setup_instructions || {}\n    }\n  },\n  character_interface: {\n    interface_type: 'voice_and_menu',\n    activation_commands: generateActivationCommands(solution),\n    status_indicators: generateStatusIndicators(solution),\n    customization_options: generateCustomizationOptions(solution),\n    help_system: generateHelpSystem(solution)\n  },\n  monitoring_setup: {\n    metrics_to_track: generateMetricsToTrack(solution),\n    alert_conditions: generateAlertConditions(solution),\n    dashboard_configuration: generateDashboardConfiguration(solution),\n    logging_configuration: generateLoggingConfiguration(solution)\n  }\n};\n\nfunction extractSourceCode(architecture) {\n  const codebase = architecture.code_generation?.complete_codebase;\n  if (!codebase) return { error: 'No code generated' };\n  \n  return {\n    main_entry_point: codebase.main_entry_point || 'main.py',\n    components: codebase.component_implementations || [],\n    integration_code: codebase.integration_code || '',\n    total_components: codebase.component_implementations?.length || 0,\n    estimated_lines_of_code: estimateLinesOfCode(codebase)\n  };\n}\n\nfunction extractConfigurationFiles(architecture) {\n  return {\n    config_files: architecture.code_generation?.complete_codebase?.configuration_files || [],\n    environment_variables: generateEnvironmentVariables(architecture),\n    default_settings: generateDefaultSettings(architecture)\n  };\n}\n\nfunction extractDocumentation(architecture) {\n  const docs = architecture.documentation_package;\n  return {\n    character_guide: docs?.character_friendly_guide || {},\n    technical_docs: docs?.technical_documentation || {},\n    setup_instructions: docs?.setup_instructions || {},\n    total_documentation_files: countDocumentationFiles(docs)\n  };\n}\n\nfunction extractTestingSuite(architecture) {\n  const testing = architecture.testing_strategy;\n  return {\n    test_levels: testing?.testing_levels || {},\n    test_scenarios: testing?.test_scenarios || [],\n    automation_framework: testing?.automation_testing || 'pytest',\n    estimated_test_coverage: testing?.test_coverage || 80\n  };\n}\n\nfunction generateDeploymentScripts(solution) {\n  return {\n    install_script: 'install.sh',\n    configure_script: 'configure.py',\n    test_script: 'run_tests.py',\n    deploy_script: 'deploy.sh',\n    rollback_script: 'rollback.sh'\n  };\n}\n\nfunction generateActivationCommands(solution) {\n  const automationType = solution.automation_type;\n  const baseCommands = [\n    'Activate automation',\n    'Deactivate automation',\n    'Check status',\n    'Customize settings'\n  ];\n  \n  if (automationType === 'protection_system') {\n    baseCommands.push(\n      'Protect party member',\n      'Set protection priority',\n      'Adjust protection threshold'\n    );\n  } else if (automationType === 'combat_system') {\n    baseCommands.push(\n      'Attack target',\n      'Set combat priority',\n      'Activate combat mode'\n    );\n  } else if (automationType === 'healing_system') {\n    baseCommands.push(\n      'Heal party member',\n      'Set healing priority',\n      'Adjust healing threshold'\n    );\n  }\n  \n  return baseCommands;\n}\n\nfunction generateStatusIndicators(solution) {\n  return [\n    'Automation status (active/inactive)',\n    'System health (good/warning/error)',\n    'Resource usage (low/medium/high)',\n    'Recent activity log',\n    'Performance metrics'\n  ];\n}\n\nfunction generateCustomizationOptions(solution) {\n  return [\n    'Activation sensitivity',\n    'Resource usage limits',\n    'Notification preferences',\n    'Priority settings',\n    'Automation aggressiveness'\n  ];\n}\n\nfunction generateHelpSystem(solution) {\n  return {\n    contextual_help: true,\n    voice_tutorials: true,\n    visual_guides: true,\n    troubleshooting_wizard: true,\n    community_forum_access: true\n  };\n}\n\nfunction generateMetricsToTrack(solution) {\n  return [\n    'automation_success_rate',\n    'response_time',\n    'resource_efficiency',\n    'error_rate',\n    'user_satisfaction_score',\n    'daily_usage_statistics'\n  ];\n}\n\nfunction generateAlertConditions(solution) {\n  return [\n    'error_rate_above_5_percent',\n    'response_time_above_5_seconds',\n    'resource_usage_above_90_percent',\n    'automation_failure',\n    'user_complaint_reported'\n  ];\n}\n\nfunction generateDashboardConfiguration(solution) {\n  return {\n    main_widgets: [\n      'status_overview',\n      'performance_chart',\n      'activity_log',\n      'resource_usage'\n    ],\n    refresh_interval: '30_seconds',\n    data_retention: '30_days'\n  };\n}\n\nfunction generateLoggingConfiguration(solution) {\n  return {\n    log_levels: ['INFO', 'WARNING', 'ERROR'],\n    log_rotation: 'weekly',\n    log_retention: '90_days',\n    log_format: 'structured_json'\n  };\n}\n\n// Helper functions\nfunction estimateLinesOfCode(codebase) {\n  let totalLines = 0;\n  if (codebase.main_entry_point) totalLines += 100;\n  if (codebase.component_implementations) {\n    totalLines += codebase.component_implementations.length * 150;\n  }\n  if (codebase.integration_code) totalLines += 200;\n  return totalLines;\n}\n\nfunction generateEnvironmentVariables(architecture) {\n  return [\n    'DEEPSEEK_API_KEY=your_api_key',\n    'N8N_WEBHOOK_URL=your_webhook_url',\n    'LOG_LEVEL=INFO',\n    'AUTOMATION_MODE=standard'\n  ];\n}\n\nfunction generateDefaultSettings(architecture) {\n  return {\n    automation_enabled: true,\n    response_time_limit: 5000,\n    max_concurrent_operations: 3,\n    notification_enabled: true,\n    logging_enabled: true\n  };\n}\n\nfunction countDocumentationFiles(docs) {\n  let count = 0;\n  if (docs?.character_friendly_guide) count += 1;\n  if (docs?.technical_documentation) count += 1;\n  if (docs?.setup_instructions) count += 1;\n  return count;\n}\n\nreturn [{\n  json: {\n    ...solution,\n    deployment_artifacts: deploymentArtifacts,\n    package_status: 'ready_for_deployment'\n  }\n}];"
+      },
+      "id": "code-create-deployment-package",
+      "name": "Create Deployment Package",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare final solution architecture response\nconst solution = $input.first().json;\n\nconst response = {\n  status: 'success',\n  timestamp: new Date().toISOString(),\n  solution_id: solution.solution_id,\n  request_id: solution.request_id,\n  character_id: solution.character_id,\n  automation_type: solution.automation_type,\n  solution_overview: {\n    system_name: `${solution.automation_type.replace('_', ' ')} Automation System`,\n    purpose: solution.solution_architecture.architecture_design?.system_overview || 'Comprehensive automation solution',\n    components_count: solution.solution_architecture.architecture_design?.component_details?.length || 0,\n    complexity_level: solution.deployment_artifacts?.deployment_package?.estimated_lines_of_code > 1000 ? 'complex' : 'moderate',\n    implementation_phases: solution.implementation_plan?.total_phases || 0,\n    estimated_development_time: solution.implementation_plan?.estimated_total_time || 0\n  },\n  architecture_highlights: {\n    design_pattern: solution.solution_architecture.architecture_design?.integration_architecture?.communication_patterns?.[0] || 'Event-driven',\n    technology_stack: solution.architecture_blueprint?.technology_stack || {},\n    integration_points: solution.architecture_blueprint?.integration_points || [],\n    key_features: extractKeyFeatures(solution)\n  },\n  implementation_plan: {\n    total_phases: solution.implementation_plan?.total_phases || 0,\n    estimated_duration: solution.implementation_plan?.estimated_total_time || 0,\n    critical_path: solution.implementation_plan?.critical_path || [],\n    resource_requirements: solution.implementation_plan?.resource_requirements || {},\n    risk_assessment: solution.implementation_plan?.risk_assessment || []\n  },\n  character_experience: {\n    interaction_methods: solution.character_experience?.interaction_methods || [],\n    learning_curve: solution.character_experience?.learning_curve || 'moderate',\n    customization_options: solution.character_experience?.customization_options || [],\n    help_system: solution.character_experience?.help_system || {}\n  },\n  quality_assurance: {\n    overall_quality_score: solution.quality_assurance?.overall_quality_score || 0,\n    test_coverage: solution.quality_assurance?.test_coverage || 0,\n    code_quality_checks: solution.quality_assurance?.code_quality_checks || [],\n    documentation_review: solution.quality_assurance?.documentation_review || []\n  },\n  deployment_package: {\n    package_id: solution.deployment_artifacts?.solution_package?.package_id || solution.solution_id,\n    installation_complexity: solution.deployment_artifacts?.deployment_package?.installation_complexity || 'moderate',\n    deployment_strategy: solution.deployment_artifacts?.deployment_package?.deployment_strategy || 'phased',\n    monitoring_included: true,\n    rollback_available: true\n  },\n  success_metrics: solution.success_metrics || {},\n  next_actions: solution.next_actions || [],\n  metadata: {\n    tokens_used: solution.metadata.tokens_used,\n    generation_time: solution.metadata.generation_time,\n    architecture_complexity: solution.metadata.architecture_complexity,\n    ai_provider: solution.metadata.ai_provider,\n    lines_of_code_estimated: solution.deployment_artifacts?.deployment_package?.estimated_lines_of_code || 0\n  }\n};\n\nfunction extractKeyFeatures(solution) {\n  const features = [];\n  const architecture = solution.solution_architecture.architecture_design;\n  \n  if (architecture?.component_details) {\n    architecture.component_details.forEach(component => {\n      if (component.technical_specifications?.functionality) {\n        features.push(...component.technical_specifications.functionality);\n      }\n    });\n  }\n  \n  // Return unique features (first 10)\n  return [...new Set(features)].slice(0, 10);\n}\n\nreturn [{\n  json: response\n}];"
+      },
+      "id": "code-prepare-final-response",
+      "name": "Prepare Final Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "webhook-response",
+      "name": "Send Final Response",
+      "type": "n8n-nodes-base.webhookResponse",
+      "typeVersion": 1,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Error handling\nconst error = $input.first().json;\n\nconst errorResponse = {\n  status: 'error',\n  timestamp: new Date().toISOString(),\n  error: error.error || 'Solution architecture generation failed',\n  details: error.details || 'No additional details available',\n  request_id: error.request_id || 'unknown',\n  character_id: error.character_id || 'unknown',\n  suggestions: [\n    'Check the automation request format and completeness',\n    'Ensure character context is properly provided',\n    'Verify that business logic and technical requirements are included',\n    'Try with a simpler automation request',\n    'Check API availability and configuration'\n  ]\n};\n\nreturn [{\n  json: errorResponse\n}];"
+      },
+      "id": "code-error-handling",
+      "name": "Error Handling",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "webhook-error-response",
+      "name": "Send Error Response",
+      "type": "n8n-nodes-base.webhookResponse",
+      "typeVersion": 1,
+      "position": [1560, 500]
+    }
+  ],
+  "connections": {
+    "Solution Architecture Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Architecture Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Architecture Request": {
+      "main": [
+        [
+          {
+            "node": "Create Architecture Blueprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Architecture Blueprint": {
+      "main": [
+        [
+          {
+            "node": "Create Architecture Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Architecture Prompt": {
+      "main": [
+        [
+          {
+            "node": "Generate Solution Architecture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Solution Architecture": {
+      "main": [
+        [
+          {
+            "node": "Process Solution Architecture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Solution Architecture": {
+      "main": [
+        [
+          {
+            "node": "Create Deployment Package",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Deployment Package": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Final Response": {
+      "main": [
+        [
+          {
+            "node": "Send Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handling": {
+      "main": [
+        [
+          {
+            "node": "Send Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T15:30:00.000Z",
+      "updatedAt": "2024-10-23T15:30:00.000Z",
+      "id": "solution-architecture",
+      "name": "Solution Architecture"
+    },
+    {
+      "createdAt": "2024-10-23T15:30:00.000Z",
+      "updatedAt": "2024-10-23T15:30:00.000Z",
+      "id": "automation-generation",
+      "name": "Automation Generation"
+    },
+    {
+      "createdAt": "2024-10-23T15:30:00.000Z",
+      "updatedAt": "2024-10-23T15:30:00.000Z",
+      "id": "character-experience",
+      "name": "Character Experience"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T15:30:00.000Z",
+  "versionId": "1"
+}

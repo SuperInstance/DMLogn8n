@@ -1,0 +1,413 @@
+{
+  "dashboard": {
+    "title": "DMLogn8n Service Discovery Dashboard",
+    "description": "Comprehensive service discovery and agent coordination monitoring",
+    "refreshInterval": 30,
+    "layout": {
+      "sections": [
+        {
+          "id": "overview",
+          "title": "System Overview",
+          "type": "summary",
+          "widgets": [
+            {
+              "id": "cluster-status",
+              "title": "Cluster Status",
+              "type": "status",
+              "dataSource": "cluster-status",
+              "refreshInterval": 10
+            },
+            {
+              "id": "service-count",
+              "title": "Service Statistics",
+              "type": "metric",
+              "dataSource": "service-counts",
+              "refreshInterval": 30
+            },
+            {
+              "id": "agent-status",
+              "title": "AI Agent Status",
+              "type": "agent-status",
+              "dataSource": "agent-coordinator",
+              "refreshInterval": 15
+            }
+          ]
+        },
+        {
+          "id": "services",
+          "title": "Service Management",
+          "type": "services",
+          "widgets": [
+            {
+              "id": "service-list",
+              "title": "Registered Services",
+              "type": "table",
+              "dataSource": "services",
+              "columns": [
+                {"field": "service_name", "label": "Service Name"},
+                {"field": "service_type", "label": "Type"},
+                {"field": "status", "label": "Status"},
+                {"field": "instances", "label": "Instances"},
+                {"field": "last_check", "label": "Last Health Check"}
+              ],
+              "actions": [
+                {"type": "view", "label": "View Details"},
+                {"type": "maintenance", "label": "Maintenance Mode"},
+                {"type": "deregister", "label": "Deregister"}
+              ]
+            },
+            {
+              "id": "service-topology",
+              "title": "Service Topology",
+              "type": "graph",
+              "dataSource": "service-topology",
+              "layout": "force-directed"
+            }
+          ]
+        },
+        {
+          "id": "health",
+          "title": "Health Monitoring",
+          "type": "health",
+          "widgets": [
+            {
+              "id": "health-summary",
+              "title": "Health Summary",
+              "type": "summary-cards",
+              "dataSource": "health-summary",
+              "cards": [
+                {"title": "Healthy Services", "field": "healthy_services"},
+                {"title": "Warning Services", "field": "warning_services"},
+                {"title": "Critical Services", "field": "critical_services"},
+                {"title": "Total Health Checks", "field": "total_checks"}
+              ]
+            },
+            {
+              "id": "health-checks",
+              "title": "Health Checks",
+              "type": "table",
+              "dataSource": "health-checks",
+              "columns": [
+                {"field": "check_id", "label": "Check ID"},
+                {"field": "service_name", "label": "Service"},
+                {"field": "status", "label": "Status"},
+                {"field": "output", "label": "Output"},
+                {"field": "last_execution", "label": "Last Execution"}
+              ],
+              "actions": [
+                {"type": "execute", "label": "Execute Now"},
+                {"type": "configure", "label": "Configure"}
+              ]
+            }
+          ]
+        },
+        {
+          "id": "agents",
+          "title": "AI Agent Coordination",
+          "type": "agents",
+          "widgets": [
+            {
+              "id": "agent-overview",
+              "title": "Agent Overview",
+              "type": "agent-grid",
+              "dataSource": "agent-coordinator",
+              "groupBy": "agent_type",
+              "metrics": [
+                {"field": "current_workload", "label": "Workload"},
+                {"field": "success_rate", "label": "Success Rate"},
+                {"field": "performance_score", "label": "Performance"}
+              ]
+            },
+            {
+              "id": "task-queue",
+              "title": "Task Queue",
+              "type": "task-table",
+              "dataSource": "agent-tasks",
+              "columns": [
+                {"field": "task_id", "label": "Task ID"},
+                {"field": "task_type", "label": "Type"},
+                {"field": "priority", "label": "Priority"},
+                {"field": "status", "label": "Status"},
+                {"field": "assigned_agent", "label": "Assigned Agent"},
+                {"field": "created_at", "label": "Created"}
+              ],
+              "actions": [
+                {"type": "assign", "label": "Assign Agent"},
+                {"type": "cancel", "label": "Cancel"},
+                {"type": "retry", "label": "Retry"}
+              ]
+            },
+            {
+              "id": "collaborations",
+              "title": "Active Collaborations",
+              "type": "collaboration-panel",
+              "dataSource": "agent-collaborations",
+              "showMessages": true,
+              "showParticipants": true
+            }
+          ]
+        },
+        {
+          "id": "configuration",
+          "title": "Configuration Management",
+          "type": "configuration",
+          "widgets": [
+            {
+              "id": "config-browser",
+              "title": "Configuration Browser",
+              "type": "tree-view",
+              "dataSource": "config-kv",
+              "groupBy": "scope",
+              "searchEnabled": true
+            },
+            {
+              "id": "config-editor",
+              "title": "Configuration Editor",
+              "type": "editor",
+              "modes": ["json", "yaml", "env"],
+              "validation": true,
+              "versionHistory": true
+            },
+            {
+              "id": "config-distribution",
+              "title": "Distribution Status",
+              "type": "distribution-map",
+              "dataSource": "config-distribution",
+              "showSubscribers": true
+            }
+          ]
+        },
+        {
+          "id": "load-balancing",
+          "title": "Load Balancing",
+          "type": "load-balancer",
+          "widgets": [
+            {
+              "id": "lb-overview",
+              "title": "Load Balancer Status",
+              "type": "lb-summary",
+              "dataSource": "load-balancer",
+              "showMetrics": true
+            },
+            {
+              "id": "lb-algorithms",
+              "title": "Algorithm Performance",
+              "type": "algorithm-chart",
+              "dataSource": "lb-metrics",
+              "chartType": "performance-comparison"
+            },
+            {
+              "id": "circuit-breakers",
+              "title": "Circuit Breaker Status",
+              "type": "circuit-breaker-grid",
+              "dataSource": "circuit-breakers",
+              "showStateHistory": true
+            }
+          ]
+        },
+        {
+          "id": "metrics",
+          "title": "Metrics & Analytics",
+          "type": "metrics",
+          "widgets": [
+            {
+              "id": "performance-chart",
+              "title": "Performance Trends",
+              "type": "time-series",
+              "dataSource": "metrics",
+              "metrics": [
+                "response_time",
+                "success_rate",
+                "throughput",
+                "error_rate"
+              ],
+              "timeRange": "1h"
+            },
+            {
+              "id": "resource-usage",
+              "title": "Resource Usage",
+              "type": "resource-chart",
+              "dataSource": "resource-metrics",
+              "resources": ["cpu", "memory", "network", "disk"]
+            },
+            {
+              "id": "alerts",
+              "title": "Active Alerts",
+              "type": "alert-panel",
+              "dataSource": "alerts",
+              "groupBy": "severity",
+              "actions": ["acknowledge", "resolve", "escalate"]
+            }
+          ]
+        }
+      ]
+    },
+    "dataSources": {
+      "cluster-status": {
+        "type": "consul-api",
+        "endpoint": "/v1/status/leader",
+        "refreshInterval": 10
+      },
+      "services": {
+        "type": "consul-api",
+        "endpoint": "/v1/catalog/services",
+        "refreshInterval": 30
+      },
+      "service-counts": {
+        "type": "discovery-api",
+        "endpoint": "/metrics/coordinator",
+        "refreshInterval": 30
+      },
+      "agent-coordinator": {
+        "type": "discovery-api",
+        "endpoint": "/agents",
+        "refreshInterval": 15
+      },
+      "health-summary": {
+        "type": "discovery-api",
+        "endpoint": "/health/cluster",
+        "refreshInterval": 30
+      },
+      "health-checks": {
+        "type": "consul-api",
+        "endpoint": "/v1/health/state/any",
+        "refreshInterval": 30
+      },
+      "service-topology": {
+        "type": "discovery-api",
+        "endpoint": "/services/topology",
+        "refreshInterval": 60
+      },
+      "config-kv": {
+        "type": "consul-api",
+        "endpoint": "/v1/kv/dmlogn8n/config?recurse=true",
+        "refreshInterval": 30
+      },
+      "agent-tasks": {
+        "type": "discovery-api",
+        "endpoint": "/agents/tasks",
+        "refreshInterval": 10
+      },
+      "agent-collaborations": {
+        "type": "discovery-api",
+        "endpoint": "/agents/collaborations",
+        "refreshInterval": 15
+      },
+      "load-balancer": {
+        "type": "discovery-api",
+        "endpoint": "/loadbalancer",
+        "refreshInterval": 30
+      },
+      "metrics": {
+        "type": "prometheus",
+        "endpoint": "/api/v1/query_range",
+        "refreshInterval": 60
+      },
+      "resource-metrics": {
+        "type": "node-exporter",
+        "endpoint": "/metrics",
+        "refreshInterval": 30
+      },
+      "alerts": {
+        "type": "alertmanager",
+        "endpoint": "/api/v1/alerts",
+        "refreshInterval": 10
+      }
+    },
+    "actions": {
+      "serviceActions": [
+        {
+          "name": "maintenance-mode",
+          "method": "PUT",
+          "endpoint": "/services/{service_id}/maintenance",
+          "confirm": true
+        },
+        {
+          "name": "deregister",
+          "method": "DELETE",
+          "endpoint": "/services/{service_id}",
+          "confirm": true,
+          "danger": true
+        }
+      ],
+      "healthActions": [
+        {
+          "name": "execute-check",
+          "method": "POST",
+          "endpoint": "/health/checks/{check_id}/execute"
+        }
+      ],
+      "agentActions": [
+        {
+          "name": "assign-task",
+          "method": "POST",
+          "endpoint": "/agents/tasks/{task_id}/assign",
+          "params": ["agent_id"]
+        },
+        {
+          "name": "start-collaboration",
+          "method": "POST",
+          "endpoint": "/agents/collaboration",
+          "params": ["agents", "type", "context"]
+        }
+      ],
+      "configActions": [
+        {
+          "name": "update-config",
+          "method": "PUT",
+          "endpoint": "/config/{key}",
+          "confirm": true
+        },
+        {
+          "name": "rollback-config",
+          "method": "POST",
+          "endpoint": "/config/{key}/rollback",
+          "params": ["version"],
+          "confirm": true
+        }
+      ]
+    },
+    "notifications": {
+      "channels": [
+        {
+          "name": "webhook",
+          "type": "webhook",
+          "config": {
+            "url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+          }
+        },
+        {
+          "name": "email",
+          "type": "email",
+          "config": {
+            "smtp": "smtp.dmlogn8n.local",
+            "recipients": ["alerts@dmlogn8n.local"]
+          }
+        }
+      ],
+      "rules": [
+        {
+          "name": "service-critical",
+          "condition": "service.status == 'critical'",
+          "channels": ["webhook", "email"],
+          "cooldown": "5m"
+        },
+        {
+          "name": "agent-failure",
+          "condition": "agent.success_rate < 0.8",
+          "channels": ["webhook"],
+          "cooldown": "10m"
+        }
+      ]
+    },
+    "theme": {
+      "primary": "#1a73e8",
+      "secondary": "#4285f4",
+      "success": "#34a853",
+      "warning": "#fbbc04",
+      "error": "#ea4335",
+      "background": "#ffffff",
+      "surface": "#f8f9fa"
+    }
+  }
+}

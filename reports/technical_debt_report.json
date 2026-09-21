@@ -1,0 +1,412 @@
+{
+  "generated_date": "2025-10-22T16:12:51.196803",
+  "metrics": {
+    "total_debt_items": 14,
+    "total_effort_hours": 256.0,
+    "total_cost": 0.0,
+    "debt_by_category": {
+      "code_quality": 3,
+      "architecture": 2,
+      "testing": 2,
+      "documentation": 2,
+      "security": 2,
+      "performance": 2,
+      "dependencies": 1
+    },
+    "debt_by_priority": {
+      "medium": 6,
+      "high": 5,
+      "low": 2,
+      "critical": 1
+    },
+    "debt_by_impact": {
+      "productivity": 2,
+      "maintainability": 4,
+      "scalability": 1,
+      "reliability": 2,
+      "security": 3,
+      "performance": 2
+    },
+    "average_age_days": 0.0,
+    "debt_trend": "increasing"
+  },
+  "debt_items": [
+    {
+      "id": "DEBT_001",
+      "title": "TODO Comments in Code",
+      "description": "Multiple TODO comments throughout the codebase indicate unfinished features",
+      "category": "DebtCategory.CODE_QUALITY",
+      "priority": "DebtPriority.MEDIUM",
+      "impact": "DebtImpact.PRODUCTIVITY",
+      "estimated_effort_hours": 8.0,
+      "estimated_cost": 0.0,
+      "interest_rate": 1.1,
+      "files_affected": [
+        "source_code/backend/*.py"
+      ],
+      "components_affected": [],
+      "created_date": "2025-10-22 16:12:51.196614",
+      "last_updated": "2025-10-22 16:12:51.196615",
+      "status": "open",
+      "assignee": null,
+      "due_date": null,
+      "tags": [
+        "cleanup",
+        "todos"
+      ],
+      "mitigation_plan": "",
+      "prevention_strategy": ""
+    },
+    {
+      "id": "DEBT_002",
+      "title": "Long Function Complexity",
+      "description": "Several functions exceed 50 lines and have high cyclomatic complexity",
+      "category": "DebtCategory.CODE_QUALITY",
+      "priority": "DebtPriority.HIGH",
+      "impact": "DebtImpact.MAINTAINABILITY",
+      "estimated_effort_hours": 16.0,
+      "estimated_cost": 0.0,
+      "interest_rate": 1.1,
+      "files_affected": [
+        "source_code/backend/session_manager.py",
+        "source_code/backend/memory_system.py"
+      ],
+      "components_affected": [],
+      "created_date": "2025-10-22 16:12:51.196618",
+      "last_updated": "2025-10-22 16:12:51.196618",
+      "status": "open",
+      "assignee": null,
+      "due_date": null,
+      "tags": [
+        "refactoring",
+        "complexity"
+      ],
+      "mitigation_plan": "",
+      "prevention_strategy": ""
+    },
+    {
+      "id": "DEBT_003",
+      "title": "Magic Numbers and Strings",
+      "description": "Hardcoded values throughout the codebase should be extracted to constants",
+      "category": "DebtCategory.CODE_QUALITY",
+      "priority": "DebtPriority.MEDIUM",
+      "impact": "DebtImpact.MAINTAINABILITY",
+      "estimated_effort_hours": 12.0,
+      "estimated_cost": 0.0,
+      "interest_rate": 1.1,
+      "files_affected": [
+        "source_code/backend/*.py"
+      ],
+      "components_affected": [],
+      "created_date": "2025-10-22 16:12:51.196619",
+      "last_updated": "2025-10-22 16:12:51.196619",
+      "status": "open",
+      "assignee": null,
+      "due_date": null,
+      "tags": [
+        "constants",
+        "cleanup"
+      ],
+      "mitigation_plan": "",
+      "prevention_strategy": ""
+    },
+    {
+      "id": "DEBT_004",
+      "title": "Service Coupling",
+      "description": "AI/ML processing service is tightly coupled with specific implementations",
+      "category": "DebtCategory.ARCHITECTURE",
+      "priority": "DebtPriority.HIGH",
+      "impact": "DebtImpact.SCALABILITY",
+      "estimated_effort_hours": 40.0,
+      "estimated_cost": 0.0,
+      "interest_rate": 1.1,
+      "files_affected": [],
+      "components_affected": [
+        "AI/ML Processing Service"
+      ],
+      "created_date": "2025-10-22 16:12:51.196622",
+      "last_updated": "2025-10-22 16:12:51.196622",
+      "status": "open",
+      "assignee": null,
+      "due_date": null,
+      "tags": [],
+      "mitigation_plan": "Introduce dependency injection and abstraction layers",
+      "prevention_strategy": "Follow SOLID principles and dependency inversion"
+    },
+    {
+      "id": "DEBT_005",
+      "title": "Configuration Management",
+      "description": "Configuration is scattered without central management system",
+      "category": "DebtCategory.ARCHITECTURE",
+      "priority": "DebtPriority.MEDIUM",
+      "impact": "DebtImpact.MAINTAINABILITY",
+      "estimated_effort_hours": 20.0,
+      "estimated_cost": 0.0,
+      "interest_rate": 1.1,
+      "files_affected": [],
+      "components_affected": [
+        "All Services"
+      ],
+      "created_date": "2025-10-22 16:12:51.196623",
+      "last_updated": "2025-10-22 16:12:51.196623",
+      "status": "open",
+      "assignee": null,
+      "due_date": null,
+      "tags": [],
+      "mitigation_plan": "Implement centralized configuration management",
+      "prevention_strategy": "Establish configuration management patterns"
+    },
+    {
+      "id": "DEBT_006",
+      "title": "Insufficient Test Coverage",
+      "description": "Several components have test coverage below 70%",
+      "category": "DebtCategory.TESTING",
+      "priority": "DebtPriority.HIGH",
+      "impact": "DebtImpact.RELIABILITY",
+      "estimated_effort_hours": 32.0,
+      "estimated_cost": 0.0,
+      "interest_rate": 1.1,
+      "files_affected": [],
+      "components_affected": [
+        "AI/ML Processing",
+        "Character Memory System"
+      ],
+      "created_date": "2025-10-22 16:12:51.196625",
+      "last_updated": "2025-10-22 16:12:51.196625",
+      "status": "open",
+      "assignee": null,
+      "due_date": null,
+      "tags": [
+        "testing",
+        "coverage"
+      ],
+      "mitigation_plan": "",
+      "prevention_strategy": ""
+    },
+    {
+      "id": "DEBT_007",
+      "title": "Missing Integration Tests",
+      "description": "Lack comprehensive integration tests for service interactions",
+      "category": "DebtCategory.TESTING",
+      "priority": "DebtPriority.HIGH",
+      "impact": "DebtImpact.RELIABILITY",
+      "estimated_effort_hours": 24.0,
+      "estimated_cost": 0.0,
+      "interest_rate": 1.1,
+      "files_affected": [],
+      "components_affected": [
+        "All Services"
+      ],
+      "created_date": "2025-10-22 16:12:51.196626",
+      "last_updated": "2025-10-22 16:12:51.196626",
+      "status": "open",
+      "assignee": null,
+      "due_date": null,
+      "tags": [
+        "integration",
+        "testing"
+      ],
+      "mitigation_plan": "",
+      "prevention_strategy": ""
+    },
+    {
+      "id": "DEBT_008",
+      "title": "API Documentation Gaps",
+      "description": "Several API endpoints lack comprehensive documentation",
+      "category": "DebtCategory.DOCUMENTATION",
+      "priority": "DebtPriority.MEDIUM",
+      "impact": "DebtImpact.PRODUCTIVITY",
+      "estimated_effort_hours": 16.0,
+      "estimated_cost": 0.0,
+      "interest_rate": 1.1,
+      "files_affected": [],
+      "components_affected": [
+        "Backend API Service"
+      ],
+      "created_date": "2025-10-22 16:12:51.196627",
+      "last_updated": "2025-10-22 16:12:51.196627",
+      "status": "open",
+      "assignee": null,
+      "due_date": null,
+      "tags": [
+        "documentation",
+        "api"
+      ],
+      "mitigation_plan": "",
+      "prevention_strategy": ""
+    },
+    {
+      "id": "DEBT_009",
+      "title": "Missing Architecture Decision Records",
+      "description": "Important architectural decisions are not documented",
+      "category": "DebtCategory.DOCUMENTATION",
+      "priority": "DebtPriority.LOW",
+      "impact": "DebtImpact.MAINTAINABILITY",
+      "estimated_effort_hours": 8.0,
+      "estimated_cost": 0.0,
+      "interest_rate": 1.1,
+      "files_affected": [],
+      "components_affected": [],
+      "created_date": "2025-10-22 16:12:51.196628",
+      "last_updated": "2025-10-22 16:12:51.196629",
+      "status": "open",
+      "assignee": null,
+      "due_date": null,
+      "tags": [
+        "documentation",
+        "architecture"
+      ],
+      "mitigation_plan": "",
+      "prevention_strategy": ""
+    },
+    {
+      "id": "DEBT_010",
+      "title": "Service-to-Service Authentication",
+      "description": "Internal services lack proper authentication mechanisms",
+      "category": "DebtCategory.SECURITY",
+      "priority": "DebtPriority.CRITICAL",
+      "impact": "DebtImpact.SECURITY",
+      "estimated_effort_hours": 40.0,
+      "estimated_cost": 0.0,
+      "interest_rate": 1.1,
+      "files_affected": [],
+      "components_affected": [
+        "All Services"
+      ],
+      "created_date": "2025-10-22 16:12:51.196630",
+      "last_updated": "2025-10-22 16:12:51.196630",
+      "status": "open",
+      "assignee": null,
+      "due_date": null,
+      "tags": [],
+      "mitigation_plan": "Implement mTLS or service mesh authentication",
+      "prevention_strategy": "Follow zero-trust security principles"
+    },
+    {
+      "id": "DEBT_011",
+      "title": "Input Validation Gaps",
+      "description": "Some API endpoints lack comprehensive input validation",
+      "category": "DebtCategory.SECURITY",
+      "priority": "DebtPriority.HIGH",
+      "impact": "DebtImpact.SECURITY",
+      "estimated_effort_hours": 16.0,
+      "estimated_cost": 0.0,
+      "interest_rate": 1.1,
+      "files_affected": [],
+      "components_affected": [
+        "Backend API Service"
+      ],
+      "created_date": "2025-10-22 16:12:51.196631",
+      "last_updated": "2025-10-22 16:12:51.196631",
+      "status": "open",
+      "assignee": null,
+      "due_date": null,
+      "tags": [
+        "security",
+        "validation"
+      ],
+      "mitigation_plan": "",
+      "prevention_strategy": ""
+    },
+    {
+      "id": "DEBT_012",
+      "title": "Database Query Optimization",
+      "description": "Several database queries can be further optimized",
+      "category": "DebtCategory.PERFORMANCE",
+      "priority": "DebtPriority.MEDIUM",
+      "impact": "DebtImpact.PERFORMANCE",
+      "estimated_effort_hours": 12.0,
+      "estimated_cost": 0.0,
+      "interest_rate": 1.1,
+      "files_affected": [],
+      "components_affected": [
+        "Database",
+        "Backend API Service"
+      ],
+      "created_date": "2025-10-22 16:12:51.196632",
+      "last_updated": "2025-10-22 16:12:51.196633",
+      "status": "open",
+      "assignee": null,
+      "due_date": null,
+      "tags": [
+        "performance",
+        "database"
+      ],
+      "mitigation_plan": "",
+      "prevention_strategy": ""
+    },
+    {
+      "id": "DEBT_013",
+      "title": "Additional Caching Opportunities",
+      "description": "More caching layers can be implemented for better performance",
+      "category": "DebtCategory.PERFORMANCE",
+      "priority": "DebtPriority.LOW",
+      "impact": "DebtImpact.PERFORMANCE",
+      "estimated_effort_hours": 8.0,
+      "estimated_cost": 0.0,
+      "interest_rate": 1.1,
+      "files_affected": [],
+      "components_affected": [],
+      "created_date": "2025-10-22 16:12:51.196633",
+      "last_updated": "2025-10-22 16:12:51.196634",
+      "status": "open",
+      "assignee": null,
+      "due_date": null,
+      "tags": [
+        "performance",
+        "caching"
+      ],
+      "mitigation_plan": "",
+      "prevention_strategy": ""
+    },
+    {
+      "id": "DEBT_014",
+      "title": "Outdated Dependencies",
+      "description": "Some Python packages have newer versions available",
+      "category": "DebtCategory.DEPENDENCIES",
+      "priority": "DebtPriority.MEDIUM",
+      "impact": "DebtImpact.SECURITY",
+      "estimated_effort_hours": 4.0,
+      "estimated_cost": 0.0,
+      "interest_rate": 1.1,
+      "files_affected": [],
+      "components_affected": [],
+      "created_date": "2025-10-22 16:12:51.196635",
+      "last_updated": "2025-10-22 16:12:51.196635",
+      "status": "open",
+      "assignee": null,
+      "due_date": null,
+      "tags": [
+        "dependencies",
+        "updates"
+      ],
+      "mitigation_plan": "",
+      "prevention_strategy": ""
+    }
+  ],
+  "repayment_plans": [
+    {
+      "plan_name": "Week 4 Technical Debt Repayment",
+      "time_horizon_weeks": 4,
+      "budget_hours": 40.0,
+      "target_debt_reduction_percent": 7.142857142857142,
+      "priority_focus_areas": [
+        "DebtCategory.SECURITY"
+      ],
+      "milestones": [
+        {
+          "week": 1,
+          "debt_item_id": "DEBT_010",
+          "title": "Service-to-Service Authentication",
+          "estimated_hours": 40.0,
+          "category": "security"
+        }
+      ],
+      "success_metrics": [
+        "Reduce technical debt items by 1",
+        "Complete 1 milestones",
+        "Utilize 40.0 hours of budget"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,346 @@
+version: '3.8'
+
+services:
+  # Redis for caching and session management
+  redis-voice:
+    image: redis:7-alpine
+    container_name: dmlogn8n-redis-voice
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_voice_data:/data
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      - voice-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Voice Chat Server (Main signaling server)
+  voice-chat-server:
+    build:
+      context: ./source_code/backend
+      dockerfile: Dockerfile.voice-chat
+    container_name: dmlogn8n-voice-chat-server
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - REDIS_HOST=redis-voice
+      - REDIS_PORT=6379
+      - LOG_LEVEL=INFO
+      - MAX_PARTICIPANTS_PER_ROOM=20
+      - ENABLE_SPATIAL_AUDIO=true
+    volumes:
+      - ./logs/voice-chat:/var/log/dmlogn8n
+      - voice_uploads:/app/uploads
+    depends_on:
+      redis-voice:
+        condition: service_healthy
+    networks:
+      - voice-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # SFU (Selective Forwarding Unit) for WebRTC
+  voice-sfu-server:
+    build:
+      context: ./source_code/backend
+      dockerfile: Dockerfile.voice-sfu
+    container_name: dmlogn8n-voice-sfu-server
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    environment:
+      - REDIS_HOST=redis-voice
+      - REDIS_PORT=6379
+      - LOG_LEVEL=INFO
+      - MAX_CONCURRENT_STREAMS=100
+      - ENABLE_STUN_TURN=true
+    volumes:
+      - ./logs/sfu:/var/log/dmlogn8n
+    depends_on:
+      redis-voice:
+        condition: service_healthy
+    networks:
+      - voice-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Sound Effects Library
+  sound-effects-library:
+    build:
+      context: ./source_code/backend
+      dockerfile: Dockerfile.sound-effects
+    container_name: dmlogn8n-sound-effects-library
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
+    environment:
+      - REDIS_HOST=redis-voice
+      - REDIS_PORT=6379
+      - LIBRARY_PATH=/var/lib/dmlogn8n/sounds
+      - MAX_FILE_SIZE_MB=100
+      - ENABLE_REAL_TIME_EFFECTS=true
+    volumes:
+      - ./logs/sound-effects:/var/log/dmlogn8n
+      - sound_effects_data:/var/lib/dmlogn8n/sounds
+      - temp_uploads:/tmp/uploads
+    depends_on:
+      redis-voice:
+        condition: service_healthy
+    networks:
+      - voice-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Dynamic Music Manager
+  dynamic-music-manager:
+    build:
+      context: ./source_code/backend
+      dockerfile: Dockerfile.dynamic-music
+    container_name: dmlogn8n-dynamic-music-manager
+    restart: unless-stopped
+    ports:
+      - "8004:8004"
+    environment:
+      - REDIS_HOST=redis-voice
+      - REDIS_PORT=6379
+      - MUSIC_LIBRARY_PATH=/var/lib/dmlogn8n/music
+      - MAX_CONCURRENT_COMPOSITIONS=10
+      - ENABLE_ADAPTIVE_MUSIC=true
+    volumes:
+      - ./logs/music:/var/log/dmlogn8n
+      - music_data:/var/lib/dmlogn8n/music
+    depends_on:
+      redis-voice:
+        condition: service_healthy
+    networks:
+      - voice-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Voice Integration Layer
+  voice-integration-layer:
+    build:
+      context: ./source_code/backend
+      dockerfile: Dockerfile.voice-integration
+    container_name: dmlogn8n-voice-integration-layer
+    restart: unless-stopped
+    ports:
+      - "8005:8005"
+    environment:
+      - REDIS_HOST=redis-voice
+      - REDIS_PORT=6379
+      - N8N_BASE_URL=http://n8n:5678
+      - MAX_WORKFLOW_WORKERS=5
+      - ENABLE_CONTENT_PROCESSING=true
+    volumes:
+      - ./logs/integration:/var/log/dmlogn8n
+      - integration_data:/var/lib/dmlogn8n/integration
+    depends_on:
+      redis-voice:
+        condition: service_healthy
+      n8n:
+        condition: service_healthy
+    networks:
+      - voice-network
+      - n8n-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx reverse proxy for load balancing
+  nginx-voice-proxy:
+    image: nginx:alpine
+    container_name: dmlogn8n-nginx-voice
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./config/nginx/ssl:/etc/nginx/ssl
+      - ./logs/nginx:/var/log/nginx
+    depends_on:
+      - voice-chat-server
+      - voice-sfu-server
+      - sound-effects-library
+      - dynamic-music-manager
+      - voice-integration-layer
+    networks:
+      - voice-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # STUN/TURN Server for WebRTC NAT traversal
+  coturn:
+    image: coturn/coturn:latest
+    container_name: dmlogn8n-coturn
+    restart: unless-stopped
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "49152-65535:49152-65535/udp"
+    environment:
+      - TURN_USERNAME=dmlogn8n
+      - TURN_PASSWORD=your-secure-password-here
+    volumes:
+      - ./config/coturn/turnserver.conf:/etc/coturn/turnserver.conf
+    networks:
+      - voice-network
+    healthcheck:
+      test: ["CMD", "turnutils_uclient", "-T", "5", "-u", "dmlogn8n", "-w", "your-secure-password-here", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # N8n for workflow automation
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: dmlogn8n-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=your-secure-n8n-password
+      - WEBHOOK_URL=http://localhost:5678/
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=168
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./config/n8n/workflows:/home/node/.n8n/workflows
+    networks:
+      - n8n-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Monitoring with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: dmlogn8n-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - voice-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: dmlogn8n-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=your-secure-grafana-password
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+    networks:
+      - voice-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Node Exporter for system metrics
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: dmlogn8n-node-exporter
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - voice-network
+
+volumes:
+  redis_voice_data:
+    driver: local
+  voice_uploads:
+    driver: local
+  sound_effects_data:
+    driver: local
+  music_data:
+    driver: local
+  integration_data:
+    driver: local
+  temp_uploads:
+    driver: local
+  n8n_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  voice-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+  n8n-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16

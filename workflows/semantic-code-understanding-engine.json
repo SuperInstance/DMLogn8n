@@ -1,0 +1,445 @@
+{
+  "name": "Semantic Code Understanding Engine - Character Intent Analysis System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "semantic-understanding",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-semantic-engine",
+      "name": "Character Intent Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "semantic-code-understanding"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse and validate character intent request\nconst request = $input.first().json;\n\n// Required fields validation\nif (!request.character_input || !request.character_class || !request.character_level) {\n  return [{\n    json: {\n      error: 'Missing required fields: character_input, character_class, character_level',\n      status: 'invalid_request',\n      timestamp: new Date().toISOString()\n    }\n  }];\n}\n\n// Extract character context and history\nconst characterContext = {\n  input: request.character_input,\n  class: request.character_class,\n  level: request.character_level,\n  party_composition: request.party_composition || [],\n  current_quest: request.current_quest || '',\n  play_style: request.play_style || 'balanced',\n  previous_automations: request.previous_automations || [],\n  success_patterns: request.success_patterns || [],\n  character_preferences: request.character_preferences || {},\n  session_context: request.session_context || {},\n  timestamp: new Date().toISOString()\n};\n\n// Define semantic analysis configuration\nconst analysisConfig = {\n  ...characterContext,\n  analysis_depth: request.analysis_depth || 'comprehensive',\n  include_code_generation: request.include_code_generation !== false,\n  include_explanations: request.include_explanations !== false,\n  learning_mode: request.learning_mode || 'adaptive',\n  ai_provider: request.ai_provider || 'deepseek'\n};\n\nreturn [{\n  json: analysisConfig\n}];"
+      },
+      "id": "code-parse-intent",
+      "name": "Parse Character Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build character knowledge base and context\nconst config = $input.first().json;\n\n// Character class-specific knowledge bases\nconst classKnowledge = {\n  'fighter': {\n    primary_focus: ['combat', 'protection', 'tank', 'damage'],\n    common_intents: ['protect party', 'deal damage', 'defend', 'lead'],\n    automation_patterns: ['combat_rotation', 'protective_aura', 'taunt_management'],\n    spell_types: [],\n    key_abilities: ['strength', 'constitution', 'weapon_mastery']\n  },\n  'wizard': {\n    primary_focus: ['magic', 'control', 'damage', 'support'],\n    common_intents: ['cast spells', 'control battlefield', 'support party', 'solve puzzles'],\n    automation_patterns: ['spell_rotation', 'concentration_management', 'buff_stack'],\n    spell_types: ['evocation', 'illusion', 'enchantment', 'divination'],\n    key_abilities: ['intelligence', 'wisdom', 'spell_mastery']\n  },\n  'cleric': {\n    primary_focus: ['healing', 'support', 'divine', 'protection'],\n    common_intents: ['heal party', 'remove curses', 'protect from evil', 'channel divinity'],\n    automation_patterns: ['healing_prioritization', 'buff_management', 'condition_removal'],\n    spell_types: ['divination', 'evocation', 'abjuration', 'necromancy'],\n    key_abilities: ['wisdom', 'charisma', 'divine_connection']\n  },\n  'rogue': {\n    primary_focus: ['stealth', 'damage', 'skills', 'utility'],\n    common_intents: ['sneak attack', 'disarm traps', 'scout ahead', 'pick locks'],\n    automation_patterns: ['stealth_positioning', 'opportunity_attack', 'skill_check_optimization'],\n    spell_types: [],\n    key_abilities: ['dexterity', 'intelligence', 'stealth_mastery']\n  },\n  'paladin': {\n    primary_focus: ['divine', 'protection', 'healing', 'combat'],\n    common_intents: ['protect allies', 'smite evil', 'heal wounds', 'uphold honor'],\n    automation_patterns: ['divine_smite', 'lay_on_hands', 'aura_management'],\n    spell_types: ['abjuration', 'evocation', 'divination'],\n    key_abilities: ['strength', 'charisma', 'divine_power']\n  }\n};\n\n// Get character class knowledge or use generic\nconst characterKnowledge = classKnowledge[config.class.toLowerCase()] || {\n  primary_focus: ['general'],\n  common_intents: ['help party', 'improve skills'],\n  automation_patterns: ['basic_automation'],\n  spell_types: [],\n  key_abilities: ['balanced']\n};\n\n// Build comprehensive context for AI analysis\nconst enhancedContext = {\n  ...config,\n  character_knowledge: characterKnowledge,\n  semantic_patterns: {\n    protection_keywords: ['protect', 'defend', 'shield', 'guard', 'save', 'rescue', 'help'],\n    combat_keywords: ['attack', 'damage', 'fight', 'kill', 'destroy', 'defeat', 'battle'],\n    healing_keywords: ['heal', 'cure', 'restore', 'mend', 'recover', 'aid', 'support'],\n    utility_keywords: ['help', 'assist', 'prepare', 'organize', 'manage', 'optimize'],\n    exploration_keywords: ['scout', 'search', 'investigate', 'explore', 'track', 'navigate']\n  },\n  business_logic_mapping: {\n    'protect party': 'protection_automation_system',\n    'heal when hurt': 'health_monitoring_system',\n    'deal more damage': 'combat_optimization_system',\n    'be prepared': 'buff_and_preparation_system',\n    'support allies': 'support_automation_system'\n  }\n};\n\nreturn [{\n  json: enhancedContext\n}];"
+      },
+      "id": "code-build-context",
+      "name": "Build Character Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create comprehensive semantic analysis prompt\nconst context = $input.first().json;\n\nconst semanticPrompt = `\nYou are an expert Semantic Code Understanding Engine for D&D character automation. Your role is to understand character intent beyond literal requests and translate it into comprehensive technical solutions.\n\n## Character Profile:\n- Class: ${context.class}\n- Level: ${context.level}\n- Play Style: ${context.play_style}\n- Party Composition: ${context.party_composition.join(', ')}\n- Current Quest: ${context.current_quest}\n\n## Character Input: \"${context.input}\"\n\n## Previous Success Patterns:\n${context.success_patterns.length > 0 ? context.success_patterns.join(', ') : 'No previous patterns'}\n\n## Your Task:\n1. **Semantic Understanding**: What is the character REALLY trying to accomplish?\n2. **Business Logic Translation**: Convert character intent into technical requirements\n3. **Solution Architecture**: Design a complete automation solution\n4. **Learning Integration**: Incorporate previous success patterns\n5. **Character-Appropriate Explanation**: Provide explanations the character understands\n\n## Response Format (JSON):\n{\n  \"semantic_analysis\": {\n    \"true_intent\": \"The deeper meaning behind the character's words\",\n    \"business_goal\": \"What the character wants to accomplish in game terms\",\n    \"emotional_context\": \"The emotional state driving this request\",\n    \"urgency_level\": \"immediate/medium/low\",\n    \"complexity\": \"simple/medium/complex\"\n  },\n  \"technical_requirements\": {\n    \"automation_type\": \"protection/healing/combat/utility/exploration\",\n    \"trigger_conditions\": [\"list of conditions that trigger the automation\"],\n    \"actions_required\": [\"list of specific actions to implement\"],\n    \"dependencies\": [\"other systems or data needed\"],\n    \"success_metrics\": [\"how to measure success\"]\n  },\n  \"solution_architecture\": {\n    \"components\": [\"major components needed\"],\n    \"data_flow\": \"how information moves through the system\",\n    \"integration_points\": [\"connections to other systems\"],\n    \"error_handling\": \"how to handle failures or edge cases\"\n  },\n  \"character_friendly_explanation\": {\n    \"what_it_does\": \"simple explanation for the character\",\n    \"why_it_helps\": \"how this achieves their goal\",\n    \"when_it_activates\": \"clear conditions for activation\",\n    \"what_character_needs_to_do\": \"any manual actions required\"\n  },\n  \"learning_opportunities\": {\n    \"patterns_to_learn\": [\"what patterns this system should learn\"],\n    \"optimization_points\": [\"how this can be improved over time\"],\n    \"adaptation_suggestions\": [\"how to adapt to different situations\"]\n  }\n}\n\nFocus on understanding the CHARACTER's perspective, not just the technical requirements. Think like a wise mentor who understands both the game world and the technical implementation.`;\n\nreturn [{\n  json: {\n    ...context,\n    deepseek_prompt: semanticPrompt,\n    analysis_type: 'semantic_understanding'\n  }\n}];"
+      },
+      "id": "code-semantic-prompt",
+      "name": "Create Semantic Analysis Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer sk-3b0251d9943549a2b475eb9e57e46ee6"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "deepseek-chat"
+            },
+            {
+              "name": "messages",
+              "value": "=[{\"role\": \"user\", \"content\": \"{{ $json.deepseek_prompt }}\"}]"
+            },
+            {
+              "name": "max_tokens",
+              "value": "=2000"
+            },
+            {
+              "name": "temperature",
+              "value": "=0.7"
+            },
+            {
+              "name": "response_format",
+              "value": "={\"type\": \"json_object\"}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-deepseek-analysis",
+      "name": "DeepSeek Semantic Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process DeepSeek response and extract semantic understanding\nconst response = $input.first().json;\nconst originalContext = items.find(item => item.json.deepseek_prompt)?.json;\n\nif (!response.choices || !response.choices[0]?.message?.content) {\n  return [{\n    json: {\n      error: 'Invalid response from DeepSeek API',\n      status: 'ai_error',\n      timestamp: new Date().toISOString()\n    }\n  }];\n}\n\ntry {\n  const analysisResult = JSON.parse(response.choices[0].message.content);\n  \n  // Enhance analysis with metadata\n  const enhancedResult = {\n    timestamp: new Date().toISOString(),\n    character_id: originalContext.character_id || 'unknown',\n    session_id: originalContext.session_id || 'unknown',\n    original_input: originalContext.input,\n    character_class: originalContext.class,\n    analysis_result: analysisResult,\n    metadata: {\n      ai_provider: 'deepseek',\n      model: 'deepseek-chat',\n      processing_time: response.usage?.total_time || 0,\n      tokens_used: response.usage?.total_tokens || 0,\n      analysis_depth: originalContext.analysis_depth,\n      learning_mode: originalContext.learning_mode\n    },\n    next_steps: {\n      requires_code_generation: analysisResult.technical_requirements ? true : false,\n      requires_pattern_learning: analysisResult.learning_opportunities ? true : false,\n      requires_solution_architecture: analysisResult.solution_architecture ? true : false\n    }\n  };\n  \n  return [{\n    json: enhancedResult\n  }];\n  \n} catch (error) {\n  return [{\n    json: {\n      error: 'Failed to parse AI response',\n      details: error.message,\n      raw_response: response.choices[0].message.content,\n      status: 'parsing_error',\n      timestamp: new Date().toISOString()\n    }\n  }];\n}"
+      },
+      "id": "code-process-analysis",
+      "name": "Process Semantic Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.next_steps.requires_code_generation }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-needs-code-generation",
+      "name": "Needs Code Generation?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Trigger code generation workflow\nconst analysis = $input.first().json;\n\n// Prepare code generation request\nconst codeGenerationRequest = {\n  semantic_analysis: analysis.analysis_result,\n  character_context: {\n    class: analysis.character_class,\n    input: analysis.original_input,\n    preferences: analysis.metadata\n  },\n  technical_requirements: analysis.analysis_result.technical_requirements,\n  solution_architecture: analysis.analysis_result.solution_architecture,\n  character_friendly: analysis.analysis_result.character_friendly_explanation,\n  workflow_request: {\n    source: 'semantic_understanding_engine',\n    priority: 'normal',\n    include_explanations: true,\n    include_error_handling: true,\n    include_testing: true\n  }\n};\n\nreturn [{\n  json: codeGenerationRequest,\n  // Store for response\n  original_analysis: analysis\n}];"
+      },
+      "id": "code-prepare-generation",
+      "name": "Prepare Code Generation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/webhook/solution-architecture-generator",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "payload",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-trigger-generation",
+      "name": "Trigger Solution Generator",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pattern learning request\nconst analysis = $input.first().json;\n\nif (analysis.analysis_result.learning_opportunities) {\n  const learningRequest = {\n    character_id: analysis.character_id,\n    session_id: analysis.session_id,\n    semantic_analysis: analysis.analysis_result.semantic_analysis,\n    learning_opportunities: analysis.analysis_result.learning_opportunities,\n    success_patterns: analysis.analysis_result.learning_opportunities.patterns_to_learn || [],\n    timestamp: analysis.timestamp,\n    source: 'semantic_understanding_engine'\n  };\n  \n  return [{\n    json: learningRequest\n  }];\n}\n\nreturn [{\n  json: { message: 'No learning opportunities identified' }\n}];"
+      },
+      "id": "code-prepare-learning",
+      "name": "Prepare Pattern Learning",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/webhook/pattern-learning",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "payload",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-trigger-learning",
+      "name": "Trigger Pattern Learning",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Final response preparation\nconst analysis = $input.first().json;\n\nconst response = {\n  status: 'success',\n  timestamp: new Date().toISOString(),\n  character_intent_understood: analysis.analysis_result.semantic_analysis?.true_intent || 'Intent unclear',\n  business_goal: analysis.analysis_result.semantic_analysis?.business_goal || 'Goal identification failed',\n  character_friendly_explanation: analysis.analysis_result.character_friendly_explanation || {\n    what_it_does: 'Automated assistance system',\n    why_it_helps: 'Achieves your objectives more efficiently',\n    when_it_activates: 'Based on your needs',\n    what_character_needs_to_do: 'Monitor and provide feedback'\n  },\n  automation_type: analysis.analysis_result.technical_requirements?.automation_type || 'general',\n  complexity_level: analysis.analysis_result.semantic_analysis?.complexity || 'medium',\n  next_actions: {\n    code_generation_triggered: analysis.next_steps?.requires_code_generation || false,\n    pattern_learning_triggered: analysis.next_steps?.requires_pattern_learning || false,\n    architecture_design_triggered: analysis.next_steps?.requires_solution_architecture || false\n  },\n  metadata: {\n    processing_time: analysis.metadata?.processing_time || 0,\n    tokens_used: analysis.metadata?.tokens_used || 0,\n    ai_provider: analysis.metadata?.ai_provider || 'deepseek'\n  }\n};\n\nreturn [{\n  json: response\n}];"
+      },
+      "id": "code-final-response",
+      "name": "Prepare Final Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "webhook-response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.webhookResponse",
+      "typeVersion": 1,
+      "position": [2440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Error handling\nconst error = $input.first().json;\n\nconst errorResponse = {\n  status: 'error',\n  timestamp: new Date().toISOString(),\n  error: error.error || 'Unknown error occurred',\n  details: error.details || 'No additional details available',\n  character_friendly_message: 'I had trouble understanding your request. Could you try explaining it differently?',\n  suggestions: [\n    'Try being more specific about what you want to accomplish',\n    'Tell me about your character class and current situation',\n    'Describe what you want to achieve in simple terms'\n  ]\n};\n\nreturn [{\n  json: errorResponse\n}];"
+      },
+      "id": "code-error-handling",
+      "name": "Error Handling",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "webhook-error-response",
+      "name": "Send Error Response",
+      "type": "n8n-nodes-base.webhookResponse",
+      "typeVersion": 1,
+      "position": [1560, 500]
+    }
+  ],
+  "connections": {
+    "Character Intent Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Character Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Character Intent": {
+      "main": [
+        [
+          {
+            "node": "Build Character Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Character Context": {
+      "main": [
+        [
+          {
+            "node": "Create Semantic Analysis Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Semantic Analysis Prompt": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek Semantic Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek Semantic Analysis": {
+      "main": [
+        [
+          {
+            "node": "Process Semantic Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Semantic Analysis": {
+      "main": [
+        [
+          {
+            "node": "Needs Code Generation?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Code Generation?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Code Generation",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Pattern Learning",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Code Generation": {
+      "main": [
+        [
+          {
+            "node": "Trigger Solution Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Pattern Learning": {
+      "main": [
+        [
+          {
+            "node": "Trigger Pattern Learning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Solution Generator": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Pattern Learning": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Final Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handling": {
+      "main": [
+        [
+          {
+            "node": "Send Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T14:30:00.000Z",
+      "updatedAt": "2024-10-23T14:30:00.000Z",
+      "id": "semantic-understanding",
+      "name": "Semantic Understanding"
+    },
+    {
+      "createdAt": "2024-10-23T14:30:00.000Z",
+      "updatedAt": "2024-10-23T14:30:00.000Z",
+      "id": "code-fabric",
+      "name": "Code Fabric"
+    },
+    {
+      "createdAt": "2024-10-23T14:30:00.000Z",
+      "updatedAt": "2024-10-23T14:30:00.000Z",
+      "id": "character-intent",
+      "name": "Character Intent"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T14:30:00.000Z",
+  "versionId": "1"
+}

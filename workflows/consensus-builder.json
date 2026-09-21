@@ -1,0 +1,224 @@
+{
+  "name": "Consensus Builder - Complex Decision Agreement System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "consensus-build",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Consensus Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "consensus-builder"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse consensus building request\nconst request = $input.first().json;\n\n// Required fields validation\nif (!request.topic || !request.proposal || !request.initiator) {\n  return [{\n    json: {\n      error: 'Missing required fields: topic, proposal, initiator',\n      status: 'invalid'\n    }\n  }];\n}\n\n// Create consensus session\nconst consensusId = `consensus_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;\nconst consensusData = {\n  ...request,\n  consensus_id: consensusId,\n  created_at: new Date().toISOString(),\n  status: 'discussion_phase',\n  phases: {\n    discussion: {\n      status: 'active',\n      started_at: new Date().toISOString(),\n      duration_minutes: request.discussion_minutes || 10\n    },\n    refinement: {\n      status: 'pending',\n      duration_minutes: request.refinement_minutes || 5\n    },\n    final_vote: {\n      status: 'pending',\n      duration_minutes: request.vote_minutes || 5\n    }\n  },\n  participants: request.participants || ['agent_dungeon_master', 'agent_narrator', 'agent_combat_manager'],\n  consensus_threshold: request.consensus_threshold || 0.8,\n  current_consensus_level: 0,\n  concerns: [],\n  suggestions: [],\n  iterations: 0,\n  max_iterations: request.max_iterations || 3\n};\n\nreturn [{\n  json: consensusData\n}];"
+      },
+      "id": "code-1",
+      "name": "Initialize Consensus",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Start discussion phase\nconst consensus = $input.first().json;\n\n// Create discussion prompt for all participants\nconst discussionPrompt = {\n  type: 'consensus_discussion',\n  consensus_id: consensus.consensus_id,\n  topic: consensus.topic,\n  proposal: consensus.proposal,\n  phase: 'discussion',\n  initiator: consensus.initiator,\n  deadline: new Date(Date.now() + consensus.phases.discussion.duration_minutes * 60000).toISOString(),\n  instructions: `\nCONSENSUS BUILDING DISCUSSION\n\nTopic: ${consensus.topic}\n\nInitial Proposal:\n${JSON.stringify(consensus.proposal, null, 2)}\n\nPlease provide:\n1. Your analysis of the proposal\n2. Any concerns or objections\n3. Suggestions for improvement\n4. Your initial position (support/neutral/oppose)\n\nDiscussion ends: ${new Date(Date.now() + consensus.phases.discussion.duration_minutes * 60000).toLocaleString()}\n`\n};\n\nreturn consensus.participants.map(participant => ({\n  json: {\n    ...discussionPrompt,\n    to_agent: participant,\n    from_agent: 'consensus_builder'\n  }\n}));"
+      },
+      "id": "code-2",
+      "name": "Start Discussion Phase",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/webhook/agent-message",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-1",
+      "name": "Send Discussion Requests",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Store consensus session\nconst consensus = $input.first().json;\n\nconst sessionData = {\n  consensus_id: consensus.consensus_id,\n  topic: consensus.topic,\n  proposal: consensus.proposal,\n  initiator: consensus.initiator,\n  participants: consensus.participants,\n  phases: consensus.phases,\n  consensus_threshold: consensus.consensus_threshold,\n  status: consensus.status,\n  current_consensus_level: consensus.current_consensus_level,\n  concerns: consensus.concerns,\n  suggestions: consensus.suggestions,\n  iterations: consensus.iterations,\n  max_iterations: consensus.max_iterations,\n  created_at: consensus.created_at\n};\n\nreturn [{\n  json: sessionData\n}];"
+      },
+      "id": "code-3",
+      "name": "Store Consensus Session",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/api/v1/consensus/sessions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "consensus_data",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-2",
+      "name": "Save Consensus Session",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Schedule discussion phase end and analysis\nconst consensus = $input.first().json;\nconst discussionDuration = consensus.phases.discussion.duration_minutes || 10;\n\nreturn [{\n  json: {\n    consensus_id: consensus.consensus_id,\n    action: 'analyze_discussion',\n    scheduled_for: new Date(Date.now() + discussionDuration * 60000).toISOString(),\n    current_phase: 'discussion',\n    next_phase: 'refinement'\n  }\n}];"
+      },
+      "id": "code-4",
+      "name": "Schedule Discussion Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"consensus_process_initiated\",\n  \"consensus_id\": \"{{ $json.consensus_id }}\",\n  \"message\": \"Consensus building process started. Discussion phase initiated.\",\n  \"current_phase\": \"discussion\",\n  \"discussion_deadline\": \"{{ $json.phases.discussion.started_at }}\",\n  \"participants\": \"{{ $json.participants }}\"\n}"
+      },
+      "id": "respond-1",
+      "name": "Send Consensus Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "Consensus Webhook": {
+      "main": [
+        [
+          {
+            "node": "Initialize Consensus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Consensus": {
+      "main": [
+        [
+          {
+            "node": "Start Discussion Phase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Discussion Phase": {
+      "main": [
+        [
+          {
+            "node": "Send Discussion Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Discussion Requests": {
+      "main": [
+        [
+          {
+            "node": "Store Consensus Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Consensus Session": {
+      "main": [
+        [
+          {
+            "node": "Save Consensus Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Consensus Session": {
+      "main": [
+        [
+          {
+            "node": "Schedule Discussion Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Discussion Analysis": {
+      "main": [
+        [
+          {
+            "node": "Send Consensus Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T21:00:00.000Z",
+      "updatedAt": "2024-10-23T21:00:00.000Z",
+      "id": "tag-consensus-building",
+      "name": "Consensus Building"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T21:00:00.000Z",
+  "versionId": "1"
+}

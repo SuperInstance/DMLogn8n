@@ -1,0 +1,256 @@
+# DMLogn8n Integration Test Configuration
+# This file contains configuration for all integration testing components
+
+# Test Environment Configuration
+test_environment: "development"
+base_url: "http://localhost:8000"
+database_url: "postgresql://dmlog:password@localhost:5432/dmlog_test"
+redis_url: "redis://localhost:6379/1"
+ai_service_url: "http://localhost:8080"
+n8n_url: "http://localhost:5678"
+websocket_url: "ws://localhost:8001"
+mongo_url: "mongodb://localhost:27017"
+
+# Browser Configuration for UI Tests
+browser: "chrome"
+headless: true
+browser_timeout: 30
+
+# Parallel Execution
+parallel_workers: 4
+max_concurrent_users: 200
+
+# Test Data Management
+test_data_cleanup: true
+generate_test_data: true
+test_data_prefix: "integration_test_"
+
+# Reporting Configuration
+reporting:
+  html: true
+  json: true
+  prometheus: true
+  prometheus_port: 9091
+  screenshots: true
+  videos: false
+
+# Test Suites Configuration
+suites:
+  smoke:
+    priority: "critical"
+    timeout: 60
+    tests:
+      - "basic_health"
+      - "database_connection"
+      - "api_availability"
+    parallel: true
+
+  integration:
+    priority: "high"
+    timeout: 300
+    tests:
+      - "user_journey"
+      - "ai_integration"
+      - "realtime_sync"
+      - "api_endpoints"
+    parallel: true
+
+  performance:
+    priority: "medium"
+    timeout: 600
+    tests:
+      - "load_testing"
+      - "concurrent_users"
+      - "response_times"
+      - "stress_test"
+    parallel: false
+
+  regression:
+    priority: "high"
+    timeout: 240
+    tests:
+      - "ui_regression"
+      - "api_compatibility"
+      - "data_integrity"
+      - "security_tests"
+    parallel: true
+
+# Load Testing Configuration
+load_testing:
+  scenarios:
+    light:
+      users: 10
+      duration: 30
+      ramp_up: 10
+
+    moderate:
+      users: 50
+      duration: 120
+      ramp_up: 30
+
+    heavy:
+      users: 100
+      duration: 300
+      ramp_up: 60
+
+    stress:
+      users: 200
+      duration: 60
+      ramp_up: 30
+
+  performance_thresholds:
+    avg_response_time: 1.0      # seconds
+    p95_response_time: 2.0      # seconds
+    p99_response_time: 5.0      # seconds
+    error_rate: 0.05            # 5%
+    cpu_usage: 80               # percentage
+    memory_usage: 85            # percentage
+
+# Real-time Testing Configuration
+realtime_testing:
+  websocket_timeout: 10
+  message_timeout: 5
+  max_connections: 50
+  test_scenarios:
+    - "basic_connectivity"
+    - "message_broadcast"
+    - "session_synchronization"
+    - "concurrent_connections"
+    - "connection_recovery"
+    - "latency_measurement"
+
+# AI Testing Configuration
+ai_testing:
+  model_timeout: 30
+  max_tokens: 150
+  temperature: 0.7
+  test_scenarios:
+    - "dm_response_generation"
+    - "context_awareness"
+    - "character_consistency"
+    - "emotion_simulation"
+    - "narrative_coherence"
+
+  quality_metrics:
+    min_response_length: 10
+    max_response_length: 500
+    coherence_threshold: 0.6
+    relevance_threshold: 0.5
+
+# Database Testing Configuration
+database_testing:
+  connection_timeout: 10
+  query_timeout: 30
+  max_test_records: 1000
+  cleanup_batch_size: 100
+
+  test_tables:
+    - "users"
+    - "characters"
+    - "game_sessions"
+    - "messages"
+    - "ai_responses"
+
+# API Testing Configuration
+api_testing:
+  timeout: 30
+  max_retries: 3
+  retry_delay: 1
+
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 60
+    burst_size: 10
+
+  endpoints:
+    authentication:
+      - "POST /api/auth/register"
+      - "POST /api/auth/login"
+      - "POST /api/auth/logout"
+      - "GET /api/auth/validate"
+
+    user_management:
+      - "GET /api/users/profile"
+      - "PUT /api/users/profile"
+      - "GET /api/users/preferences"
+      - "PUT /api/users/preferences"
+
+    game_sessions:
+      - "POST /api/sessions/create"
+      - "GET /api/sessions/{id}"
+      - "POST /api/sessions/{id}/message"
+      - "POST /api/sessions/{id}/end"
+
+    characters:
+      - "POST /api/characters/create"
+      - "GET /api/characters/list"
+      - "GET /api/characters/{id}"
+      - "PUT /api/characters/{id}"
+
+# Security Testing Configuration
+security_testing:
+  sql_injection: true
+  xss_protection: true
+  cors_configuration: true
+  authentication_bypass: true
+  rate_limiting: true
+
+  test_payloads:
+    sql_injection:
+      - "'; DROP TABLE users; --"
+      - "' OR '1'='1"
+      - "admin'--"
+
+    xss:
+      - "<script>alert('xss')</script>"
+      - "javascript:alert('xss')"
+      - "<img src=x onerror=alert('xss')>"
+
+# Monitoring and Metrics
+monitoring:
+  prometheus:
+    enabled: true
+    port: 9091
+    metrics_path: "/metrics"
+
+  logging:
+    level: "INFO"
+    format: "detailed"
+    file_path: "/home/activeloguser/DMLogn8n/testing/logs/integration_tests.log"
+    max_file_size: "100MB"
+    backup_count: 5
+
+# Debug Configuration
+debug:
+  enabled: true
+  save_snapshots: true
+  debug_reports: true
+  verbose_logging: false
+
+  snapshots:
+    max_count: 10
+    save_path: "/home/activeloguser/DMLogn8n/testing/debug/snapshots"
+
+  reports:
+    save_path: "/home/activeloguser/DMLogn8n/testing/debug/reports"
+    include_system_info: true
+    include_logs: true
+    include_metrics: true
+
+# Notification Configuration
+notifications:
+  enabled: false
+  slack_webhook: ""
+  email_recipients: []
+  on_failure_only: true
+
+# Environment Variables Override
+# These can be overridden by environment variables
+env_overrides:
+  - "BASE_URL"
+  - "DATABASE_URL"
+  - "REDIS_URL"
+  - "AI_SERVICE_URL"
+  - "N8N_URL"
+  - "TEST_ENVIRONMENT"
+  - "HEADLESS_BROWSER"

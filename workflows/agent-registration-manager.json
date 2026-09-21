@@ -1,0 +1,368 @@
+{
+  "name": "Agent Registration Manager - Multi-Agent System Management",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent-management",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Agent Management Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "agent-registration-manager"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse agent management request\nconst request = $input.first().json;\n\n// Required fields validation\nif (!request.action || !request.agent_data) {\n  return [{\n    json: {\n      error: 'Missing required fields: action, agent_data',\n      status: 'invalid'\n    }\n  }];\n}\n\n// Create management session\nconst sessionId = `mgmt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;\nconst managementRequest = {\n  ...request,\n  session_id: sessionId,\n  timestamp: new Date().toISOString(),\n  processed_by: 'agent_registration_manager'\n};\n\nreturn [{\n  json: managementRequest\n}];"
+      },
+      "id": "code-1",
+      "name": "Process Management Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {\n          "options": {\n            "caseSensitive": true,\n            "leftValue": "",\n            "typeValidation": "strict"\n          },\n          "conditions": [\n            {\n              "leftValue": "={{ $json.action }}",\n              "rightValue": "register",\n              "operator": {\n                "type": "string",\n                "operation": "equals"\n              }\n            }\n          ],\n          "combinator": "and"\n        }
+      },
+      "id": "if-1",
+      "name": "Route Management Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process agent registration\nconst request = $input.first().json;\nconst agentData = request.agent_data;\n\n// Validate required registration fields\nconst requiredFields = ['agent_id', 'agent_type', 'capabilities', 'communication_endpoint'];\nconst missingFields = requiredFields.filter(field => !agentData[field]);\n\nif (missingFields.length > 0) {\n  return [{\n    json: {\n      error: `Missing required registration fields: ${missingFields.join(', ')}`,\n      status: 'validation_failed'\n    }\n  }];\n}\n\n// Create agent profile\nconst agentProfile = {\n  agent_id: agentData.agent_id,\n  agent_type: agentData.agent_type,\n  display_name: agentData.display_name || agentData.agent_id,\n  description: agentData.description || '',\n  capabilities: agentData.capabilities,\n  communication_endpoint: agentData.communication_endpoint,\n  status: 'registering',\n  registration_date: new Date().toISOString(),\n  last_active: new Date().toISOString(),\n  preferences: {\n    communication_style: agentData.communication_style || 'formal',\n    response_time_target: agentData.response_time_target || 30,\n    collaboration_preference: agentData.collaboration_preference || 'active',\n    notification_level: agentData.notification_level || 'normal'\n  },\n  permissions: {\n    can_initiate_coordination: agentData.permissions?.can_initiate_coordination !== false,\n    can_vote: agentData.permissions?.can_vote !== false,\n    can_propose_actions: agentData.permissions?.can_propose_actions !== false,\n    can_access_shared_context: agentData.permissions?.can_access_shared_context !== false\n  },\n  metadata: {\n    version: '1.0.0',\n    registration_source: request.registration_source || 'direct',\n    approved_by: null,\n    approval_date: null\n  }\n};\n\nreturn [{\n  json: {\n    action: 'agent_registered',\n    session_id: request.session_id,\n    agent_profile: agentProfile,\n    next_steps: ['Validate communication endpoint', 'Test agent connectivity', 'Grant initial permissions']\n  }\n}];"
+      },
+      "id": "code-2",
+      "name": "Register Agent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process agent status update\nconst request = $input.first().json;\nconst agentData = request.agent_data;\n\nconst statusUpdate = {\n  agent_id: agentData.agent_id,\n  new_status: agentData.status,\n  previous_status: agentData.previous_status || 'unknown',\n  status_reason: agentData.status_reason || 'Status update requested',\n  timestamp: new Date().toISOString(),\n  updated_by: request.updated_by || 'self',\n  additional_info: agentData.additional_info || {}\n};\n\nreturn [{\n  json: {\n    action: 'status_updated',\n    session_id: request.session_id,\n    status_update: statusUpdate\n  }\n}];"
+      },
+      "id": "code-3",
+      "name": "Update Agent Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process agent capabilities update\nconst request = $input.first().json;\nconst agentData = request.agent_data;\n\nconst capabilitiesUpdate = {\n  agent_id: agentData.agent_id,\n  capabilities: {\n    core: agentData.capabilities?.core || [],\n    specialized: agentData.capabilities?.specialized || [],\n    communication: agentData.capabilities?.communication || [],\n    coordination: agentData.capabilities?.coordination || []\n  },\n  version: agentData.capabilities_version || '1.0.0',\n  updated_at: new Date().toISOString(),\n  compatibility_notes: agentData.compatibility_notes || []\n};\n\nreturn [{\n  json: {\n    action: 'capabilities_updated',\n    session_id: request.session_id,\n    capabilities_update: capabilitiesUpdate\n  }\n}];"
+      },
+      "id": "code-4",
+      "name": "Update Agent Capabilities",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate agent communication endpoint\nconst profile = $input.first().json;\nconst agentProfile = profile.agent_profile;\n\nif (!agentProfile) {\n  return [{\n    json: {\n      error: 'No agent profile available for validation',\n      status: 'validation_failed'\n    }\n  }];\n}\n\n// Create validation request\nconst validationRequest = {\n  target_endpoint: agentProfile.communication_endpoint,\n  agent_id: agentProfile.agent_id,\n  validation_type: 'connectivity_test',\n  timeout_seconds: 10,\n  test_payload: {\n    type: 'ping',\n    timestamp: new Date().toISOString(),\n    request_id: `validation_${Date.now()}`\n  }\n};\n\nreturn [{\n  json: {\n    action: 'validate_endpoint',\n    session_id: profile.session_id,\n    validation_request: validationRequest,\n    agent_profile: agentProfile\n  }\n}];"
+      },
+      "id": "code-5",
+      "name": "Validate Agent Endpoint",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.validation_request.target_endpoint }}/ping",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Agent-ID",
+              "value": "={{ $json.validation_request.agent_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "ping_data",
+              "value": "={{ $json.validation_request.test_payload }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "http-1",
+      "name": "Test Agent Connectivity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process validation result and complete registration\nconst validation = $input.first().json;\nconst originalData = $('Validate Agent Endpoint').first().json;\n\nlet registrationStatus;\nlet activationSteps = [];\n\nif (validation.status >= 200 && validation.status < 300) {\n  // Successful validation\n  registrationStatus = 'active';\n  activationSteps = [\n    'Endpoint validation successful',\n    'Agent communication verified',\n    'Granting system access',\n    'Notifying other agents'\n  ];\n} else {\n  // Validation failed\n  registrationStatus = 'registration_failed';\n  activationSteps = [\n    'Endpoint validation failed',\n    'Please check communication endpoint',\n    'Registration will remain pending'\n  ];\n}\n\nconst completedRegistration = {\n  ...originalData.agent_profile,\n  status: registrationStatus,\n  validation_result: {\n    status_code: validation.status,\n    response_time: validation.responseTime || 'unknown',\n    validated_at: new Date().toISOString(),\n    success: registrationStatus === 'active'\n  },\n  activation_steps: activationSteps,\n  completed_at: new Date().toISOString()\n};\n\nreturn [{\n  json: {\n    action: 'registration_completed',\n    session_id: originalData.session_id,\n    registration_result: completedRegistration\n  }\n}];"
+      },
+      "id": "code-6",
+      "name": "Complete Registration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/api/v1/agents",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "agent_data",
+              "value": "={{ $json.registration_result }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-2",
+      "name": "Store Agent Registration",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Notify other agents about new registration\nconst registration = $input.first().json;\nconst agentProfile = registration.registration_result;\n\nif (agentProfile.status !== 'active') {\n  return [{\n    json: {\n      action: 'skip_notification',\n      reason: 'Agent not successfully activated'\n    }\n  }];\n}\n\nconst notification = {\n  type: 'agent_registered_notification',\n  from_agent: 'agent_registration_manager',\n  broadcast_to: 'all_active_agents',\n  data: {\n    new_agent: {\n      agent_id: agentProfile.agent_id,\n      display_name: agentProfile.display_name,\n      agent_type: agentProfile.agent_type,\n      capabilities: agentProfile.capabilities,\n      registered_at: agentProfile.registration_date\n    },\n    message: `New agent registered: ${agentProfile.display_name} (${agentProfile.agent_type})\\n\\nCapabilities: ${agentProfile.capabilities.join(', ')}\\n\\nAgent is now active and available for coordination.`\n  }\n};\n\nreturn [{\n  json: notification\n}];"
+      },
+      "id": "code-7",
+      "name": "Create Agent Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/webhook/agent-message",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-3",
+      "name": "Broadcast Agent Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"agent_management_completed\",\n  \"action\": \"{{ $json.action }}\",\n  \"agent_id\": \"{{ $json.registration_result.agent_id }}\",\n  \"registration_status\": \"{{ $json.registration_result.status }}\",\n  \"message\": \"Agent management operation completed successfully\"\n}"
+      },
+      "id": "respond-1",
+      "name": "Send Management Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2440, 300]
+    }
+  ],
+  "connections": {
+    "Agent Management Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Management Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Management Request": {
+      "main": [
+        [
+          {
+            "node": "Route Management Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Management Action": {
+      "main": [
+        [
+          {
+            "node": "Register Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Agent Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Agent Capabilities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Register Agent": {
+      "main": [
+        [
+          {
+            "node": "Validate Agent Endpoint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Agent Status": {
+      "main": [
+        [
+          {
+            "node": "Send Management Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Agent Capabilities": {
+      "main": [
+        [
+          {
+            "node": "Send Management Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Agent Endpoint": {
+      "main": [
+        [
+          {
+            "node": "Test Agent Connectivity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Agent Connectivity": {
+      "main": [
+        [
+          {
+            "node": "Complete Registration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete Registration": {
+      "main": [
+        [
+          {
+            "node": "Store Agent Registration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Agent Registration": {
+      "main": [
+        [
+          {
+            "node": "Create Agent Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Agent Notification": {
+      "main": [
+        [
+          {
+            "node": "Broadcast Agent Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Broadcast Agent Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Management Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T21:00:00.000Z",
+      "updatedAt": "2024-10-23T21:00:00.000Z",
+      "id": "tag-agent-management",
+      "name": "Agent Management"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T21:00:00.000Z",
+  "versionId": "1"
+}

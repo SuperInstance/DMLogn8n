@@ -1,0 +1,400 @@
+---
+# Advanced Load Balancing Configuration
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dmlog-advanced-ingress
+  namespace: dmlog
+  annotations:
+    # AWS Load Balancer Controller annotations
+    kubernetes.io/ingress.class: "alb"
+    alb.ingress.kubernetes.io/scheme: "internet-facing"
+    alb.ingress.kubernetes.io/target-type: "ip"
+
+    # Load balancing algorithm
+    alb.ingress.kubernetes.io/load-balancer-attributes: |
+      load_balancing.algorithm.type=least_outstanding_requests
+      load_balancing.cross_zone.enabled=true
+      idle_timeout.timeout_seconds=60
+
+    # Health checks
+    alb.ingress.kubernetes.io/healthcheck-path: "/health"
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
+    alb.ingress.kubernetes.io/healthcheck-protocol: "HTTP"
+    alb.ingress.kubernetes.io/healthcheck-port: "traffic-port"
+
+    # Sticky sessions
+    alb.ingress.kubernetes.io/target-group-attributes: |
+      stickiness.enabled=true
+      stickiness.type=lb_cookie
+      stickiness.duration_seconds=300
+
+    # SSL/TLS configuration
+    alb.ingress.kubernetes.io/ssl-policy: "ELBSecurityPolicy-TLS-1-2-2017-01"
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:us-west-2:ACCOUNT_ID:certificate/CERTIFICATE_ID"
+    alb.ingress.kubernetes.io/redirect-http-to-https: "true"
+
+    # WAF integration
+    alb.ingress.kubernetes.io/wafv2-acl-arn: "arn:aws:wafv2:us-west-2:ACCOUNT_ID:global/webacl/DMLog-WAF/ID"
+
+    # Rate limiting
+    alb.ingress.kubernetes.io/rate-limit: "1000"
+
+    # Connection draining
+    alb.ingress.kubernetes.io/deregistration-delay-seconds: "30"
+
+    # Access logs
+    alb.ingress.kubernetes.io/load-balancer-attributes: |
+      access_logs.s3.enabled=true
+      access_logs.s3.bucket=dmlog-alb-logs
+      access_logs.s3.prefix=dmlog-prod
+
+    # Custom headers
+    alb.ingress.kubernetes.io/custom-response-headers: |
+      X-Custom-Header=DMLog-Advanced-LB
+      X-Request-ID=$request_id
+spec:
+  rules:
+  - host: api.dmlog.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-service
+            port:
+              number: 8080
+  - host: app.dmlog.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-service
+            port:
+              number: 80
+
+---
+# Advanced Service with multiple ports and traffic policies
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-advanced-service
+  namespace: dmlog
+  annotations:
+    # Service annotations for advanced routing
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "tcp"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443,8443"
+    service.beta.kubernetes.io/aws-load-balancer-proxy-protocol: "*"
+    service.beta.kubernetes.io/aws-load-balancer-connection-draining: "true"
+    service.beta.kubernetes.io/aws-load-balancer-connection-draining-timeout: "300"
+
+    # Internal load balancer
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+
+    # Cross-zone load balancing
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+
+    # Health check annotations
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "tcp"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-healthy-threshold: "2"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-unhealthy-threshold: "3"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-interval: "30"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-timeout: "10"
+
+    # Access logs
+    service.beta.kubernetes.io/aws-load-balancer-access-log-emit-interval: "60"
+    service.beta.kubernetes.io/aws-load-balancer-access-log-s3-bucket-name: "dmlog-internal-lb-logs"
+    service.beta.kubernetes.io/aws-load-balancer-access-log-s3-bucket-prefix: "backend-service"
+spec:
+  type: LoadBalancer
+  selector:
+    app: dmlog
+    component: backend
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 8443
+    protocol: TCP
+  - name: grpc
+    port: 50051
+    targetPort: 50051
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 300
+  externalTrafficPolicy: Local
+
+---
+# Service with Topology Aware Routing
+apiVersion: v1
+kind: Service
+metadata:
+  name: topology-aware-service
+  namespace: dmlog
+  annotations:
+    service.kubernetes.io/topology-aware-hints: "auto"
+spec:
+  type: ClusterIP
+  selector:
+    app: dmlog
+    component: backend
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+  topologyKeys:
+  - "kubernetes.io/hostname"
+  - "topology.kubernetes.io/zone"
+  - "topology.kubernetes.io/region"
+  - "*"
+
+---
+# Gateway API for advanced traffic routing
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: Gateway
+metadata:
+  name: dmlog-gateway
+  namespace: dmlog
+  annotations:
+    networking.istio.io/service-type: "LoadBalancer"
+    networking.istio.io/load-balancer-mode: "ROUND_ROBIN"
+spec:
+  gatewayClassName: istio
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces:
+        from: Same
+  - name: https
+    protocol: HTTPS
+    port: 443
+    allowedRoutes:
+      namespaces:
+        from: Same
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: dmlog-tls
+  - name: grpc
+    protocol: GRPC
+    port: 50051
+    allowedRoutes:
+      namespaces:
+        from: Same
+
+---
+# HTTPRoute for advanced routing rules
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: HTTPRoute
+metadata:
+  name: dmlog-http-route
+  namespace: dmlog
+spec:
+  parentRefs:
+  - name: dmlog-gateway
+    namespace: dmlog
+  hostnames:
+  - "api.dmlog.com"
+  - "app.dmlog.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: "/api/v1"
+    filters:
+    - type: RequestMirror
+      requestMirror:
+        service:
+          name: backend-canary-service
+          port: 8080
+      weight: 10
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        add:
+        - name: X-Route-Version
+          value: "v1"
+    forwardTo:
+    - serviceName: backend-service
+      port: 8080
+      weight: 90
+    - serviceName: backend-canary-service
+      port: 8080
+      weight: 10
+  - matches:
+    - headers:
+      - name: X-Canary
+        type: Exact
+          value: "true"
+    forwardTo:
+    - serviceName: backend-canary-service
+      port: 8080
+  - matches:
+    - path:
+        type: PathPrefix
+        value: "/health"
+    forwardTo:
+    - serviceName: backend-service
+      port: 8080
+
+---
+# TrafficPolicy for Istio advanced routing
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: backend-destination
+  namespace: dmlog
+spec:
+  host: backend-service
+  trafficPolicy:
+    loadBalancer:
+      simple: LEAST_CONN
+      localityLbSetting:
+        enabled: true
+        failover:
+        - from: us-west-2
+          to: us-east-1
+        - from: us-west-2
+          to: eu-west-1
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 30s
+        tcpKeepalive:
+          time: 7200s
+          interval: 75s
+      http:
+        http1MaxPendingRequests: 50
+        maxRequestsPerConnection: 10
+        maxRetries: 3
+        idleTimeout: 300s
+        h2UpgradePolicy: UPGRADE
+    circuitBreaker:
+      consecutiveErrors: 3
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 50
+    outlierDetection:
+      consecutive5xxErrors: 3
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 50
+    tls:
+      mode: ISTIO_MUTUAL
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+  - name: canary
+    labels:
+      version: canary
+
+---
+# VirtualService for advanced traffic management
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: dmlog-virtual-service
+  namespace: dmlog
+spec:
+  hosts:
+  - api.dmlog.com
+  - app.dmlog.com
+  gateways:
+  - dmlog-gateway
+  http:
+  - match:
+    - headers:
+        canary:
+          exact: "true"
+    route:
+    - destination:
+        host: backend-service
+        subset: canary
+      weight: 100
+  - match:
+    - headers:
+        version:
+          exact: "v2"
+    route:
+    - destination:
+        host: backend-service
+        subset: v2
+      weight: 100
+  - route:
+    - destination:
+        host: backend-service
+        subset: v1
+      weight: 95
+    - destination:
+        host: backend-service
+        subset: canary
+      weight: 5
+    fault:
+      delay:
+        percentage:
+          value: 0.1
+        fixedDelay: 5s
+    retries:
+      attempts: 3
+      perTryTimeout: 2s
+      retryOn: gateway-error,connect-failure,refused-stream
+    timeout: 30s
+    mirror:
+      host: backend-service
+      subset: canary
+    mirrorPercentage:
+      value: 1
+
+---
+# ServiceMeshPolicy for advanced security and traffic
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: dmlog-peer-auth
+  namespace: dmlog
+spec:
+  selector:
+    matchLabels:
+      app: dmlog
+  mtls:
+    mode: STRICT
+
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: dmlog-authz
+  namespace: dmlog
+spec:
+  selector:
+    matchLabels:
+      app: dmlog
+  rules:
+  - from:
+    - source:
+        principals: ["cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"]
+  - to:
+    - operation:
+        methods: ["GET", "POST", "PUT", "DELETE"]
+  when:
+  - key: request.headers[authorization]
+    values: ["Bearer *"]

@@ -1,0 +1,353 @@
+name: Monitoring & Alerting
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # Every 5 minutes
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'check'
+        type: choice
+        options:
+          - check
+          - test
+          - cleanup
+
+jobs:
+  health-checks:
+    name: Application Health Checks
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [development, staging, production]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name dmlog-${{ matrix.environment }}-cluster
+
+      - name: Check pod status
+        run: |
+          echo "Checking pod status for ${{ matrix.environment }}..."
+          kubectl get pods -n dmlog-${{ matrix.environment }}
+
+          # Check for any failing pods
+          failed_pods=$(kubectl get pods -n dmlog-${{ matrix.environment }} --field-selector=status.phase!=Running --no-headers | wc -l)
+          if [ $failed_pods -gt 0 ]; then
+            echo "❌ Found $failed_pods failing pods in ${{ matrix.environment }}"
+            kubectl get pods -n dmlog-${{ matrix.environment }} --field-selector=status.phase!=Running
+            exit 1
+          else
+            echo "✅ All pods are running in ${{ matrix.environment }}"
+          fi
+
+      - name: Check service endpoints
+        run: |
+          # Get service URLs
+          case "${{ matrix.environment }}" in
+            "development")
+              API_URL="https://dev-api.dmlog.com"
+              ;;
+            "staging")
+              API_URL="https://staging-api.dmlog.com"
+              ;;
+            "production")
+              API_URL="https://api.dmlog.com"
+              ;;
+          esac
+
+          echo "Checking API endpoint: $API_URL"
+
+          # Health check
+          if curl -f -s --max-time 30 "$API_URL/health" > /dev/null; then
+            echo "✅ API health check passed for ${{ matrix.environment }}"
+          else
+            echo "❌ API health check failed for ${{ matrix.environment }}"
+            exit 1
+          fi
+
+          # Check response time
+          response_time=$(curl -o /dev/null -s -w '%{time_total}' "$API_URL/health")
+          if (( $(echo "$response_time < 2.0" | bc -l) )); then
+            echo "✅ API response time acceptable: ${response_time}s"
+          else
+            echo "⚠️ API response time slow: ${response_time}s"
+          fi
+
+      - name: Check database connectivity
+        run: |
+          # Check database connectivity
+          db_status=$(kubectl exec -n dmlog-${{ matrix.environment }} deployment/backend-deployment -- python -c "
+import os
+import psycopg2
+from sqlalchemy import create_engine
+from source_code.backend.config.settings import get_settings
+
+settings = get_settings()
+try:
+    engine = create_engine(settings.database_url)
+    with engine.connect() as conn:
+        result = conn.execute('SELECT 1').fetchone()
+    print('OK')
+except Exception as e:
+    print(f'ERROR: {e}')
+    exit(1)
+" 2>/dev/null || echo "ERROR")
+
+          if [ "$db_status" = "OK" ]; then
+            echo "✅ Database connectivity OK for ${{ matrix.environment }}"
+          else
+            echo "❌ Database connectivity failed for ${{ matrix.environment }}"
+            exit 1
+          fi
+
+      - name: Check Redis connectivity
+        run: |
+          redis_status=$(kubectl exec -n dmlog-${{ matrix.environment }} deployment/backend-deployment -- python -c "
+import redis
+from source_code.backend.config.settings import get_settings
+
+settings = get_settings()
+try:
+    r = redis.from_url(settings.redis_url)
+    r.ping()
+    print('OK')
+except Exception as e:
+    print(f'ERROR: {e}')
+    exit(1)
+" 2>/dev/null || echo "ERROR")
+
+          if [ "$redis_status" = "OK" ]; then
+            echo "✅ Redis connectivity OK for ${{ matrix.environment }}"
+          else
+            echo "❌ Redis connectivity failed for ${{ matrix.environment }}"
+            exit 1
+          fi
+
+      - name: Check resource usage
+        run: |
+          echo "Checking resource usage for ${{ matrix.environment }}..."
+
+          # Check CPU and memory usage
+          kubectl top pods -n dmlog-${{ matrix.environment }} --no-headers | while read line; do
+            pod=$(echo $line | awk '{print $1}')
+            cpu=$(echo $line | awk '{print $2}')
+            memory=$(echo $line | awk '{print $3}')
+
+            # Extract numeric values
+            cpu_cores=$(echo $cpu | sed 's/m//' | awk '{print $1/1000}')
+            memory_mb=$(echo $memory | sed 's/Mi//' | awk '{print $1}')
+
+            # Check thresholds
+            if (( $(echo "$cpu_cores > 0.8" | bc -l) )); then
+              echo "⚠️ High CPU usage on $pod: $cpu"
+            fi
+
+            if [ "$memory_mb" -gt 400 ]; then
+              echo "⚠️ High memory usage on $pod: $memory"
+            fi
+          done
+
+      - name: Generate health report
+        if: always()
+        run: |
+          echo "## Health Check Report - ${{ matrix.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** ${{ matrix.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: Alert on failure
+        if: failure()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: '#alerts'
+          message: "🚨 Health check failed for ${{ matrix.environment }} environment!"
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  performance-monitoring:
+    name: Performance Monitoring
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check application metrics
+        run: |
+          # Query Prometheus metrics
+          ./scripts/check-metrics.sh
+
+      - name: Check error rates
+        run: |
+          # Check error rates from logs
+          error_rate=$(./scripts/calculate-error-rate.sh)
+
+          if (( $(echo "$error_rate > 5.0" | bc -l) )); then
+            echo "❌ High error rate detected: ${error_rate}%"
+            exit 1
+          else
+            echo "✅ Error rate acceptable: ${error_rate}%"
+          fi
+
+      - name: Check response times
+        run: |
+          # Check 95th percentile response times
+          p95_response_time=$(./scripts/get-p95-response-time.sh)
+
+          if (( $(echo "$p95_response_time > 2000" | bc -l) )); then
+            echo "⚠️ High P95 response time: ${p95_response_time}ms"
+          else
+            echo "✅ P95 response time acceptable: ${p95_response_time}ms"
+          fi
+
+  backup-monitoring:
+    name: Backup Monitoring
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check recent backups
+        run: |
+          echo "Checking recent backups..."
+
+          # Check database backups
+          latest_db_backup=$(aws s3 ls s3://dmlog-backups/database/ --recursive | sort | tail -n 1 | awk '{print $4, $5, $6}')
+          echo "Latest database backup: $latest_db_backup"
+
+          # Check file storage backups
+          latest_file_backup=$(aws s3 ls s3://dmlog-backups/files/ --recursive | sort | tail -n 1 | awk '{print $4, $5, $6}')
+          echo "Latest file backup: $latest_file_backup"
+
+          # Check if backups are recent (within 24 hours)
+          backup_age=$(aws s3 ls s3://dmlog-backups/database/ --recursive | sort | tail -n 1 | awk '{print $1" "$2}')
+          current_time=$(date +%s)
+          backup_time=$(date -d "$backup_age" +%s)
+          age_hours=$(( (current_time - backup_time) / 3600 ))
+
+          if [ $age_hours -gt 24 ]; then
+            echo "❌ No recent database backup found (last backup: ${age_hours} hours ago)"
+            exit 1
+          else
+            echo "✅ Recent database backup found (${age_hours} hours ago)"
+          fi
+
+      - name: Test backup restore
+        run: |
+          echo "Testing backup restore process..."
+          ./scripts/test-backup-restore.sh
+
+  security-monitoring:
+    name: Security Monitoring
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for security incidents
+        run: |
+          echo "Checking for security incidents..."
+
+          # Check CloudTrail for suspicious activity
+          ./scripts/check-security-events.sh
+
+          # Check for failed login attempts
+          failed_logins=$(./scripts/get-failed-logins.sh)
+
+          if [ "$failed_logins" -gt 100 ]; then
+            echo "⚠️ High number of failed login attempts: $failed_logins"
+            # Don't fail the job, just alert
+          fi
+
+      - name: Check SSL certificates
+        run: |
+          echo "Checking SSL certificates..."
+
+          domains=("api.dmlog.com" "app.dmlog.com" "staging-api.dmlog.com")
+
+          for domain in "${domains[@]}"; do
+            expiry_date=$(echo | openssl s_client -servername $domain -connect $domain:443 2>/dev/null | openssl x509 -noout -enddate | cut -d= -f2)
+            expiry_timestamp=$(date -d "$expiry_date" +%s)
+            current_timestamp=$(date +%s)
+            days_until_expiry=$(( (expiry_timestamp - current_timestamp) / 86400 ))
+
+            if [ $days_until_expiry -lt 30 ]; then
+              echo "❌ SSL certificate for $domain expires in $days_until_expiry days"
+              exit 1
+            else
+              echo "✅ SSL certificate for $domain valid for $days_until_expiry days"
+            fi
+          done
+
+      - name: Vulnerability scan
+        run: |
+          echo "Running vulnerability scan..."
+          ./scripts/vulnerability-scan.sh
+
+  log-monitoring:
+    name: Log Monitoring
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for critical errors
+        run: |
+          echo "Checking for critical errors in logs..."
+
+          # Query logs from ELK stack
+          critical_errors=$(./scripts/get-critical-errors.sh)
+
+          if [ "$critical_errors" -gt 0 ]; then
+            echo "❌ Found $critical_errors critical errors in logs"
+            # Get sample of errors
+            ./scripts/get-error-samples.sh
+            exit 1
+          else
+            echo "✅ No critical errors found in logs"
+          fi
+
+      - name: Check log patterns
+        run: |
+          echo "Analyzing log patterns..."
+
+          # Check for unusual patterns
+          ./scripts/analyze-log-patterns.sh
+
+  notification:
+    name: Send Notifications
+    runs-on: ubuntu-latest
+    needs: [health-checks, performance-monitoring, backup-monitoring, security-monitoring, log-monitoring]
+    if: always()
+    steps:
+      - name: Generate summary report
+        run: |
+          echo "## Monitoring Summary Report" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Health Checks:** ${{ needs.health-checks.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Performance Monitoring:** ${{ needs.performance-monitoring.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Backup Monitoring:** ${{ needs.backup-monitoring.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Security Monitoring:** ${{ needs.security-monitoring.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Log Monitoring:** ${{ needs.log-monitoring.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: Send success notification
+        if: ${{ needs.health-checks.result == 'success' && needs.performance-monitoring.result == 'success' && needs.backup-monitoring.result == 'success' && needs.security-monitoring.result == 'success' && needs.log-monitoring.result == 'success' }}
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          channel: '#monitoring'
+          message: "✅ All monitoring checks passed successfully!"
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+      - name: Send failure notification
+        if: ${{ needs.health-checks.result == 'failure' || needs.performance-monitoring.result == 'failure' || needs.backup-monitoring.result == 'failure' || needs.security-monitoring.result == 'failure' || needs.log-monitoring.result == 'failure' }}
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: '#alerts'
+          message: "🚨 One or more monitoring checks have failed!"
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}

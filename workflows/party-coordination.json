@@ -1,0 +1,262 @@
+{
+  "name": "Party Coordination - Group Decision Making & Voting System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "party-coordinate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Coordination Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "party-coordination"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse coordination request\nconst request = $input.first().json;\n\n// Required fields validation\nif (!request.action || !request.proposal || !request.requesting_agent) {\n  return [{\n    json: {\n      error: 'Missing required fields: action, proposal, requesting_agent',\n      status: 'invalid'\n    }\n  }];\n}\n\n// Create coordination session\nconst sessionId = `coord_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;\nconst coordinationData = {\n  ...request,\n  session_id: sessionId,\n  created_at: new Date().toISOString(),\n  status: 'pending',\n  voting_required: true,\n  voting_threshold: request.voting_threshold || 0.6,\n  timeout_minutes: request.timeout_minutes || 15,\n  current_votes: {},\n  participants: request.participants || ['agent_dungeon_master', 'agent_narrator', 'agent_combat_manager', 'agent_scene_coordinator']\n};\n\nreturn [{\n  json: coordinationData\n}];"
+      },
+      "id": "code-1",
+      "name": "Initialize Coordination",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {\n          "options": {\n            "caseSensitive": true,\n            "leftValue": "",\n            "typeValidation": "strict"\n          },\n          "conditions": [\n            {\n              "leftValue": "={{ $json.action }}",\n              "rightValue": "vote",\n              "operator": {\n                "type": "string",\n                "operation": "equals"\n              }\n            }\n          ],\n          "combinator": "and"\n        }
+      },
+      "id": "if-1",
+      "name": "Check Action Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process voting request\nconst coordination = $input.first().json;\n\n// Create voting ballots for each participant\nconst votingBallots = coordination.participants.map(participant => ({\n  session_id: coordination.session_id,\n  proposal: coordination.proposal,\n  voting_agent: participant,\n  vote_options: ['approve', 'reject', 'abstain', 'conditional'],\n  vote_deadline: new Date(Date.now() + coordination.timeout_minutes * 60000).toISOString(),\n  voting_weight: coordination.voting_weights ? coordination.voting_weights[participant] : 1,\n  vote_cast: null,\n  vote_reason: null,\n  status: 'pending'\n}));\n\n// Broadcast voting request to all participants\nreturn votingBallots.map(ballot => ({\n  json: {\n    type: 'voting_request',\n    to_agent: ballot.voting_agent,\n    from_agent: 'party_coordinator',\n    data: ballot,\n    message: `Voting request: ${coordination.proposal.title || 'New proposal'}\\n\\n${coordination.proposal.description}\\n\\nPlease vote by: ${ballot.vote_deadline}`\n  }\n}));"
+      },
+      "id": "code-2",
+      "name": "Create Voting Process",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process direct coordination (no voting required)\nconst coordination = $input.first().json;\n\nif (coordination.action === 'consensus') {\n  return [{\n    json: {\n      type: 'consensus_request',\n      session_id: coordination.session_id,\n      proposal: coordination.proposal,\n      requesting_agent: coordination.requesting_agent,\n      participants: coordination.participants,\n      status: 'seeking_consensus',\n      deadline: new Date(Date.now() + coordination.timeout_minutes * 60000).toISOString()\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    type: 'direct_coordination',\n    session_id: coordination.session_id,\n    status: 'processing'\n  }\n}];"
+      },
+      "id": "code-3",
+      "name": "Process Direct Coordination",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/webhook/agent-message",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-1",
+      "name": "Send Voting Requests",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Store coordination session\nconst coordination = $input.first().json;\n\nconst sessionData = {\n  session_id: coordination.session_id,\n  action: coordination.action,\n  proposal: coordination.proposal,\n  requesting_agent: coordination.requesting_agent,\n  participants: coordination.participants,\n  voting_threshold: coordination.voting_threshold,\n  status: coordination.status,\n  created_at: coordination.created_at,\n  timeout_minutes: coordination.timeout_minutes,\n  deadline: new Date(Date.now() + coordination.timeout_minutes * 60000).toISOString()\n};\n\nreturn [{\n  json: sessionData\n}];"
+      },
+      "id": "code-4",
+      "name": "Store Session",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:8000/api/v1/party/sessions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "session_data",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-2",
+      "name": "Save Session to Database",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Schedule voting deadline check\nconst coordination = $input.first().json;\nconst delayMinutes = coordination.timeout_minutes || 15;\n\n// Create delayed execution for vote counting\nreturn [{\n  json: {\n    session_id: coordination.session_id,\n    action: 'count_votes',\n    scheduled_for: new Date(Date.now() + delayMinutes * 60000).toISOString(),\n    status: 'scheduled'\n  }\n}];"
+      },
+      "id": "code-5",
+      "name": "Schedule Vote Counting",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"coordination_initiated\",\n  \"session_id\": \"{{ $json.session_id }}\",\n  \"message\": \"Coordination process started. Voting requests sent to participants.\",\n  \"deadline\": \"{{ $json.deadline }}\"\n}"
+      },
+      "id": "respond-1",
+      "name": "Send Initial Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "Coordination Webhook": {
+      "main": [
+        [
+          {
+            "node": "Initialize Coordination",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Coordination": {
+      "main": [
+        [
+          {
+            "node": "Check Action Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Action Type": {
+      "main": [
+        [
+          {
+            "node": "Create Voting Process",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Direct Coordination",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Voting Process": {
+      "main": [
+        [
+          {
+            "node": "Send Voting Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Direct Coordination": {
+      "main": [
+        [
+          {
+            "node": "Store Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Session": {
+      "main": [
+        [
+          {
+            "node": "Save Session to Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Session to Database": {
+      "main": [
+        [
+          {
+            "node": "Schedule Vote Counting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Vote Counting": {
+      "main": [
+        [
+          {
+            "node": "Send Initial Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-23T21:00:00.000Z",
+      "updatedAt": "2024-10-23T21:00:00.000Z",
+      "id": "tag-party-coordination",
+      "name": "Party Coordination"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-10-23T21:00:00.000Z",
+  "versionId": "1"
+}
